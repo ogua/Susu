@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox spacing="16" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.ogua.susudesktop.DashboardController">
+    <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+    <Label styleClass="page-title" text="Dashboard"/>
+
+    <FlowPane hgap="16" vgap="16">
+        <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Customers"/>
+            <Label fx:id="customersTile" styleClass="page-title"/>
+        </VBox>
+        <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Active Accounts"/>
+            <Label fx:id="accountsTile" styleClass="page-title"/>
+        </VBox>
+        <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Portfolio Balance"/>
+            <Label fx:id="portfolioTile" styleClass="section-title"/>
+        </VBox>
+        <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Your Collections Today"/>
+            <Label fx:id="collectionsTile" styleClass="section-title"/>
+        </VBox>
+    </FlowPane>
+</VBox>

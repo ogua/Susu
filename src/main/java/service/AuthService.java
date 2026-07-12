@@ -1,5 +1,6 @@
 package service;
 
+import db.AppConfig;
 import db.DatabaseConnection;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -24,6 +25,8 @@ public class AuthService {
     private static final Logger LOGGER = Logger.getLogger(AuthService.class.getName());
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final int LOCKOUT_MINUTES = 15;
+
+    private final ApiClient apiClient = new ApiClient();
 
     /** Result of a login attempt; user is non-null only on SUCCESS. */
     public record LoginResult(Status status, LocalUser user, String message) {
@@ -64,6 +67,7 @@ public class AuthService {
                         rs.getString("phone"),
                         rs.getString("role"),
                         true);
+                refreshApiTokenIfHybrid(email, password);
                 return new LoginResult(LoginResult.Status.SUCCESS, user, null);
             }
         } catch (SQLException e) {
@@ -101,6 +105,28 @@ public class AuthService {
              ResultSet rs = ps.executeQuery()) {
             return rs.next() && rs.getInt(1) > 0;
         }
+    }
+
+    /**
+     * Hybrid mode only: best-effort background attempt to (re)authenticate with the
+     * server and cache a fresh Sanctum token, so the outbox can push once online.
+     * Fire-and-forget — never delays or fails the local login, which already
+     * succeeded above.
+     */
+    private void refreshApiTokenIfHybrid(String email, String password) {
+        if (!AppConfig.isSyncEnabled()) {
+            return;
+        }
+
+        Thread thread = new Thread(() -> {
+            try {
+                apiClient.login(email.trim().toLowerCase(), password, "susudesktop");
+            } catch (ApiClient.ApiException e) {
+                LOGGER.log(Level.INFO, "Online token refresh skipped: {0}", e.getMessage());
+            }
+        }, "api-token-refresh");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void registerFailedAttempt(String userId, int currentFailures) {

@@ -121,6 +121,19 @@
     -fx-padding: 14 24 14 24;
 }
 
+/* ---- Sidebar navigation ---- */
+.nav-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -ogua-text-secondary;
+    -fx-font-size: 13px;
+    -fx-alignment: CENTER_LEFT;
+    -fx-background-radius: 6;
+    -fx-padding: 10 12 10 12;
+    -fx-cursor: hand;
+}
+.nav-button:hover      { -fx-background-color: -ogua-neutral-bg; -fx-text-fill: -ogua-text-primary; }
+.nav-button-active     { -fx-background-color: -ogua-neutral-bg; -fx-text-fill: -ogua-primary-dark; -fx-font-weight: bold; }
+
 /* ---- Empty / placeholder states ---- */
 .empty-state-title   { -fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: -ogua-text-primary; }
 .empty-state-message { -fx-font-size: 12px; -fx-text-fill: -ogua-text-secondary; }

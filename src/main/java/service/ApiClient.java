@@ -1,0 +1,121 @@
+package service;
+
+import db.AppConfig;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+/**
+ * Thin HTTP client to the SusuApp Laravel backend, used only in hybrid mode
+ * (AppConfig.isSyncEnabled()). Mirrors the mobile app's axios client contract
+ * exactly: POST /api/v1/auth/login and POST /api/v1/sync/batch (AD-3) — same
+ * request/response shapes, so the server can't tell which client sent them.
+ */
+public class ApiClient {
+
+    public static class ApiException extends Exception {
+        public ApiException(String message) {
+            super(message);
+        }
+
+        public ApiException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    private final HttpClient http = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+
+    /** Authenticates against the server and caches the returned Sanctum token. */
+    public JSONObject login(String login, String password, String deviceName) throws ApiException {
+        JSONObject body = new JSONObject()
+                .put("login", login)
+                .put("password", password)
+                .put("device_name", deviceName);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/v1/auth/login"))
+                .timeout(Duration.ofSeconds(20))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
+
+        JSONObject json = send(request);
+        AppConfig.setApiToken(json.getString("token"));
+        return json;
+    }
+
+    /** Pushes queued outbox ops to POST /sync/batch. Requires a cached token (see {@link #login}). */
+    public JSONObject pushSyncBatch(JSONArray ops) throws ApiException {
+        String token = AppConfig.getApiToken();
+        if (token == null || token.isBlank()) {
+            throw new ApiException("Not signed in to the server. Log in online at least once to enable sync.");
+        }
+
+        JSONObject body = new JSONObject().put("ops", ops);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/v1/sync/batch"))
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer " + token)
+                .header("X-Client-Origin", "desktop")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
+
+        return send(request);
+    }
+
+    private String baseUrl() {
+        String url = AppConfig.getApiBaseUrl();
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
+
+    private JSONObject send(HttpRequest request) throws ApiException {
+        HttpResponse<String> response;
+        try {
+            response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw new ApiException("Could not reach the server: " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException("Request interrupted.", e);
+        }
+
+        JSONObject json;
+        try {
+            json = new JSONObject(response.body());
+        } catch (Exception e) {
+            throw new ApiException("Server returned an unexpected response (HTTP " + response.statusCode() + ").");
+        }
+
+        if (response.statusCode() >= 400) {
+            throw new ApiException(extractError(json, response.statusCode()));
+        }
+
+        return json;
+    }
+
+    private String extractError(JSONObject json, int statusCode) {
+        if (json.has("message")) {
+            return json.getString("message");
+        }
+        JSONObject errors = json.optJSONObject("errors");
+        if (errors != null && !errors.keySet().isEmpty()) {
+            String firstKey = errors.keySet().iterator().next();
+            JSONArray messages = errors.optJSONArray(firstKey);
+            if (messages != null && !messages.isEmpty()) {
+                return messages.getString(0);
+            }
+        }
+        return "Request failed (HTTP " + statusCode + ").";
+    }
+}

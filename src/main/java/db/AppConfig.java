@@ -80,6 +80,15 @@ public class AppConfig {
         return get("api.base_url", "http://localhost:8000");
     }
 
+    /** Sanctum token cached after the last successful online login (hybrid mode). */
+    public static String getApiToken() {
+        return get("api.token");
+    }
+
+    public static void setApiToken(String token) {
+        set("api.token", token);
+    }
+
     /** Returns the app data directory, creating it if necessary. */
     public static File getAppDir() {
         File dir = new File(System.getProperty("user.home"), APP_DIR_NAME);

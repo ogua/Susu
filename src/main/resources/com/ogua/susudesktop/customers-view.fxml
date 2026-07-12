@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DatePicker?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<HBox spacing="16" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.ogua.susudesktop.CustomersController">
+    <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+    <VBox spacing="12" HBox.hgrow="ALWAYS">
+        <Label styleClass="page-title" text="Customers"/>
+        <HBox spacing="8">
+            <TextField fx:id="searchField" onAction="#onSearch" promptText="Search by name, phone, or code" HBox.hgrow="ALWAYS"/>
+            <Button onAction="#onSearch" styleClass="button-secondary" text="Search"/>
+        </HBox>
+
+        <TableView fx:id="table" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="codeColumn" prefWidth="100" text="Code"/>
+                <TableColumn fx:id="nameColumn" prefWidth="180" text="Name"/>
+                <TableColumn fx:id="phoneColumn" prefWidth="140" text="Phone"/>
+                <TableColumn fx:id="statusColumn" prefWidth="90" text="Status"/>
+            </columns>
+        </TableView>
+    </VBox>
+
+    <ScrollPane fitToWidth="true" prefWidth="360" style="-fx-background-color: transparent;">
+        <VBox spacing="12" styleClass="card">
+            <Label styleClass="card-title" text="Register Customer"/>
+
+            <Label styleClass="text-muted" text="First name"/>
+            <TextField fx:id="firstNameField"/>
+            <Label styleClass="text-muted" text="Last name"/>
+            <TextField fx:id="lastNameField"/>
+            <Label styleClass="text-muted" text="Phone"/>
+            <TextField fx:id="phoneField"/>
+            <Label styleClass="text-muted" text="Gender"/>
+            <ComboBox fx:id="genderCombo" maxWidth="Infinity"/>
+            <Label styleClass="text-muted" text="Date of birth"/>
+            <DatePicker fx:id="dobPicker" maxWidth="Infinity"/>
+
+            <Label styleClass="section-title" text="KYC"/>
+            <Label styleClass="text-muted" text="ID type"/>
+            <ComboBox fx:id="idTypeCombo" maxWidth="Infinity"/>
+            <Label styleClass="text-muted" text="ID number"/>
+            <TextField fx:id="idNumberField"/>
+
+            <Label styleClass="section-title" text="Next of kin"/>
+            <Label styleClass="text-muted" text="Name"/>
+            <TextField fx:id="kinNameField"/>
+            <Label styleClass="text-muted" text="Phone"/>
+            <TextField fx:id="kinPhoneField"/>
+            <Label styleClass="text-muted" text="Relationship"/>
+            <TextField fx:id="kinRelationshipField"/>
+
+            <Label styleClass="text-muted" text="Address"/>
+            <TextArea fx:id="addressField" prefRowCount="2" wrapText="true"/>
+
+            <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+            <Button maxWidth="Infinity" onAction="#onRegister" styleClass="button-primary" text="Save Customer"/>
+        </VBox>
+    </ScrollPane>
+</HBox>

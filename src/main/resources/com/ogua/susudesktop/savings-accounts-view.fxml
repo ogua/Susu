@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<HBox spacing="16" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.ogua.susudesktop.SavingsAccountsController">
+    <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+    <VBox spacing="12" HBox.hgrow="ALWAYS">
+        <Label styleClass="page-title" text="Savings Accounts"/>
+
+        <TableView fx:id="table" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="accountNumberColumn" prefWidth="110" text="Account #"/>
+                <TableColumn fx:id="customerColumn" prefWidth="180" text="Customer"/>
+                <TableColumn fx:id="balanceColumn" prefWidth="110" text="Balance"/>
+                <TableColumn fx:id="cycleColumn" prefWidth="80" text="Cycle"/>
+                <TableColumn fx:id="statusColumn" prefWidth="90" text="Status"/>
+            </columns>
+        </TableView>
+
+        <HBox spacing="8">
+            <Button onAction="#onRecordCollection" styleClass="button-primary" text="Record Collection"/>
+            <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
+        </HBox>
+        <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+    </VBox>
+
+    <ScrollPane fitToWidth="true" prefWidth="340" style="-fx-background-color: transparent;">
+        <VBox spacing="12" styleClass="card">
+            <Label styleClass="card-title" text="Open New Account"/>
+
+            <Label styleClass="text-muted" text="Find customer"/>
+            <HBox spacing="6">
+                <TextField fx:id="customerSearchField" HBox.hgrow="ALWAYS"/>
+                <Button onAction="#onFindCustomer" styleClass="button-secondary" text="Find"/>
+            </HBox>
+            <ComboBox fx:id="customerCombo" maxWidth="Infinity" promptText="Select a customer"/>
+
+            <Label styleClass="text-muted" text="Daily contribution (GHS)"/>
+            <TextField fx:id="contributionField" promptText="5.00"/>
+
+            <Label fx:id="openStatusLabel" styleClass="text-danger" wrapText="true"/>
+            <Button maxWidth="Infinity" onAction="#onOpenAccount" styleClass="button-primary" text="Open Account"/>
+        </VBox>
+    </ScrollPane>
+</HBox>
