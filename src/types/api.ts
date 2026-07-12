@@ -47,3 +47,87 @@ export interface ApiValidationError {
   message: string;
   errors: Record<string, string[]>;
 }
+
+export interface Customer {
+  id: string;
+  customer_code: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  gender: string | null;
+  photo_path: string | null;
+  status: 'active' | 'dormant' | 'closed';
+  branch_id: string;
+  has_login: boolean;
+  savings_accounts?: SavingsAccount[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavingsAccount {
+  id: string;
+  account_number: string;
+  customer_id: string;
+  customer?: Customer;
+  product?: {
+    id: string;
+    name: string;
+    type: string;
+    cycle_length_days: number;
+  };
+  agent_id: string | null;
+  contribution_amount: number;
+  contribution_formatted: string;
+  cycle_number: number;
+  contributions_this_cycle: number;
+  balance: number;
+  balance_formatted: string;
+  status: 'active' | 'dormant' | 'closed';
+  opened_at: string;
+  updated_at: string;
+}
+
+export interface Transaction {
+  id: string;
+  reference: string;
+  type: 'collection' | 'commission' | 'withdrawal' | 'remittance' | 'reversal' | 'adjustment';
+  status: 'pending' | 'completed' | 'failed' | 'reversed';
+  payment_method: 'cash' | 'mobile_money' | 'internal';
+  amount: number;
+  amount_formatted: string;
+  balance_after: number | null;
+  description: string | null;
+  recorded_at: string;
+  posted_at: string;
+}
+
+export interface WithdrawalRequest {
+  id: string;
+  savings_account_id: string;
+  amount: number;
+  amount_formatted: string;
+  reason: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'paid';
+  rejected_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentDailySummary {
+  id: string;
+  summary_date: string;
+  collections_total: number;
+  collections_total_formatted: string;
+  collections_count: number;
+  expected_cash: number;
+  declared_cash: number | null;
+  variance: number | null;
+  status: 'open' | 'submitted' | 'reconciled' | 'flagged';
+  notes: string | null;
+}
+
+export interface Paginated<T> {
+  data: T[];
+  links: { first: string | null; last: string | null; prev: string | null; next: string | null };
+  meta: { current_page: number; last_page: number; per_page: number; total: number };
+}

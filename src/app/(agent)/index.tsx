@@ -1,47 +1,67 @@
-import { router } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { logout } from '@/api/auth';
+import { setDuty } from '@/api/duty';
+import { getTodaySummary } from '@/api/summaries';
 import { ThemedText } from '@/components/themed-text';
 import { useAuthStore } from '@/stores/authStore';
+import { useDutyStore } from '@/stores/dutyStore';
 import { drainOutbox } from '@/sync/engine';
 import { pendingCount } from '@/sync/outbox';
 
-/**
- * Phase 0 shell: session info + working sync-queue status.
- * Phase 1 replaces this with today's collection summary, account search,
- * and the duty toggle.
- */
 export default function AgentDashboard() {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const onDuty = useDutyStore((state) => state.onDuty);
+  const setOnDuty = useDutyStore((state) => state.setOnDuty);
   const [pending, setPending] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [togglingDuty, setTogglingDuty] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const summary = useQuery({
+    queryKey: ['agent', 'summary', 'today'],
+    queryFn: getTodaySummary,
+    staleTime: 30_000,
+  });
+
+  const refreshPending = useCallback(async () => {
     setPending(await pendingCount());
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
-    }, [refresh]),
+      void refreshPending();
+    }, [refreshPending]),
   );
 
   async function handleSyncNow() {
     setRefreshing(true);
     await drainOutbox();
-    await refresh();
+    await refreshPending();
+    await summary.refetch();
     setRefreshing(false);
+  }
+
+  async function handleToggleDuty(value: boolean) {
+    setTogglingDuty(true);
+    try {
+      const confirmed = await setDuty(value);
+      setOnDuty(confirmed);
+    } catch {
+      // Duty toggle needs connectivity; leave the switch as it was.
+    } finally {
+      setTogglingDuty(false);
+    }
   }
 
   async function handleLogout() {
     try {
       await logout();
     } catch {
-      // Token may already be dead; local logout regardless.
+      // Local logout regardless of server reachability.
     }
     await clearSession();
     router.replace('/(auth)/login');
@@ -58,15 +78,48 @@ export default function AgentDashboard() {
         {user?.branches?.length ? (
           <ThemedText type="small">Branch: {user.branches[0].name}</ThemedText>
         ) : null}
+
+        <View style={styles.dutyRow}>
+          <ThemedText>{onDuty ? 'On duty' : 'Off duty'}</ThemedText>
+          {togglingDuty ? (
+            <ActivityIndicator />
+          ) : (
+            <Switch value={onDuty} onValueChange={handleToggleDuty} />
+          )}
+        </View>
       </View>
 
       <View style={styles.card}>
-        <ThemedText type="subtitle">Sync queue</ThemedText>
-        <ThemedText>
-          {pending === 0 ? 'All caught up.' : `${pending} operation(s) waiting to sync.`}
-        </ThemedText>
-        <Pressable style={styles.button} onPress={handleSyncNow}>
-          <ThemedText style={styles.buttonText}>Sync now</ThemedText>
+        <ThemedText type="subtitle">Today</ThemedText>
+        {summary.isLoading ? (
+          <ActivityIndicator />
+        ) : summary.data ? (
+          <>
+            <ThemedText>{summary.data.summary.collections_count} collections recorded</ThemedText>
+            <ThemedText>Total: {summary.data.summary.collections_total_formatted}</ThemedText>
+            <ThemedText type="small">
+              Cash in hand: GHS {(summary.data.cash_in_hand / 100).toFixed(2)}
+            </ThemedText>
+          </>
+        ) : (
+          <ThemedText type="small">Could not load today&apos;s summary (offline?).</ThemedText>
+        )}
+      </View>
+
+      <View style={styles.grid}>
+        <Pressable style={styles.tile} onPress={() => router.push('/(agent)/accounts')}>
+          <ThemedText style={styles.tileText}>My Accounts</ThemedText>
+        </Pressable>
+        <Pressable style={styles.tile} onPress={() => router.push('/(agent)/register-customer')}>
+          <ThemedText style={styles.tileText}>Register Customer</ThemedText>
+        </Pressable>
+        <Pressable style={styles.tile} onPress={() => router.push('/(agent)/day-close')}>
+          <ThemedText style={styles.tileText}>Day Summary</ThemedText>
+        </Pressable>
+        <Pressable style={styles.tile} onPress={() => router.push('/(agent)/sync')}>
+          <ThemedText style={styles.tileText}>
+            Sync Queue{pending > 0 ? ` (${pending})` : ''}
+          </ThemedText>
         </Pressable>
       </View>
 
@@ -87,6 +140,27 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: '#ffffff',
   },
+  dutyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  tile: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    backgroundColor: '#eef4ff',
+    borderRadius: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  tileText: { fontWeight: '600', color: '#208AEF', textAlign: 'center' },
   button: {
     backgroundColor: '#208AEF',
     borderRadius: 10,

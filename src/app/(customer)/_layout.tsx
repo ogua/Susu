@@ -18,6 +18,8 @@ export default function CustomerLayout() {
   return (
     <Stack>
       <Stack.Screen name="index" options={{ title: 'My Susu' }} />
+      <Stack.Screen name="account/[accountId]" options={{ title: 'Account' }} />
+      <Stack.Screen name="withdraw" options={{ title: 'Request Withdrawal' }} />
     </Stack>
   );
 }
