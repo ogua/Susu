@@ -1,0 +1,27 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "php",
+            "args": [
+                "artisan",
+                "boost:mcp"
+            ]
+        },
+        "chrome-devtools": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "chrome-devtools-mcp@latest"
+            ]
+        },
+        "mysql": {
+        "command": "uvx",
+        "args": [
+            "mcp-server-mysql"
+        ],
+        "env": {
+            "MYSQL_CONNECTION_STRING": "mysql://root:@127.0.0.1:3310/susuapp"
+        }
+        }
+    }
+}
