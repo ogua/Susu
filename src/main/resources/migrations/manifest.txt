@@ -1,0 +1,3 @@
+# Migration manifest — one filename per line, applied in sort order.
+# Add new V###__description.sql files here; no code changes required.
+V001__initial_schema.sql

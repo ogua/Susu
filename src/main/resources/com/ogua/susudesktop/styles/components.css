@@ -1,0 +1,144 @@
+/*
+ * SusuApp Desktop — reusable component classes built on the tokens in
+ * design-system.css. Loaded after design-system.css on every Scene.
+ */
+
+/* ---- Buttons ---- */
+.button-primary {
+    -fx-background-color: -ogua-primary;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-padding: 10 20 10 20;
+    -fx-cursor: hand;
+}
+.button-primary:hover    { -fx-background-color: -ogua-primary-dark; }
+.button-primary:pressed  { -fx-background-color: -ogua-primary-dark; }
+.button-primary:disabled { -fx-opacity: 0.5; -fx-cursor: default; }
+
+.button-secondary {
+    -fx-background-color: transparent;
+    -fx-text-fill: -ogua-secondary;
+    -fx-border-color: -ogua-border;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 9 19 9 19;
+    -fx-cursor: hand;
+}
+.button-secondary:hover   { -fx-background-color: -ogua-bg; }
+.button-secondary:pressed { -fx-background-color: -ogua-neutral-bg; }
+
+.button-danger {
+    -fx-background-color: -ogua-danger;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-padding: 10 20 10 20;
+    -fx-cursor: hand;
+}
+.button-danger:hover   { -fx-opacity: 0.9; }
+.button-danger:pressed { -fx-opacity: 0.85; }
+
+/* ---- Card ---- */
+.card {
+    -fx-background-color: -ogua-surface;
+    -fx-background-radius: 10;
+    -fx-border-color: -ogua-border;
+    -fx-border-radius: 10;
+    -fx-padding: 20;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 14, 0, 0, 3);
+}
+
+/* ---- Status pills ---- */
+.status-pill         { -fx-background-radius: 999; -fx-padding: 3 10 3 10; -fx-font-size: 11px; -fx-font-weight: bold; }
+.status-pill-success { -fx-background-color: -ogua-success-bg; -fx-text-fill: -ogua-success-text; }
+.status-pill-danger  { -fx-background-color: -ogua-danger-bg; -fx-text-fill: -ogua-danger-text; }
+.status-pill-warning { -fx-background-color: -ogua-warning-bg; -fx-text-fill: -ogua-warning-text; }
+.status-pill-neutral { -fx-background-color: -ogua-neutral-bg; -fx-text-fill: -ogua-neutral-text; }
+
+/* ---- Inputs ---- */
+.text-field, .password-field, .combo-box {
+    -fx-background-color: -ogua-surface;
+    -fx-border-color: -ogua-border;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 8 12 8 12;
+}
+.text-field:focused, .password-field:focused, .combo-box:focused {
+    -fx-border-color: -ogua-primary;
+}
+
+/* ---- Selection controls (brand accent instead of default blue) ---- */
+.radio-button > .radio {
+    -fx-border-color: -ogua-border;
+    -fx-background-color: -ogua-surface;
+}
+.radio-button:selected > .radio > .dot {
+    -fx-background-color: -ogua-primary;
+}
+.radio-button:selected > .radio {
+    -fx-border-color: -ogua-primary;
+}
+.check-box > .box {
+    -fx-border-color: -ogua-border;
+    -fx-background-color: -ogua-surface;
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+}
+.check-box:selected > .box {
+    -fx-background-color: -ogua-primary;
+    -fx-border-color: -ogua-primary;
+}
+.check-box:selected > .box > .mark {
+    -fx-background-color: white;
+}
+
+/* ---- Scroll containers ---- */
+.scroll-pane, .scroll-pane .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+}
+.scroll-pane > .corner {
+    -fx-background-color: transparent;
+}
+
+/* ---- Brand imagery ---- */
+.login-background-image {
+    -fx-background-image: url("../images/app-background.jpg");
+    -fx-background-size: cover;
+    -fx-background-position: center center;
+    -fx-background-repeat: no-repeat;
+}
+.login-scrim {
+    -fx-background-color: linear-gradient(to bottom, rgba(15,23,42,0.75), rgba(15,23,42,0.45));
+}
+
+/* ---- App chrome ---- */
+.topbar {
+    -fx-background-color: -ogua-surface;
+    -fx-border-color: transparent transparent -ogua-border transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 14 24 14 24;
+}
+
+/* ---- Empty / placeholder states ---- */
+.empty-state-title   { -fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: -ogua-text-primary; }
+.empty-state-message { -fx-font-size: 12px; -fx-text-fill: -ogua-text-secondary; }
+
+/* ---- Table (TableView) ---- */
+.table-view {
+    -fx-background-color: -ogua-surface;
+    -fx-border-color: -ogua-border;
+    -fx-border-radius: 8;
+}
+.table-view .column-header-background {
+    -fx-background-color: -ogua-neutral-bg;
+    -fx-background-radius: 8 8 0 0;
+}
+.table-view .column-header .label {
+    -fx-text-fill: -ogua-text-secondary;
+    -fx-font-weight: bold;
+    -fx-font-size: 11px;
+}
+.table-row-cell:odd  { -fx-background-color: -ogua-surface; }
+.table-row-cell:even { -fx-background-color: -ogua-bg; }

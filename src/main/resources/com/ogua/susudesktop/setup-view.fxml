@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.RadioButton?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.SetupController">
+    <content>
+        <VBox spacing="24" style="-fx-background-color: -ogua-bg;">
+            <padding><Insets bottom="32" left="32" right="32" top="28"/></padding>
+
+            <HBox alignment="CENTER_LEFT" spacing="14">
+                <ImageView fitHeight="48" fitWidth="48" preserveRatio="true" smooth="true">
+                    <Image url="@images/susu-logo.png"/>
+                </ImageView>
+                <VBox spacing="4">
+                    <Label styleClass="page-title" text="SusuApp Desktop"/>
+                    <Label styleClass="text-muted" text="First-run setup — choose storage, mode, and create the first administrator" wrapText="true"/>
+                </VBox>
+            </HBox>
+
+            <VBox spacing="14" styleClass="card">
+                <Label styleClass="card-title" text="1. Storage"/>
+                <Label styleClass="text-muted" text="Where should this computer keep its data?" wrapText="true"/>
+
+                <fx:define><ToggleGroup fx:id="storageGroup"/></fx:define>
+                <RadioButton fx:id="sqliteRadio" selected="true" text="SQLite — this computer only (recommended for a single office PC)" toggleGroup="$storageGroup" wrapText="true"/>
+                <RadioButton fx:id="mysqlRadio" text="MySQL server — shared by several computers on the office network" toggleGroup="$storageGroup" wrapText="true"/>
+
+                <GridPane fx:id="mysqlPane" disable="true" hgap="12" vgap="10">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                    <Label text="Host" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                    <TextField fx:id="mysqlHost" maxWidth="Infinity" text="127.0.0.1" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                    <Label text="Port" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                    <TextField fx:id="mysqlPort" maxWidth="Infinity" text="3306" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                    <Label text="Database" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+                    <TextField fx:id="mysqlDatabase" maxWidth="Infinity" text="susuapp_desktop" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                    <Label text="Username" GridPane.columnIndex="0" GridPane.rowIndex="3"/>
+                    <TextField fx:id="mysqlUsername" maxWidth="Infinity" text="root" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+                    <Label text="Password" GridPane.columnIndex="0" GridPane.rowIndex="4"/>
+                    <PasswordField fx:id="mysqlPassword" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="4"/>
+                </GridPane>
+            </VBox>
+
+            <VBox spacing="14" styleClass="card">
+                <Label styleClass="card-title" text="2. Mode"/>
+                <Label styleClass="text-muted" text="Should this computer sync with the SusuApp server?" wrapText="true"/>
+
+                <fx:define><ToggleGroup fx:id="modeGroup"/></fx:define>
+                <RadioButton fx:id="standaloneRadio" selected="true" text="Standalone — this company operates fully offline" toggleGroup="$modeGroup" wrapText="true"/>
+                <RadioButton fx:id="hybridRadio" text="Hybrid — sync with the SusuApp web server when online" toggleGroup="$modeGroup" wrapText="true"/>
+
+                <GridPane fx:id="hybridPane" disable="true" hgap="12" vgap="10">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                    <Label text="Server URL" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                    <TextField fx:id="apiBaseUrl" maxWidth="Infinity" promptText="https://susu.example.com" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                </GridPane>
+            </VBox>
+
+            <VBox spacing="14" styleClass="card">
+                <Label styleClass="card-title" text="3. Administrator account"/>
+                <Label styleClass="text-muted" text="You will use this account to sign in after setup." wrapText="true"/>
+
+                <GridPane hgap="12" vgap="10">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                    <Label text="Full name" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                    <TextField fx:id="adminName" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                    <Label text="Email" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                    <TextField fx:id="adminEmail" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                    <Label text="Password" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+                    <PasswordField fx:id="adminPassword" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                </GridPane>
+            </VBox>
+
+            <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+            <Button fx:id="finishButton" defaultButton="true" maxWidth="Infinity" onAction="#onFinish" styleClass="button-primary" text="Finish setup"/>
+        </VBox>
+    </content>
+</ScrollPane>

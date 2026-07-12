@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.MainController">
+    <top>
+        <HBox alignment="CENTER_LEFT" spacing="10" styleClass="topbar">
+            <ImageView fitHeight="28" fitWidth="28" preserveRatio="true" smooth="true">
+                <Image url="@images/susu-logo.png"/>
+            </ImageView>
+            <Label styleClass="section-title" text="SusuApp Desktop"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="modeLabel" styleClass="text-muted"/>
+            <Label fx:id="userLabel" styleClass="body-text"/>
+            <Button onAction="#onLogout" styleClass="button-secondary" text="Sign out"/>
+        </HBox>
+    </top>
+    <center>
+        <ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: -ogua-bg;">
+            <content>
+                <VBox alignment="CENTER" spacing="16" style="-fx-background-color: -ogua-bg;">
+                    <padding><Insets bottom="40" left="24" right="24" top="40"/></padding>
+                    <VBox alignment="CENTER" maxWidth="420" spacing="8" styleClass="card">
+                        <Label styleClass="empty-state-title" text="Back office coming in the next release"/>
+                        <Label alignment="CENTER" styleClass="empty-state-message" text="Customers, collections, withdrawals, and reports will appear here." textAlignment="CENTER" wrapText="true"/>
+                        <Label fx:id="storageLabel" styleClass="caption"/>
+                    </VBox>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+</BorderPane>

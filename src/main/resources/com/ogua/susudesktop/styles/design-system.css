@@ -1,0 +1,45 @@
+/*
+ * SusuApp Desktop — design tokens.
+ * Loaded after bootstrapfx.css on every Scene (see Navigator.show()).
+ * Colors are JavaFX "looked-up colors": defined once on .root, referenced
+ * elsewhere as a bare -ogua-* name (no var(), no leading --).
+ * Brand primary matches the web app's Filament panel color (Color::Amber)
+ * so the desktop client stays visually consistent with the web/mobile apps.
+ */
+
+.root {
+    -ogua-primary: #F59E0B;
+    -ogua-primary-dark: #B45309;
+    -ogua-secondary: #475569;
+    -ogua-success: #16A34A;
+    -ogua-success-bg: #DCFCE7;
+    -ogua-success-text: #166534;
+    -ogua-danger: #DC2626;
+    -ogua-danger-bg: #FEE2E2;
+    -ogua-danger-text: #991B1B;
+    -ogua-warning: #EA580C;
+    -ogua-warning-bg: #FFEDD5;
+    -ogua-warning-text: #9A3412;
+    -ogua-neutral-bg: #F1F5F9;
+    -ogua-neutral-text: #475569;
+
+    -ogua-surface: #FFFFFF;
+    -ogua-bg: #F8FAFC;
+    -ogua-border: #E2E8F0;
+    -ogua-text-primary: #0F172A;
+    -ogua-text-secondary: #64748B;
+
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 13px;
+    -fx-background-color: -ogua-bg;
+}
+
+/* Typography hierarchy — apply via styleClass, do not hardcode font sizes inline */
+.page-title    { -fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: -ogua-text-primary; }
+.section-title { -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: -ogua-text-primary; }
+.card-title    { -fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: -ogua-text-primary; }
+.body-text     { -fx-font-size: 13px; -fx-text-fill: -ogua-text-primary; }
+.text-muted    { -fx-font-size: 12px; -fx-text-fill: -ogua-text-secondary; }
+.caption       { -fx-font-size: 11px; -fx-text-fill: -ogua-text-secondary; }
+.text-danger   { -fx-text-fill: -ogua-danger; }
+.text-success  { -fx-text-fill: -ogua-success; }

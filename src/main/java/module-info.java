@@ -9,6 +9,16 @@ module com.ogua.susudesktop {
     requires org.kordamp.bootstrapfx.core;
     requires eu.hansolo.tilesfx;
 
+    requires java.sql;
+    requires java.net.http;
+    requires com.zaxxer.hikari;
+    requires org.xerial.sqlitejdbc;
+    requires jbcrypt;
+    requires org.json;
+
     opens com.ogua.susudesktop to javafx.fxml;
+    opens db to javafx.fxml;
+    opens models to javafx.base;
+    opens service to javafx.fxml;
     exports com.ogua.susudesktop;
 }
