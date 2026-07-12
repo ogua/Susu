@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "aaa3825eeae88f9dc0f0441b0608a2b2",
+    "content-hash": "40149a509fd7e5d3649ecb03e15aabdd",
     "packages": [
         {
             "name": "anourvalar/eloquent-serialize",
@@ -4324,49 +4324,6 @@
             "time": "2026-06-23T18:43:15+00:00"
         },
         {
-            "name": "matscode/paystack",
-            "version": "v1.10.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/matscode/paystack.git",
-                "reference": "97feac7c5506cd9231510e8e0f5836c28e1b7599"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/matscode/paystack/zipball/97feac7c5506cd9231510e8e0f5836c28e1b7599",
-                "reference": "97feac7c5506cd9231510e8e0f5836c28e1b7599",
-                "shasum": ""
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Matscode\\Paystack\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "GPL-3.0-only"
-            ],
-            "authors": [
-                {
-                    "name": "Michael Akanji",
-                    "email": "matscode@gmail.com",
-                    "homepage": "http://michaelakanji.com"
-                }
-            ],
-            "description": "This package is for communicating with PAYSTACK API",
-            "keywords": [
-                "payment",
-                "paystack",
-                "php"
-            ],
-            "support": {
-                "issues": "https://github.com/matscode/paystack/issues",
-                "source": "https://github.com/matscode/paystack/tree/v1.10.1"
-            },
-            "time": "2024-07-25T10:43:56+00:00"
-        },
-        {
             "name": "monolog/monolog",
             "version": "3.10.0",
             "source": {
@@ -6261,92 +6218,6 @@
                 "source": "https://github.com/MyIntervals/PHP-CSS-Parser/tree/v9.4.0"
             },
             "time": "2026-06-18T15:10:53+00:00"
-        },
-        {
-            "name": "sajjadhossainshohag/laravel-paystack",
-            "version": "v1.1.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/sajjadhossainshohag/laravel-paystack.git",
-                "reference": "43792f17d33004e105e98eed64f09ae1817ac0d8"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/sajjadhossainshohag/laravel-paystack/zipball/43792f17d33004e105e98eed64f09ae1817ac0d8",
-                "reference": "43792f17d33004e105e98eed64f09ae1817ac0d8",
-                "shasum": ""
-            },
-            "require": {
-                "guzzlehttp/guzzle": "~6|~7|~8|~9",
-                "illuminate/support": "~6|~7|~8|~9|^10.0|^11.0|^12.0|^13.0",
-                "php": "^7.2|^8.0|^8.1|^8.2|^8.3|^8.4"
-            },
-            "require-dev": {
-                "mockery/mockery": "^1.3",
-                "php-coveralls/php-coveralls": "^2.0",
-                "phpunit/phpunit": "^8.4|^9.0|^10.5",
-                "scrutinizer/ocular": "~1.1"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "aliases": {
-                        "Paystack": "Sajjadhossainshohag\\Paystack\\Facades\\Paystack"
-                    },
-                    "providers": [
-                        "Sajjadhossainshohag\\Paystack\\PaystackServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "files": [
-                    "src/Support/helpers.php"
-                ],
-                "psr-4": {
-                    "Sajjadhossainshohag\\Paystack\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Prosper Otemuyiwa",
-                    "email": "prosperotemuyiwa@gmail.com"
-                },
-                {
-                    "name": "iamfunsho",
-                    "email": "info@devfunsho.com"
-                },
-                {
-                    "name": "Sajjad Hossain Shohag",
-                    "email": "sajjadhossainshohagbd@gmail.com"
-                }
-            ],
-            "description": "A Laravel Package for Paystack",
-            "keywords": [
-                "github",
-                "laravel",
-                "laravel 10",
-                "laravel 11",
-                "laravel 12",
-                "laravel 6",
-                "laravel 7",
-                "laravel 8",
-                "laravel 9",
-                "open source",
-                "payments",
-                "paystack",
-                "paystack.co",
-                "php",
-                "subscription"
-            ],
-            "support": {
-                "issues": "https://github.com/sajjadhossainshohag/laravel-paystack/issues",
-                "source": "https://github.com/sajjadhossainshohag/laravel-paystack/tree/v1.1.1"
-            },
-            "time": "2026-05-20T08:38:31+00:00"
         },
         {
             "name": "scrivo/highlight.php",

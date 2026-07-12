@@ -1,5 +1,11 @@
 <?php
 
+use Database\Seeders\RoleSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Features\SupportTesting\Testable;
+use Livewire\Livewire;
+use Tests\TestCase;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -11,8 +17,8 @@
 |
 */
 
-pest()->extend(Tests\TestCase::class)
- // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*
@@ -36,12 +42,26 @@ expect()->extend('toBeOne', function () {
 |--------------------------------------------------------------------------
 |
 | While Pest is very powerful out-of-the-box, you may have some testing code specific to your
-| project that you don't want to repeat in every file. Here you can also expose helpers as
-| global functions to help you to reduce the number of lines of code in your test files.
+| project that you don't want to repeat in every line of code in your test files.
 |
 */
 
-function something()
+/**
+ * Test a Livewire component. Stand-in for pestphp/pest-plugin-livewire's
+ * helper (that plugin needs PHP >= 8.3 with Livewire 4).
+ *
+ * @param  class-string  $component
+ * @param  array<string, mixed>  $params
+ */
+function livewire(string $component, array $params = []): Testable
 {
-    // ..
+    return Livewire::test($component, $params);
+}
+
+/**
+ * Seed the application roles (most feature tests need them).
+ */
+function seedRoles(): void
+{
+    (new RoleSeeder)->run();
 }

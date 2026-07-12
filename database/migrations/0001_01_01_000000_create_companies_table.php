@@ -1,8 +1,8 @@
 <?php
 
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -18,7 +18,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->string('slug')->unique();
             $table->string('domain_alias')->unique();
-            $table->url('website')->nullable();
+            $table->string('website')->nullable();
             $table->string('primary_color')->default('#3b82f6');
             $table->string('secondary_color')->default('#1e40af');
 

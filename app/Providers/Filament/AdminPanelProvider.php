@@ -2,27 +2,29 @@
 
 namespace App\Providers\Filament;
 
-use Filament\Panel;
 use App\Models\Branch;
-use Filament\PanelProvider;
+use App\Models\User;
+use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Filament\Http\Middleware\Authenticate;
+use Filament\Http\Middleware\AuthenticateSession;
+use Filament\Http\Middleware\DisableBladeIconComponents;
+use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Pages\Dashboard;
+use Filament\Panel;
+use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
+use Filament\Widgets\FilamentInfoWidget;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use Filament\Widgets\FilamentInfoWidget;
-use Filament\Http\Middleware\Authenticate;
-use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Cookie\Middleware\EncryptCookies;
-use Filament\Http\Middleware\AuthenticateSession;
-use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use Swis\Filament\Backgrounds\ImageProviders\MyImages;
-use Filament\Http\Middleware\DisableBladeIconComponents;
 use Swis\Filament\Backgrounds\FilamentBackgroundsPlugin;
-use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
-use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Swis\Filament\Backgrounds\ImageProviders\MyImages;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -41,25 +43,9 @@ class AdminPanelProvider extends PanelProvider
             ->sidebarCollapsibleOnDesktop()
             // ->brandLogo(asset('images/uniMAC-logo-line.png'))
             ->tenant(Branch::class, slugAttribute: 'slug')
-            ->brandLogo(function () {
-                if (Auth::guard('admin')->check()) {
-                    return Auth::guard('admin')->user()->company?->logo;
-                }
-
-                $company = Cache::get('domain_company_'.request()->getHost());
-
-                return $company?->logo ?? asset('images/logo.png');
-            })
+            ->brandLogo(fn (): ?string => static::resolveBrandLogo())
             ->brandLogoHeight('3rem')
-            ->favicon(function () {
-                if (Auth::guard('admin')->check()) {
-                    return Auth::guard('admin')->user()->company?->logo;
-                }
-
-                $company = Cache::get('domain_company_'.request()->getHost());
-
-                return $company?->logo ?? asset('images/logo.png');
-            })
+            ->favicon(fn (): ?string => static::resolveBrandLogo())
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -87,13 +73,31 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ])->plugins([
+                FilamentShieldPlugin::make(),
                 FilamentBackgroundsPlugin::make()
-                ->imageProvider(
-                    MyImages::make()
-                        ->directory('images/backgrounds')
-                )
+                    ->imageProvider(
+                        MyImages::make()
+                            ->directory('images/backgrounds')
+                    ),
             ])
             ->databaseNotifications()
             ->databaseNotificationsPolling('30s');
+    }
+
+    /**
+     * Resolve the tenant company's logo for the authenticated user, falling
+     * back to a cached domain-alias lookup for guests, then the app default.
+     */
+    protected static function resolveBrandLogo(): ?string
+    {
+        $user = Auth::user();
+
+        if ($user instanceof User && $user->company?->logo) {
+            return $user->company->logo;
+        }
+
+        $company = Cache::get('domain_company_'.request()->getHost());
+
+        return $company?->logo ?? asset('images/logo.png');
     }
 }

@@ -423,7 +423,7 @@ livewire(ListUsers::class)
 SusuApp is a susu (rotating savings / micro-finance collection) application for the micro-finance industry. It ships on three platforms that must stay in feature parity:
 
 - **Web application (this repository)** — `c:\xampp\htdocs\Projects\SusuApp`. Laravel 12 + Filament v5 + Livewire. Serves users who prefer the web path.
-- **Mobile application** — `D:\Mobile\susu-mobile-app`. Expo / React Native (TypeScript, expo-router). Serves users who prefer the mobile app. It consumes this Laravel application's API — it has no business logic or database of its own.
+- **Mobile application** — `D:\Mobile\susu-mobile-app`. Expo / React Native (TypeScript, expo-router). Serves field agents (offline-first: local SQLite via WatermelonDB with an outbox/sync queue, so collections work without connectivity) and customers (online). It consumes this Laravel application's API and holds no business logic of its own; offline records carry client-generated UUIDs and replay idempotently through `/api/v1/sync/batch`.
 - **Desktop application (offline)** — `D:\Desktop App\susuDesktop`. JavaFX (Java 25, Maven; run with `mvn clean javafx:run`). Serves users who need offline capability: it works against local storage while disconnected and syncs with this Laravel application's API when back online. The Laravel backend remains the source of truth its data reconciles against.
 
 ## Cross-Platform Parity Rules

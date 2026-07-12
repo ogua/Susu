@@ -1,8 +1,8 @@
 <?php
 
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -17,11 +17,16 @@ return new class extends Migration
             $table->uuid('branch_id')->nullable();
             $table->string('name');
             $table->string('email')->unique();
+            $table->string('phone')->nullable();
+            $table->string('photo_path')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+
+            $table->foreign('company_id')->references('id')->on('companies')->nullOnDelete();
+            $table->unique(['company_id', 'phone']);
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

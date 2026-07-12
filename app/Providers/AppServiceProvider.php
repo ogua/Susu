@@ -2,10 +2,10 @@
 
 namespace App\Providers;
 
-use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\ServiceProvider;
-use Sajjadhossainshohag\Paystack\Facades\Paystack;
+use Maatwebsite\Excel\Facades\Excel;
+use Torann\GeoIP\Facades\GeoIP;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -18,8 +18,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Add your aliases
         $loader->alias('Excel', Excel::class);
-        $loader->alias('GeoIP', \Torann\GeoIP\Facades\GeoIP::class);
-        $loader->alias('Paystack', Paystack::class);
+        $loader->alias('GeoIP', GeoIP::class);
     }
 
     /**

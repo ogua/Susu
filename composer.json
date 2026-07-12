@@ -14,8 +14,6 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "maatwebsite/excel": "^3.1",
-        "matscode/paystack": "^1.10",
-        "sajjadhossainshohag/laravel-paystack": "^1.1",
         "stechstudio/filament-impersonate": "^5.6",
         "swisnl/filament-backgrounds": "^2.0",
         "torann/geoip": "^3.0"
