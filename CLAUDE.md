@@ -442,3 +442,15 @@ The Laravel backend is the **single source of truth**. All business logic, valid
    - Pest feature tests covering both the web flow and the API endpoint
    - Mobile screen / API client update in `D:\Mobile\susu-mobile-app`
    - Desktop view / API-sync update in `D:\Desktop App\susuDesktop` (including offline local-storage handling and sync behavior for the feature)
+
+## Git Workflow
+
+All three codebases are tracked in the single repo `git@github.com:ogua/Susu.git` so the whole product can be followed from one place:
+
+- **`main`** — this web app (`c:\xampp\htdocs\Projects\SusuApp`).
+- **`mobileapp`** — the mobile app (`D:\Mobile\susu-mobile-app`), pushed from its own local clone's `master` branch.
+- **`desktopapp`** — the desktop app (`D:\Desktop App\susuDesktop`), pushed from its own local clone's `master` branch.
+
+Each app repo has `origin` set to `git@github.com:ogua/Susu.git` with a push refspec mapping its local `master` to its branch above (e.g. `git push` from the mobile repo lands on `mobileapp`, not `main`). Commit and push in whichever repo you're working in as usual — `git push` targets the right branch automatically. These are independent histories (not merged into `main`); do not attempt to merge `mobileapp`/`desktopapp` into `main` or vice versa without explicit user approval.
+
+**Commit discipline: commit every completed feature or update immediately, in whichever of the three repos it was made, before moving to the next task.** Don't batch unrelated changes into one commit. Write a concise commit message describing the "why". This applies across all three codebases (SusuApp, mobile, desktop) whenever Claude finishes a unit of work in them.
