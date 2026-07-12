@@ -5,6 +5,7 @@ namespace App\Enums;
 enum SyncOpType: string
 {
     case RegisterCustomer = 'customer.register';
+    case OpenSavingsAccount = 'account.open';
     case RecordCollection = 'collection.record';
     case SubmitDailySummary = 'summary.submit';
     case RecordLocationPings = 'locations.record';
@@ -19,6 +20,7 @@ enum SyncOpType: string
         return match ($role) {
             'field_agent' => [
                 self::RegisterCustomer,
+                self::OpenSavingsAccount,
                 self::RecordCollection,
                 self::SubmitDailySummary,
                 self::RecordLocationPings,

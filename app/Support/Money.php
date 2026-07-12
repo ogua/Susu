@@ -2,8 +2,6 @@
 
 namespace App\Support;
 
-use NumberFormatter;
-
 /**
  * All amounts in SusuApp are integers in minor units (pesewas for GHS).
  * This helper is the single place that turns them into display strings;
