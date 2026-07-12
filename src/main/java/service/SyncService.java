@@ -18,6 +18,44 @@ public class SyncService {
 
     private final OutboxService outbox = new OutboxService();
     private final ApiClient apiClient = new ApiClient();
+    private final SavingsProductService productService = new SavingsProductService();
+
+    /**
+     * Pulls the company's product catalogue first (so any account.open op about to be
+     * pushed references a product id the server already knows), then drains the outbox.
+     * This is what the "Sync Now" button calls.
+     */
+    public SyncSummary syncNow() throws SQLException {
+        pullProducts();
+        return pushOutbox();
+    }
+
+    /**
+     * Mirrors the company's active product catalogue locally by id (see
+     * SavingsProductService#upsertFromServer) — best-effort, never throws, since a
+     * failed pull shouldn't block the outbox push that follows it.
+     */
+    public void pullProducts() {
+        JSONObject response;
+        try {
+            response = apiClient.bootstrap();
+        } catch (ApiClient.ApiException e) {
+            return;
+        }
+
+        JSONArray products = response.optJSONArray("products");
+        if (products == null) {
+            return;
+        }
+
+        for (int i = 0; i < products.length(); i++) {
+            try {
+                productService.upsertFromServer(products.getJSONObject(i));
+            } catch (SQLException e) {
+                // Best-effort: skip this product, keep processing the rest.
+            }
+        }
+    }
 
     public SyncSummary pushOutbox() throws SQLException {
         List<OutboxService.OutboxItem> items = outbox.pending(200);

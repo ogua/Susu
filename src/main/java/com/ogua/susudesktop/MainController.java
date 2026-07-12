@@ -56,8 +56,20 @@ public class MainController {
         syncNowButton.setVisible(AppConfig.isSyncEnabled());
         syncNowButton.setManaged(AppConfig.isSyncEnabled());
         refreshSyncStatus();
+        pullProductsInBackground();
 
         showDashboard();
+    }
+
+    /** Best-effort catalogue refresh on startup, so a freshly opened session has
+     * the company's real products before the user tries to open an account. */
+    private void pullProductsInBackground() {
+        if (!AppConfig.isSyncEnabled()) {
+            return;
+        }
+        Thread thread = new Thread(syncService::pullProducts, "product-pull-startup");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void refreshSyncStatus() {
@@ -82,7 +94,7 @@ public class MainController {
         Task<SyncService.SyncSummary> task = new Task<>() {
             @Override
             protected SyncService.SyncSummary call() throws Exception {
-                return syncService.pushOutbox();
+                return syncService.syncNow();
             }
         };
 

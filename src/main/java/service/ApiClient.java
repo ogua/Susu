@@ -52,12 +52,24 @@ public class ApiClient {
         return json;
     }
 
+    /** Full snapshot of the caller's working set (accounts/customers/products). Requires a cached token. */
+    public JSONObject bootstrap() throws ApiException {
+        String token = requireToken();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/v1/sync/bootstrap"))
+                .timeout(Duration.ofSeconds(20))
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer " + token)
+                .GET()
+                .build();
+
+        return send(request);
+    }
+
     /** Pushes queued outbox ops to POST /sync/batch. Requires a cached token (see {@link #login}). */
     public JSONObject pushSyncBatch(JSONArray ops) throws ApiException {
-        String token = AppConfig.getApiToken();
-        if (token == null || token.isBlank()) {
-            throw new ApiException("Not signed in to the server. Log in online at least once to enable sync.");
-        }
+        String token = requireToken();
 
         JSONObject body = new JSONObject().put("ops", ops);
 
@@ -72,6 +84,14 @@ public class ApiClient {
                 .build();
 
         return send(request);
+    }
+
+    private String requireToken() throws ApiException {
+        String token = AppConfig.getApiToken();
+        if (token == null || token.isBlank()) {
+            throw new ApiException("Not signed in to the server. Log in online at least once to enable sync.");
+        }
+        return token;
     }
 
     private String baseUrl() {
