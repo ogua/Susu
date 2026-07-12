@@ -1,9 +1,9 @@
-import { Redirect } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 
 import { useAuthStore } from '@/stores/authStore';
 
-/** Entry point: route to the experience matching the session's role. */
-export default function Index() {
+/** Staff experience (field agents; managers/admins reviewing on the go). */
+export default function AgentLayout() {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
 
@@ -15,5 +15,9 @@ export default function Index() {
     return <Redirect href="/(customer)" />;
   }
 
-  return <Redirect href="/(agent)" />;
+  return (
+    <Stack>
+      <Stack.Screen name="index" options={{ title: 'Agent Dashboard' }} />
+    </Stack>
+  );
 }
