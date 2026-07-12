@@ -8,8 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SyncBatchRequest;
 use App\Http\Resources\V1\CustomerResource;
 use App\Http\Resources\V1\SavingsAccountResource;
+use App\Http\Resources\V1\SavingsProductResource;
 use App\Models\Customer;
 use App\Models\SavingsAccount;
+use App\Models\SavingsProduct;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -37,9 +39,15 @@ class SyncController extends Controller
 
         $customers = Customer::whereIn('id', $accounts->pluck('customer_id'))->get();
 
+        // Company-wide, not agent-scoped: offline clients (desktop hybrid mode) need
+        // the full active catalogue to keep their local product ids server-matching
+        // (see App\Http\Resources\V1\SavingsProductResource).
+        $products = SavingsProduct::where('company_id', $user->company_id)->where('is_active', true)->get();
+
         return response()->json([
             'accounts' => SavingsAccountResource::collection($accounts),
             'customers' => CustomerResource::collection($customers),
+            'products' => SavingsProductResource::collection($products),
             'cursor' => now()->toISOString(),
         ]);
     }
