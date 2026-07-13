@@ -5,6 +5,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import '@/location/backgroundTracking';
+
 import { useAuthStore } from '@/stores/authStore';
 import { watchConnectivity } from '@/sync/engine';
 

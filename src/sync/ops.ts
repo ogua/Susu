@@ -43,3 +43,14 @@ export async function enqueueDailySummary(payload: {
 }): Promise<string> {
   return enqueue('summary.submit', payload);
 }
+
+interface LocationPingPayload {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  recorded_at: string;
+}
+
+export async function enqueueLocationPings(pings: LocationPingPayload[]): Promise<string> {
+  return enqueue('locations.record', { pings });
+}

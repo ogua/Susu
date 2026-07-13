@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { logout } from '@/api/auth';
 import { setDuty } from '@/api/duty';
 import { getTodaySummary } from '@/api/summaries';
 import { ThemedText } from '@/components/themed-text';
+import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '@/location/backgroundTracking';
 import { useAuthStore } from '@/stores/authStore';
 import { useDutyStore } from '@/stores/dutyStore';
 import { drainOutbox } from '@/sync/engine';
@@ -37,6 +38,16 @@ export default function AgentDashboard() {
     }, [refreshPending]),
   );
 
+  useEffect(() => {
+    // Reconciles native tracking with the "on duty" default after a fresh
+    // app launch, where this JS state resets but the OS-level task may not
+    // be running yet. Best-effort — never blocks the dashboard on this.
+    if (onDuty) {
+      void startBackgroundLocationTracking();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleSyncNow() {
     setRefreshing(true);
     await drainOutbox();
@@ -50,6 +61,11 @@ export default function AgentDashboard() {
     try {
       const confirmed = await setDuty(value);
       setOnDuty(confirmed);
+      if (confirmed) {
+        await startBackgroundLocationTracking();
+      } else {
+        await stopBackgroundLocationTracking();
+      }
     } catch {
       // Duty toggle needs connectivity; leave the switch as it was.
     } finally {
@@ -58,6 +74,7 @@ export default function AgentDashboard() {
   }
 
   async function handleLogout() {
+    await stopBackgroundLocationTracking();
     try {
       await logout();
     } catch {
