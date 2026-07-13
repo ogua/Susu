@@ -20,6 +20,8 @@ export default function CustomerLayout() {
       <Stack.Screen name="index" options={{ title: 'My Susu' }} />
       <Stack.Screen name="account/[accountId]" options={{ title: 'Account' }} />
       <Stack.Screen name="withdraw" options={{ title: 'Request Withdrawal' }} />
+      <Stack.Screen name="deposit" options={{ title: 'Deposit' }} />
+      <Stack.Screen name="payment-verify" options={{ title: 'Mobile Money Payment' }} />
     </Stack>
   );
 }

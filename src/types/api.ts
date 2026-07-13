@@ -126,6 +126,31 @@ export interface AgentDailySummary {
   notes: string | null;
 }
 
+export type MobileMoneyProvider = 'mtn' | 'vod' | 'atl';
+
+export type PaymentIntentStatus =
+  | 'initiated'
+  | 'pay_offline'
+  | 'send_otp'
+  | 'pending'
+  | 'success'
+  | 'failed'
+  | 'abandoned';
+
+export interface PaymentIntent {
+  id: string;
+  flow: 'charge_api' | 'checkout';
+  channel: MobileMoneyProvider | null;
+  phone: string | null;
+  amount: number;
+  amount_formatted: string;
+  status: PaymentIntentStatus;
+  journal_entry_id: string | null;
+  authorization_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Paginated<T> {
   data: T[];
   links: { first: string | null; last: string | null; prev: string | null; next: string | null };

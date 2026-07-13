@@ -43,9 +43,14 @@ export default function AccountDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Pressable style={styles.withdrawButton} onPress={() => router.push({ pathname: '/(customer)/withdraw', params: { accountId } })}>
-        <ThemedText style={styles.withdrawButtonText}>Request Withdrawal</ThemedText>
-      </Pressable>
+      <View style={styles.actionRow}>
+        <Pressable style={styles.depositButton} onPress={() => router.push({ pathname: '/(customer)/deposit', params: { accountId } })}>
+          <ThemedText style={styles.depositButtonText}>Deposit via Mobile Money</ThemedText>
+        </Pressable>
+        <Pressable style={styles.withdrawButton} onPress={() => router.push({ pathname: '/(customer)/withdraw', params: { accountId } })}>
+          <ThemedText style={styles.withdrawButtonText}>Request Withdrawal</ThemedText>
+        </Pressable>
+      </View>
 
       {transactions.isLoading ? (
         <ActivityIndicator style={{ marginTop: 24 }} />
@@ -70,6 +75,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   separator: { height: 1, backgroundColor: '#e5e5ea' },
+  actionRow: { gap: 8 },
+  depositButton: {
+    backgroundColor: '#1a8a3d',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  depositButtonText: { color: '#ffffff', fontWeight: '600' },
   withdrawButton: {
     backgroundColor: '#208AEF',
     borderRadius: 10,
