@@ -50,5 +50,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/{intent}/submit-otp', [PaymentController::class, 'submitOtp'])->name('submit-otp');
         Route::post('/{intent}/verify', [PaymentController::class, 'verify'])->name('verify');
         Route::get('/{intent}', [PaymentController::class, 'show'])->name('show');
+
+        // Back-office only (mirrors PaymentIntentPolicy::viewAny) — the desktop
+        // hybrid-mode payments view, not agents/customers.
+        Route::middleware('role:branch_manager|company_admin')->group(function (): void {
+            Route::get('/', [PaymentController::class, 'index'])->name('index');
+        });
     });
 });

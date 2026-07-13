@@ -245,3 +245,25 @@ it('lets the webhook and a manual verify race without double-posting', function 
     expect($this->account->refresh()->balance)->toBe(0) // still only posted once
         ->and($this->account->contributions_this_cycle)->toBe(1);
 });
+
+it('lists payment intents scoped to the caller company, for back-office roles only', function (): void {
+    $manager = User::factory()->branchManager($this->branch)->create();
+
+    $ownIntent = PaymentIntent::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'payable_id' => $this->account->id,
+        'payable_type' => SavingsAccount::class,
+        'initiated_by' => $this->agent->id,
+    ]);
+    $otherIntent = PaymentIntent::factory()->create(); // different company entirely
+
+    $response = $this->actingAs($manager, 'sanctum')->getJson('/api/v1/payments');
+
+    $response->assertOk();
+    $ids = collect($response->json('intents'))->pluck('id');
+    expect($ids)->toContain($ownIntent->id)
+        ->and($ids)->not->toContain($otherIntent->id);
+
+    $this->actingAs($this->agent, 'sanctum')->getJson('/api/v1/payments')->assertForbidden();
+});

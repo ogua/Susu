@@ -87,6 +87,23 @@ class PaymentController extends Controller
         return response()->json(['intent' => PaymentIntentResource::make($paymentIntent)]);
     }
 
+    /** Read-only list for the desktop's hybrid-mode payments view — company-scoped, newest first. */
+    public function index(Request $request): JsonResponse
+    {
+        $intents = PaymentIntent::where('company_id', $request->user()->company_id)
+            ->latest()
+            ->paginate(50);
+
+        return response()->json([
+            'intents' => PaymentIntentResource::collection($intents),
+            'meta' => [
+                'current_page' => $intents->currentPage(),
+                'last_page' => $intents->lastPage(),
+                'total' => $intents->total(),
+            ],
+        ]);
+    }
+
     private function findScoped(Request $request, string $id): PaymentIntent
     {
         return PaymentIntent::where('company_id', $request->user()->company_id)->findOrFail($id);
