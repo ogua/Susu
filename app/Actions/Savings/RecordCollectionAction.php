@@ -76,11 +76,20 @@ class RecordCollectionAction
                 $meta['flagged_stale'] = true;
             }
 
+            // Cash sits with the agent until remitted; mobile money never touches the
+            // agent's hand at all — it settles from Paystack to the company's bank —
+            // so the two payment methods must debit different asset accounts or the
+            // agent's cash-in-hand (used for day-close reconciliation) would be wrong.
+            $debitAccount = match ($paymentMethod) {
+                PaymentMethod::MobileMoney => $this->chart->momoClearing($account->company),
+                default => $this->chart->agentCash($agent),
+            };
+
             $entry = $this->ledger->post(new EntryData(
                 company: $account->company,
                 type: TransactionType::Collection,
                 lines: [
-                    ['account' => $this->chart->agentCash($agent), 'debit' => $amount],
+                    ['account' => $debitAccount, 'debit' => $amount],
                     ['account' => $account->ledgerAccount, 'credit' => $amount],
                 ],
                 branch: $account->branch,
@@ -127,7 +136,11 @@ class RecordCollectionAction
                 'status' => AccountStatus::Active,
             ])->save();
 
-            $this->trackDailySummary($agent, $account, $amount, $recordedAt);
+            // Self-service customer momo deposits have no day sheet to track — only
+            // staff roles carry cash-in-hand/reconciliation responsibility.
+            if ($agent->hasAnyRole(['field_agent', 'branch_manager', 'company_admin'])) {
+                $this->trackDailySummary($agent, $account, $amount, $recordedAt);
+            }
 
             return new CollectionResult($entry, $account, $cycle->commissionAmount, duplicate: false);
         });
@@ -141,8 +154,9 @@ class RecordCollectionAction
 
         $isAssignedAgent = $account->agent_id === $agent->id;
         $isManager = $agent->hasRole(['branch_manager', 'company_admin']);
+        $isOwnAccount = $account->customer?->user_id === $agent->id;
 
-        if (! $isAssignedAgent && ! $isManager) {
+        if (! $isAssignedAgent && ! $isManager && ! $isOwnAccount) {
             throw ValidationException::withMessages(['account' => 'You are not assigned to this account.']);
         }
 

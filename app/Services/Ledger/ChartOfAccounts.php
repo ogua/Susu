@@ -56,6 +56,24 @@ class ChartOfAccounts
         );
     }
 
+    /**
+     * Money confirmed paid via mobile money, pending settlement from Paystack
+     * to the company's bank account. Kept separate from agentCash() because
+     * the agent never physically holds this money — conflating the two would
+     * corrupt the day-close cash reconciliation (agentCash's balance).
+     */
+    public function momoClearing(Company $company): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'MOMO-CLEARING'],
+            [
+                'name' => 'Mobile Money Clearing',
+                'type' => LedgerAccountType::Asset,
+                'is_system' => true,
+            ],
+        );
+    }
+
     /** The customer's savings balance is the company's liability to them. */
     public function savingsLiability(SavingsAccount $account): LedgerAccount
     {

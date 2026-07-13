@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Customer;
+use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\SyncController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,5 +40,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/accounts/{account}/transactions', [Customer\AccountController::class, 'transactions'])->name('accounts.transactions');
         Route::get('/withdrawal-requests', [Customer\WithdrawalRequestController::class, 'index'])->name('withdrawals.index');
         Route::post('/withdrawal-requests', [Customer\WithdrawalRequestController::class, 'store'])->name('withdrawals.store');
+    });
+
+    // Shared by agent (collect screen) and customer (deposit screen) roles —
+    // RecordCollectionAction enforces who may act on a given account.
+    Route::prefix('payments')->name('payments.')->middleware('throttle:20,1')->group(function (): void {
+        Route::post('/charge', [PaymentController::class, 'chargeMobileMoney'])->name('charge');
+        Route::post('/initialize', [PaymentController::class, 'initializeCheckout'])->name('initialize');
+        Route::post('/{intent}/submit-otp', [PaymentController::class, 'submitOtp'])->name('submit-otp');
+        Route::post('/{intent}/verify', [PaymentController::class, 'verify'])->name('verify');
+        Route::get('/{intent}', [PaymentController::class, 'show'])->name('show');
     });
 });
