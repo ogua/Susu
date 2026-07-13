@@ -23,7 +23,9 @@ class LoanInstallmentFactory extends Factory
             'principal_due' => 83_34,
             'interest_due' => 15_00,
             'penalty_due' => 0,
-            'amount_paid' => 0,
+            'principal_paid' => 0,
+            'interest_paid' => 0,
+            'penalty_paid' => 0,
             'status' => 'pending',
         ];
     }

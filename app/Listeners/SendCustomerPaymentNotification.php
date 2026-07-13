@@ -24,6 +24,8 @@ class SendCustomerPaymentNotification implements ShouldQueue
         TransactionType::Collection,
         TransactionType::Withdrawal,
         TransactionType::Reversal,
+        TransactionType::Disbursement,
+        TransactionType::Repayment,
     ];
 
     public function __construct(private SmsService $sms) {}
@@ -101,6 +103,8 @@ class SendCustomerPaymentNotification implements ShouldQueue
         return match ($entry->type) {
             TransactionType::Collection => "Deposit of {$formatted} received on your susu account. {$balance} Ref: {$entry->reference}",
             TransactionType::Withdrawal => "Withdrawal of {$formatted} paid from your susu account.{$balance} Ref: {$entry->reference}",
+            TransactionType::Disbursement => "Your loan of {$formatted} has been disbursed. Ref: {$entry->reference}",
+            TransactionType::Repayment => "Loan repayment of {$formatted} received. Ref: {$entry->reference}",
             default => "A correction of {$formatted} was applied to your susu account.{$balance} Ref: {$entry->reference}",
         };
     }

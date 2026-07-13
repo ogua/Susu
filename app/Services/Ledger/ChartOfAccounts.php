@@ -6,6 +6,7 @@ use App\Enums\LedgerAccountType;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\LedgerAccount;
+use App\Models\Loan;
 use App\Models\SavingsAccount;
 use App\Models\User;
 
@@ -85,6 +86,46 @@ class ChartOfAccounts
                 'type' => LedgerAccountType::Liability,
                 'accountable_type' => SavingsAccount::class,
                 'accountable_id' => $account->id,
+                'is_system' => true,
+            ],
+        );
+    }
+
+    /** Principal + interest a customer owes on a disbursed loan — an asset to the company. */
+    public function loanReceivable(Loan $loan): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $loan->company_id, 'code' => 'LN-'.$loan->loan_number],
+            [
+                'branch_id' => $loan->branch_id,
+                'name' => 'Loan '.$loan->loan_number,
+                'type' => LedgerAccountType::Asset,
+                'accountable_type' => Loan::class,
+                'accountable_id' => $loan->id,
+                'is_system' => true,
+            ],
+        );
+    }
+
+    public function loanInterestIncome(Company $company): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $company->id, 'code' => '4200-LNINT'],
+            [
+                'name' => 'Loan Interest Income',
+                'type' => LedgerAccountType::Income,
+                'is_system' => true,
+            ],
+        );
+    }
+
+    public function loanFeeIncome(Company $company): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $company->id, 'code' => '4300-LNFEE'],
+            [
+                'name' => 'Loan Fee Income',
+                'type' => LedgerAccountType::Income,
                 'is_system' => true,
             ],
         );
