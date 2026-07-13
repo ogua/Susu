@@ -169,3 +169,26 @@ it('queues exactly one customer notification per disbursement and per repayment'
 
     expect(NotificationLog::where('customer_id', $this->customer->id)->count())->toBe(2);
 });
+
+it('applies a repayment to penalty before interest and principal, keeping the ledger balanced', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+
+    $firstInstallment = $disbursed->installments->first();
+    $firstInstallment->update(['due_date' => now()->subDays(10)]); // past the 3-day grace period
+    $this->artisan('loans:flag-arrears');
+    $firstInstallment->refresh();
+
+    expect($firstInstallment->penalty_due)->toBeGreaterThan(0);
+
+    $repaymentAmount = $firstInstallment->totalDue();
+    app(RecordLoanRepaymentAction::class)->execute($disbursed->fresh(), $repaymentAmount, $this->manager);
+
+    $penaltyIncome = app(ChartOfAccounts::class)->loanPenaltyIncome($this->branch->company);
+    expect($firstInstallment->fresh()->remainingPenalty())->toBe(0)
+        ->and($penaltyIncome->refresh()->balance)->toBe($firstInstallment->penalty_due);
+
+    // Debits must still equal credits even with a third (penalty) income line.
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});

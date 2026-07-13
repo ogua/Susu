@@ -18,11 +18,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Applies a repayment across outstanding installments oldest-first, interest
- * before principal within each installment (interest accrues and is
- * recognized as revenue before principal is considered repaid). Idempotent
- * on client_reference — a replayed op (e.g. an offline sync retry) can never
- * double-post.
+ * Applies a repayment across outstanding installments oldest-first —
+ * penalty, then interest, then principal within each installment (clearing
+ * the punitive charge and accrued revenue before principal is considered
+ * repaid). Idempotent on client_reference — a replayed op (e.g. an offline
+ * sync retry) can never double-post.
  */
 class RecordLoanRepaymentAction
 {
@@ -60,16 +60,25 @@ class RecordLoanRepaymentAction
             /** @var Loan $lockedLoan */
             $lockedLoan = Loan::whereKey($loan->id)->lockForUpdate()->firstOrFail();
 
-            [$principalApplied, $interestApplied] = $this->applyToInstallments($lockedLoan, $amount);
+            [$principalApplied, $interestApplied, $penaltyApplied] = $this->applyToInstallments($lockedLoan, $amount);
+
+            $lines = [
+                ['account' => $this->cashAccount($lockedLoan, $paymentMethod), 'debit' => $amount],
+            ];
+            if ($principalApplied > 0) {
+                $lines[] = ['account' => $lockedLoan->receivableAccount, 'credit' => $principalApplied];
+            }
+            if ($interestApplied > 0) {
+                $lines[] = ['account' => $this->chart->loanInterestIncome($lockedLoan->company), 'credit' => $interestApplied];
+            }
+            if ($penaltyApplied > 0) {
+                $lines[] = ['account' => $this->chart->loanPenaltyIncome($lockedLoan->company), 'credit' => $penaltyApplied];
+            }
 
             $entry = $this->ledger->post(new EntryData(
                 company: $lockedLoan->company,
                 type: TransactionType::Repayment,
-                lines: [
-                    ['account' => $this->cashAccount($lockedLoan, $paymentMethod), 'debit' => $amount],
-                    ['account' => $lockedLoan->receivableAccount, 'credit' => $principalApplied],
-                    ['account' => $this->chart->loanInterestIncome($lockedLoan->company), 'credit' => $interestApplied],
-                ],
+                lines: $lines,
                 branch: $lockedLoan->branch,
                 paymentMethod: $paymentMethod,
                 origin: $origin,
@@ -96,13 +105,14 @@ class RecordLoanRepaymentAction
     }
 
     /**
-     * @return array{0: int, 1: int} [principalApplied, interestApplied]
+     * @return array{0: int, 1: int, 2: int} [principalApplied, interestApplied, penaltyApplied]
      */
     private function applyToInstallments(Loan $loan, int $amount): array
     {
         $remaining = $amount;
         $principalApplied = 0;
         $interestApplied = 0;
+        $penaltyApplied = 0;
 
         $installments = $loan->installments()
             ->whereIn('status', [InstallmentStatus::Pending, InstallmentStatus::PartiallyPaid, InstallmentStatus::Overdue])
@@ -118,27 +128,39 @@ class RecordLoanRepaymentAction
                 continue;
             }
 
-            $interestPortion = min($installment->remainingInterest(), $installmentTotal);
-            $principalPortion = min($installment->remainingPrincipal(), $installmentTotal - $interestPortion);
+            // Penalty first (it's the punitive charge for lateness), then
+            // interest, then principal — matches totalDue()'s composition so
+            // the three portions always sum to exactly $installmentTotal.
+            $penaltyPortion = min($installment->remainingPenalty(), $installmentTotal);
+            $interestPortion = min($installment->remainingInterest(), $installmentTotal - $penaltyPortion);
+            $principalPortion = min($installment->remainingPrincipal(), $installmentTotal - $penaltyPortion - $interestPortion);
+
+            $wasOverdue = $installment->status === InstallmentStatus::Overdue;
 
             $installment->forceFill([
+                'penalty_paid' => $installment->penalty_paid + $penaltyPortion,
                 'interest_paid' => $installment->interest_paid + $interestPortion,
                 'principal_paid' => $installment->principal_paid + $principalPortion,
             ]);
-            $installment->status = $installment->amountPaid() >= $installment->totalDue()
-                ? InstallmentStatus::Paid
-                : InstallmentStatus::PartiallyPaid;
+            $installment->status = match (true) {
+                $installment->amountPaid() >= $installment->totalDue() => InstallmentStatus::Paid,
+                // Stays visibly overdue through a partial payment rather than
+                // reverting to PartiallyPaid — it's still late until settled.
+                $wasOverdue => InstallmentStatus::Overdue,
+                default => InstallmentStatus::PartiallyPaid,
+            };
             if ($installment->status === InstallmentStatus::Paid) {
                 $installment->paid_at = now();
             }
             $installment->save();
 
+            $penaltyApplied += $penaltyPortion;
             $principalApplied += $principalPortion;
             $interestApplied += $interestPortion;
             $remaining -= $installmentTotal;
         }
 
-        return [$principalApplied, $interestApplied];
+        return [$principalApplied, $interestApplied, $penaltyApplied];
     }
 
     private function cashAccount(Loan $loan, PaymentMethod $method): LedgerAccount

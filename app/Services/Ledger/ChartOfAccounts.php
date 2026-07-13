@@ -130,4 +130,16 @@ class ChartOfAccounts
             ],
         );
     }
+
+    public function loanPenaltyIncome(Company $company): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $company->id, 'code' => '4400-LNPEN'],
+            [
+                'name' => 'Loan Penalty Income',
+                'type' => LedgerAccountType::Income,
+                'is_system' => true,
+            ],
+        );
+    }
 }
