@@ -86,6 +86,21 @@ public class ApiClient {
         return send(request);
     }
 
+    /** Read-only list for the desktop's hybrid-mode payments view. Requires a cached token. */
+    public JSONObject listPaymentIntents() throws ApiException {
+        String token = requireToken();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/v1/payments"))
+                .timeout(Duration.ofSeconds(20))
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer " + token)
+                .GET()
+                .build();
+
+        return send(request);
+    }
+
     private String requireToken() throws ApiException {
         String token = AppConfig.getApiToken();
         if (token == null || token.isBlank()) {

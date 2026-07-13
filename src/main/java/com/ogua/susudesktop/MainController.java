@@ -35,6 +35,7 @@ public class MainController {
     @FXML private Button navCustomers;
     @FXML private Button navAccounts;
     @FXML private Button navDayClose;
+    @FXML private Button navPayments;
 
     private final OutboxService outbox = new OutboxService();
     private final SyncService syncService = new SyncService();
@@ -55,6 +56,10 @@ public class MainController {
 
         syncNowButton.setVisible(AppConfig.isSyncEnabled());
         syncNowButton.setManaged(AppConfig.isSyncEnabled());
+        // Payments are only ever initiated from mobile/web; standalone desktops
+        // have no server to pull them from at all.
+        navPayments.setVisible(AppConfig.isSyncEnabled());
+        navPayments.setManaged(AppConfig.isSyncEnabled());
         refreshSyncStatus();
         pullProductsInBackground();
 
@@ -140,6 +145,11 @@ public class MainController {
     }
 
     @FXML
+    private void showPayments() {
+        load("payment-intents-view.fxml", navPayments);
+    }
+
+    @FXML
     private void onLogout() {
         SessionManager.clearSession();
         Navigator.showLogin((Stage) userLabel.getScene().getWindow());
@@ -155,7 +165,7 @@ public class MainController {
             throw new IllegalStateException("Could not load view " + fxml + ": " + e.getMessage(), e);
         }
 
-        for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navDayClose)) {
+        for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navDayClose, navPayments)) {
             nav.getStyleClass().remove("nav-button-active");
         }
         activeNav.getStyleClass().add("nav-button-active");

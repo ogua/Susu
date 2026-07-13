@@ -34,6 +34,7 @@
             <Button fx:id="navCustomers" maxWidth="Infinity" onAction="#showCustomers" styleClass="nav-button" text="Customers"/>
             <Button fx:id="navAccounts" maxWidth="Infinity" onAction="#showAccounts" styleClass="nav-button" text="Savings Accounts"/>
             <Button fx:id="navDayClose" maxWidth="Infinity" onAction="#showDayClose" styleClass="nav-button" text="Day Summary"/>
+            <Button fx:id="navPayments" maxWidth="Infinity" onAction="#showPayments" styleClass="nav-button" text="Mobile Money Payments"/>
             <Region VBox.vgrow="ALWAYS"/>
             <Label fx:id="storageLabel" styleClass="caption" wrapText="true"/>
         </VBox>
