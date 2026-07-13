@@ -2,6 +2,7 @@
 
 namespace App\Actions\Payments;
 
+use App\Actions\Payments\Concerns\ResolvesCustomerEmail;
 use App\Enums\PaymentFlow;
 use App\Enums\PaymentIntentStatus;
 use App\Models\PaymentIntent;
@@ -18,6 +19,8 @@ use Illuminate\Support\Str;
  */
 class InitializeCheckoutAction
 {
+    use ResolvesCustomerEmail;
+
     public function __construct(private PaystackClient $paystack) {}
 
     /**
@@ -51,11 +54,12 @@ class InitializeCheckoutAction
             'client_reference' => $clientReference,
         ]);
 
-        $account->loadMissing('customer');
-        $phone = $account->customer?->phone ?? $initiatedBy->phone ?? $account->id;
-        $email = preg_replace('/[^a-z0-9]+/i', '', $phone).'@customers.susuapp.invalid';
-
-        $response = $this->paystack->initializeTransaction($email, $amount, $clientReference, $callbackUrl);
+        $response = $this->paystack->initializeTransaction(
+            $this->emailFor($account, $initiatedBy),
+            $amount,
+            $clientReference,
+            $callbackUrl,
+        );
         $data = $response['data'] ?? [];
 
         $intent->forceFill([

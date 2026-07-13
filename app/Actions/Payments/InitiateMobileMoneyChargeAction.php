@@ -2,6 +2,7 @@
 
 namespace App\Actions\Payments;
 
+use App\Actions\Payments\Concerns\ResolvesCustomerEmail;
 use App\Enums\PaymentFlow;
 use App\Enums\PaymentIntentStatus;
 use App\Models\PaymentIntent;
@@ -18,6 +19,8 @@ use Illuminate\Support\Str;
  */
 class InitiateMobileMoneyChargeAction
 {
+    use ResolvesCustomerEmail;
+
     public function __construct(
         private PaystackClient $paystack,
         private VerifyPaymentIntentAction $verify,
@@ -72,15 +75,5 @@ class InitiateMobileMoneyChargeAction
             PaymentIntentStatus::fromProviderStatus($data['status'] ?? 'pending'),
             $response,
         );
-    }
-
-    /** Paystack requires an email; susu customers rarely have one, so a stable synthetic one is used. */
-    private function emailFor(SavingsAccount $account, User $initiatedBy): string
-    {
-        $account->loadMissing('customer');
-        $phone = $account->customer?->phone ?? $initiatedBy->phone ?? $account->id;
-        $slug = preg_replace('/[^a-z0-9]+/i', '', $phone);
-
-        return "{$slug}@customers.susuapp.invalid";
     }
 }
