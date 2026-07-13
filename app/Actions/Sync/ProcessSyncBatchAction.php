@@ -5,16 +5,22 @@ namespace App\Actions\Sync;
 use App\Actions\Agents\RecordLocationPingsAction;
 use App\Actions\Agents\SubmitAgentDailySummaryAction;
 use App\Actions\Customers\CreateCustomerAction;
+use App\Actions\Loans\ApplyForLoanAction;
+use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Actions\Savings\OpenSavingsAccountAction;
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
 use App\Enums\SyncOpType;
+use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
+use App\Http\Requests\Api\V1\StoreLoanApplicationRequest;
 use App\Http\Requests\Api\V1\StoreLocationPingsRequest;
 use App\Http\Requests\Api\V1\StoreSavingsAccountRequest;
 use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
 use App\Models\Customer;
+use App\Models\Loan;
+use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\SyncOp;
@@ -38,6 +44,8 @@ class ProcessSyncBatchAction
         private RecordCollectionAction $recordCollection,
         private SubmitAgentDailySummaryAction $submitSummary,
         private RecordLocationPingsAction $recordPings,
+        private ApplyForLoanAction $applyForLoan,
+        private RecordLoanRepaymentAction $recordLoanRepayment,
     ) {}
 
     /**
@@ -110,6 +118,8 @@ class ProcessSyncBatchAction
             SyncOpType::RecordCollection => $this->applyCollection($actor, $origin, $payload, $op['op_id'], $recordedAt),
             SyncOpType::SubmitDailySummary => $this->applySummary($actor, $payload, $op['op_id'], $recordedAt),
             SyncOpType::RecordLocationPings => ['stored' => $this->recordPings->execute($actor, $payload['pings'])],
+            SyncOpType::ApplyForLoan => $this->applyLoanApplication($actor, $payload, $op['op_id']),
+            SyncOpType::RecordLoanRepayment => $this->applyLoanRepayment($actor, $origin, $payload, $op['op_id'], $recordedAt),
         };
     }
 
@@ -125,6 +135,8 @@ class ProcessSyncBatchAction
             SyncOpType::RecordCollection => StoreCollectionRequest::payloadRules(),
             SyncOpType::SubmitDailySummary => SubmitDailySummaryRequest::payloadRules(),
             SyncOpType::RecordLocationPings => StoreLocationPingsRequest::payloadRules(),
+            SyncOpType::ApplyForLoan => StoreLoanApplicationRequest::payloadRules(),
+            SyncOpType::RecordLoanRepayment => RecordLoanRepaymentRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -213,6 +225,61 @@ class ProcessSyncBatchAction
             'summary_id' => $summary->id,
             'expected_cash' => $summary->expected_cash,
             'variance' => $summary->variance,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyLoanApplication(User $actor, array $payload, string $opId): array
+    {
+        // Sync ops are staff-only (SyncBatchRequest), so customer_id is always
+        // required here even though the direct API lets a customer omit it
+        // and apply for themselves instead.
+        $customer = Customer::where('company_id', $actor->company_id)->findOrFail($payload['customer_id']);
+        $product = LoanProduct::where('company_id', $actor->company_id)->findOrFail($payload['loan_product_id']);
+        $savingsAccount = isset($payload['savings_account_id'])
+            ? SavingsAccount::where('company_id', $actor->company_id)->find($payload['savings_account_id'])
+            : null;
+
+        $loan = $this->applyForLoan->execute(
+            submittedBy: $actor,
+            customer: $customer,
+            product: $product,
+            requestedAmount: (int) $payload['amount'],
+            savingsAccount: $savingsAccount,
+            guarantorName: $payload['guarantor_name'] ?? null,
+            guarantorPhone: $payload['guarantor_phone'] ?? null,
+            notes: $payload['notes'] ?? null,
+            clientReference: $payload['client_reference'] ?? $opId,
+        );
+
+        return ['loan_id' => $loan->id, 'loan_number' => $loan->loan_number, 'status' => $loan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyLoanRepayment(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
+    {
+        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+
+        $result = $this->recordLoanRepayment->execute(
+            loan: $loan,
+            amount: (int) $payload['amount'],
+            recordedBy: $actor,
+            clientReference: $payload['client_reference'] ?? $opId,
+            recordedAt: isset($payload['recorded_at']) ? Carbon::parse($payload['recorded_at']) : $recordedAt,
+            origin: $origin,
+        );
+
+        return [
+            'entry_id' => $result->entry->id,
+            'outstanding_balance' => $result->loan->outstanding_balance,
+            'loan_status' => $result->loan->status->value,
+            'was_duplicate' => $result->duplicate,
         ];
     }
 

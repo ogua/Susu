@@ -70,6 +70,13 @@ class ApplyForLoanAction
             'origination_fee_amount' => $product->origination_fee_amount,
             'penalty_rate_bps' => $product->penalty_rate_bps,
             'grace_period_days' => $product->grace_period_days,
+            // Explicit rather than relying on the DB column defaults: Eloquent
+            // never reflects those back onto the in-memory model create()
+            // returns, so callers immediately serializing this loan (e.g. the
+            // API response) would otherwise see null instead of 0.
+            'total_interest' => 0,
+            'total_repayable' => 0,
+            'outstanding_balance' => 0,
             'status' => LoanStatus::Applied,
             'guarantor_name' => $guarantorName,
             'guarantor_phone' => $guarantorPhone,

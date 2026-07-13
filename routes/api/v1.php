@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Customer;
+use App\Http\Controllers\Api\V1\LoanController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\SyncController;
 use Illuminate\Support\Facades\Route;
@@ -56,5 +57,21 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::middleware('role:branch_manager|company_admin')->group(function (): void {
             Route::get('/', [PaymentController::class, 'index'])->name('index');
         });
+    });
+
+    // Shared by agent (apply/repay on a customer's behalf) and customer
+    // (self-service apply) roles — ApplyForLoanAction/RecordLoanRepaymentAction
+    // enforce who may act on a given loan.
+    Route::prefix('loans')->name('loans.')->middleware('throttle:20,1')->group(function (): void {
+        Route::get('/products', [LoanController::class, 'products'])->name('products');
+        Route::get('/eligibility', [LoanController::class, 'eligibility'])->name('eligibility');
+        Route::get('/', [LoanController::class, 'index'])->name('index');
+        Route::post('/', [LoanController::class, 'store'])->name('store');
+        Route::get('/{loan}', [LoanController::class, 'show'])->name('show');
+
+        // Repayments are staff-recorded only (cash collected in the field).
+        Route::post('/{loan}/repayments', [LoanController::class, 'recordRepayment'])
+            ->middleware('role:field_agent|branch_manager|company_admin')
+            ->name('repayments.store');
     });
 });
