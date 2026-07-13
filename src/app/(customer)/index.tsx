@@ -59,6 +59,10 @@ export default function CustomerHome() {
         <ThemedText type="subtitle">Welcome, {user?.name}</ThemedText>
       </View>
 
+      <Pressable style={styles.loansButton} onPress={() => router.push('/(customer)/loans')}>
+        <ThemedText style={styles.loansButtonText}>My Loans</ThemedText>
+      </Pressable>
+
       {accounts.isLoading ? (
         <ActivityIndicator style={{ marginTop: 24 }} />
       ) : accounts.isError ? (
@@ -102,6 +106,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: '#208AEF' },
+  loansButton: {
+    backgroundColor: '#eef4ff',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  loansButtonText: { color: '#208AEF', fontWeight: '600' },
   button: {
     backgroundColor: '#6b7280',
     borderRadius: 10,

@@ -24,6 +24,9 @@ export default function AgentLayout() {
       <Stack.Screen name="day-close" options={{ title: 'Day Summary' }} />
       <Stack.Screen name="sync" options={{ title: 'Sync Queue' }} />
       <Stack.Screen name="payment-verify" options={{ title: 'Mobile Money Payment' }} />
+      <Stack.Screen name="loans/index" options={{ title: 'Loans' }} />
+      <Stack.Screen name="loans/[loanId]" options={{ title: 'Loan' }} />
+      <Stack.Screen name="loans/apply/[accountId]" options={{ title: 'Apply for Loan' }} />
     </Stack>
   );
 }

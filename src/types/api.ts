@@ -151,6 +151,72 @@ export interface PaymentIntent {
   updated_at: string;
 }
 
+export type LoanStatus = 'applied' | 'approved' | 'rejected' | 'disbursed' | 'closed' | 'written_off';
+
+export type InstallmentStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue';
+
+export interface LoanProduct {
+  id: string;
+  name: string;
+  code: string;
+  interest_method: 'flat' | 'reducing_balance';
+  interest_rate_bps: number;
+  term_period_count: number;
+  repayment_frequency: 'weekly' | 'monthly';
+  origination_fee_amount: number;
+  min_amount: number;
+  min_amount_formatted: string;
+  max_amount: number;
+  max_amount_formatted: string;
+}
+
+export interface LoanInstallment {
+  id: string;
+  sequence: number;
+  due_date: string;
+  principal_due: number;
+  interest_due: number;
+  penalty_due: number;
+  total_due: number;
+  total_due_formatted: string;
+  amount_paid: number;
+  remaining: number;
+  status: InstallmentStatus;
+  paid_at: string | null;
+}
+
+export interface Loan {
+  id: string;
+  loan_number: string;
+  customer_id: string;
+  loan_product?: { id: string; name: string };
+  principal_amount: number;
+  principal_amount_formatted: string;
+  interest_method: 'flat' | 'reducing_balance';
+  interest_rate_bps: number;
+  term_period_count: number;
+  repayment_frequency: 'weekly' | 'monthly';
+  total_interest: number;
+  total_repayable: number;
+  total_repayable_formatted: string;
+  outstanding_balance: number;
+  outstanding_balance_formatted: string;
+  status: LoanStatus;
+  guarantor_name: string | null;
+  guarantor_phone: string | null;
+  rejection_reason: string | null;
+  installments?: LoanInstallment[];
+  applied_at: string | null;
+  approved_at: string | null;
+  disbursed_at: string | null;
+  closed_at: string | null;
+}
+
+export interface LoanEligibility {
+  eligible: boolean;
+  reasons: string[];
+}
+
 export interface Paginated<T> {
   data: T[];
   links: { first: string | null; last: string | null; prev: string | null; next: string | null };

@@ -23,33 +23,46 @@ export default function AgentAccountsScreen() {
   });
 
   function renderItem({ item }: { item: SavingsAccount }) {
+    const customerName = item.customer ? `${item.customer.first_name} ${item.customer.last_name}` : '';
+
     return (
-      <Pressable
-        style={styles.row}
-        onPress={() =>
-          router.push({
-            pathname: '/(agent)/collect/[accountId]',
-            params: {
-              accountId: item.id,
-              accountNumber: item.account_number,
-              customerName: item.customer ? `${item.customer.first_name} ${item.customer.last_name}` : '',
-              contributionAmount: String(item.contribution_amount),
-              balanceFormatted: item.balance_formatted,
-            },
-          })
-        }
-      >
-        <View style={{ flex: 1 }}>
-          <ThemedText type="smallBold">
-            {item.customer ? `${item.customer.first_name} ${item.customer.last_name}` : item.account_number}
-          </ThemedText>
-          <ThemedText type="small">{item.account_number}</ThemedText>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <ThemedText>{item.balance_formatted}</ThemedText>
-          <ThemedText type="small">{item.status}</ThemedText>
-        </View>
-      </Pressable>
+      <View style={styles.row}>
+        <Pressable
+          style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+          onPress={() =>
+            router.push({
+              pathname: '/(agent)/collect/[accountId]',
+              params: {
+                accountId: item.id,
+                accountNumber: item.account_number,
+                customerName,
+                contributionAmount: String(item.contribution_amount),
+                balanceFormatted: item.balance_formatted,
+              },
+            })
+          }
+        >
+          <View style={{ flex: 1 }}>
+            <ThemedText type="smallBold">{customerName || item.account_number}</ThemedText>
+            <ThemedText type="small">{item.account_number}</ThemedText>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <ThemedText>{item.balance_formatted}</ThemedText>
+            <ThemedText type="small">{item.status}</ThemedText>
+          </View>
+        </Pressable>
+        <Pressable
+          style={styles.loanButton}
+          onPress={() =>
+            router.push({
+              pathname: '/(agent)/loans/apply/[accountId]',
+              params: { accountId: item.id, customerId: item.customer_id, customerName },
+            })
+          }
+        >
+          <ThemedText type="small" style={styles.loanButtonText}>Loan</ThemedText>
+        </Pressable>
+      </View>
     );
   }
 
@@ -94,6 +107,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
   },
+  loanButton: {
+    borderWidth: 1,
+    borderColor: '#208AEF',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginLeft: 8,
+  },
+  loanButtonText: { color: '#208AEF', fontWeight: '600' },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
