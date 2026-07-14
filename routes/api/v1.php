@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Customer;
+use App\Http\Controllers\Api\V1\GroupController;
 use App\Http\Controllers\Api\V1\LoanController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\SyncController;
@@ -73,5 +74,20 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/{loan}/repayments', [LoanController::class, 'recordRepayment'])
             ->middleware('role:field_agent|branch_manager|company_admin')
             ->name('repayments.store');
+    });
+
+    // Shared by agent (records contributions in the field) and customer
+    // (views their own memberships) roles — payouts are staff-only.
+    Route::prefix('groups')->name('groups.')->middleware('throttle:20,1')->group(function (): void {
+        Route::get('/', [GroupController::class, 'index'])->name('index');
+        Route::get('/{group}', [GroupController::class, 'show'])->name('show');
+
+        Route::post('/{group}/contributions', [GroupController::class, 'storeContribution'])
+            ->middleware('role:field_agent|branch_manager|company_admin')
+            ->name('contributions.store');
+
+        Route::post('/rounds/{round}/payout', [GroupController::class, 'payout'])
+            ->middleware('role:branch_manager|company_admin')
+            ->name('rounds.payout');
     });
 });

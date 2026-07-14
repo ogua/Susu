@@ -1,9 +1,12 @@
 <?php
 
+use App\Actions\Groups\ActivateGroupAction;
+use App\Actions\Groups\AddGroupMemberAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Enums\LoanStatus;
 use App\Models\Branch;
 use App\Models\Customer;
+use App\Models\Group;
 use App\Models\JournalEntry;
 use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
@@ -220,4 +223,30 @@ it('rejects loan approve/disburse ops from a field agent', function (): void {
 
     $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
     expect($loan->refresh()->status)->toBe(LoanStatus::Applied);
+});
+
+it('lets a field agent record a group contribution through the sync batch', function (): void {
+    $group = Group::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'branch_id' => $this->branch->id,
+        'contribution_amount' => 1000,
+    ]);
+    $customerOne = Customer::factory()->forBranch($this->branch)->create();
+    $customerTwo = Customer::factory()->forBranch($this->branch)->create();
+    $memberOne = app(AddGroupMemberAction::class)->execute($group, $customerOne, 1);
+    app(AddGroupMemberAction::class)->execute($group, $customerTwo, 2);
+    app(ActivateGroupAction::class)->execute($group->fresh());
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'group.contribution.record',
+            'payload' => ['group_member_id' => $memberOne->id],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('results.0.status', 'applied')
+        ->assertJsonPath('results.0.result.amount', 1000);
 });

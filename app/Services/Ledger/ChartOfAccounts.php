@@ -5,6 +5,7 @@ namespace App\Services\Ledger;
 use App\Enums\LedgerAccountType;
 use App\Models\Branch;
 use App\Models\Company;
+use App\Models\Group;
 use App\Models\LedgerAccount;
 use App\Models\Loan;
 use App\Models\SavingsAccount;
@@ -138,6 +139,25 @@ class ChartOfAccounts
             [
                 'name' => 'Loan Penalty Income',
                 'type' => LedgerAccountType::Income,
+                'is_system' => true,
+            ],
+        );
+    }
+
+    /**
+     * Pooled but not-yet-paid-out contributions for one susu group's current
+     * round — a liability to whichever member is due the payout.
+     */
+    public function groupLiability(Group $group): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $group->company_id, 'code' => 'GRP-'.$group->code],
+            [
+                'branch_id' => $group->branch_id,
+                'name' => 'Group '.$group->name,
+                'type' => LedgerAccountType::Liability,
+                'accountable_type' => Group::class,
+                'accountable_id' => $group->id,
                 'is_system' => true,
             ],
         );

@@ -5,6 +5,7 @@ namespace App\Actions\Sync;
 use App\Actions\Agents\RecordLocationPingsAction;
 use App\Actions\Agents\SubmitAgentDailySummaryAction;
 use App\Actions\Customers\CreateCustomerAction;
+use App\Actions\Groups\RecordGroupContributionAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
@@ -20,11 +21,13 @@ use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\RejectLoanRequest;
 use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
+use App\Http\Requests\Api\V1\StoreGroupContributionRequest;
 use App\Http\Requests\Api\V1\StoreLoanApplicationRequest;
 use App\Http\Requests\Api\V1\StoreLocationPingsRequest;
 use App\Http\Requests\Api\V1\StoreSavingsAccountRequest;
 use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
 use App\Models\Customer;
+use App\Models\GroupMember;
 use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
@@ -55,6 +58,7 @@ class ProcessSyncBatchAction
         private ApproveLoanAction $approveLoan,
         private RejectLoanAction $rejectLoan,
         private DisburseLoanAction $disburseLoan,
+        private RecordGroupContributionAction $recordGroupContribution,
     ) {}
 
     /**
@@ -132,6 +136,7 @@ class ProcessSyncBatchAction
             SyncOpType::ApproveLoan => $this->applyApproveLoan($actor, $payload),
             SyncOpType::RejectLoan => $this->applyRejectLoan($actor, $payload),
             SyncOpType::DisburseLoan => $this->applyDisburseLoan($actor, $payload),
+            SyncOpType::RecordGroupContribution => $this->applyGroupContribution($actor, $origin, $payload, $op['op_id'], $recordedAt),
         };
     }
 
@@ -152,6 +157,7 @@ class ProcessSyncBatchAction
             SyncOpType::ApproveLoan => ApproveLoanRequest::payloadRules(),
             SyncOpType::RejectLoan => RejectLoanRequest::payloadRules(),
             SyncOpType::DisburseLoan => DisburseLoanRequest::payloadRules(),
+            SyncOpType::RecordGroupContribution => StoreGroupContributionRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -334,6 +340,29 @@ class ProcessSyncBatchAction
         $loan = $this->disburseLoan->execute($loan, $actor);
 
         return ['loan_id' => $loan->id, 'status' => $loan->status->value, 'outstanding_balance' => $loan->outstanding_balance];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyGroupContribution(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
+    {
+        $member = GroupMember::whereHas('group', fn ($query) => $query->where('company_id', $actor->company_id))
+            ->findOrFail($payload['group_member_id']);
+
+        $contribution = $this->recordGroupContribution->execute(
+            recordedBy: $actor,
+            member: $member,
+            clientReference: $payload['client_reference'] ?? $opId,
+            recordedAt: isset($payload['recorded_at']) ? Carbon::parse($payload['recorded_at']) : $recordedAt,
+            origin: $origin,
+        );
+
+        return [
+            'contribution_id' => $contribution->id,
+            'amount' => $contribution->amount,
+        ];
     }
 
     /**
