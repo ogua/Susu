@@ -54,7 +54,7 @@ class ApplyForLoanAction
 
         $branch = $customer->branch;
 
-        return Loan::create([
+        $loan = new Loan([
             'company_id' => $customer->company_id,
             'branch_id' => $customer->branch_id,
             'customer_id' => $customer->id,
@@ -84,6 +84,21 @@ class ApplyForLoanAction
             'client_reference' => $clientReference,
             'applied_at' => now(),
         ]);
+
+        // Offline clients (desktop/mobile) generate this UUID themselves; using
+        // it as the primary key too (id isn't mass-assignable, hence forceFill)
+        // means the record's identity matches across the client that created
+        // it and the server, so later ops in the same lifecycle (approve,
+        // disburse, repayment) referencing this loan_id resolve correctly once
+        // synced. Must be set before the first save() so HasUuids' creating()
+        // hook sees it and skips auto-generation. Mirrors CreateCustomerAction.
+        if ($clientReference !== null) {
+            $loan->forceFill(['id' => $clientReference]);
+        }
+
+        $loan->save();
+
+        return $loan;
     }
 
     /** G7 numbering: {branch_code}-L{sequence}, opaque and unique — UUIDs remain the real identity. */

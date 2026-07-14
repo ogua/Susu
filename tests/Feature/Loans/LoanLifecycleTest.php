@@ -131,6 +131,23 @@ it('closes the loan once fully repaid', function (): void {
     }
 });
 
+it('uses the client_reference as the loan id when provided', function (): void {
+    // Offline clients (desktop/mobile) generate this id themselves; later ops
+    // in the same lifecycle (approve/disburse/repayment) reference loan_id
+    // directly, so it must match once synced — mirrors CreateCustomerAction.
+    $ref = (string) Str::uuid();
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $this->product,
+        requestedAmount: 300_00,
+        clientReference: $ref,
+    );
+
+    expect($loan->id)->toBe($ref);
+});
+
 it('is idempotent when the same client_reference is replayed', function (): void {
     $loan = applyLoan($this->agent, $this->customer, $this->product);
     app(ApproveLoanAction::class)->execute($loan, $this->manager);
