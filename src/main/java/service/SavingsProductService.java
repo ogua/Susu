@@ -147,7 +147,44 @@ public class SavingsProductService {
         product.setCycleLengthDays(rs.getInt("cycle_length_days"));
         product.setCommissionType(CommissionType.fromValue(rs.getString("commission_type")));
         product.setCommissionValue(rs.getLong("commission_value"));
+        product.setEarlyWithdrawalPenaltyBps(rs.getInt("early_withdrawal_penalty_bps"));
         product.setActive(rs.getInt("is_active") != 0);
         return product;
+    }
+
+    /**
+     * Lazily provisions a single target-savings product, same spirit as
+     * {@link #getOrCreateDefault()} — standalone offices don't get a full
+     * product-management screen, just the two products they actually need.
+     */
+    public SavingsProduct getOrCreateDefaultTarget() throws SQLException {
+        for (SavingsProduct product : findActive()) {
+            if (product.isTarget()) {
+                return product;
+            }
+        }
+
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String id = UUID.randomUUID().toString();
+            String now = Instant.now().toString();
+            String sql = "INSERT INTO savings_products (id, name, code, type, contribution_amount,"
+                    + " cycle_length_days, commission_type, commission_value, early_withdrawal_penalty_bps,"
+                    + " is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,1,?,?)";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, id);
+                ps.setString(2, "Target Savings");
+                ps.setString(3, "TS-001");
+                ps.setString(4, SavingsProduct.TYPE_TARGET);
+                ps.setLong(5, 500); // GHS 5.00 default contribution
+                ps.setInt(6, 31);
+                ps.setString(7, CommissionType.FLAT_PER_CYCLE.value());
+                ps.setLong(8, 0);
+                ps.setInt(9, 1000); // 10% early-withdrawal penalty
+                ps.setString(10, now);
+                ps.setString(11, now);
+                ps.executeUpdate();
+            }
+            return findById(conn, id);
+        }
     }
 }

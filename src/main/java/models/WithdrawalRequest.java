@@ -8,6 +8,7 @@ public class WithdrawalRequest {
     private String savingsAccountId;
     private String customerId;
     private long amount;
+    private long penaltyAmount;
     private String reason;
     private WithdrawalStatus status;
     private String requestedBy;
@@ -26,6 +27,9 @@ public class WithdrawalRequest {
 
     public long getAmount() { return amount; }
     public void setAmount(long amount) { this.amount = amount; }
+
+    public long getPenaltyAmount() { return penaltyAmount; }
+    public void setPenaltyAmount(long penaltyAmount) { this.penaltyAmount = penaltyAmount; }
 
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }

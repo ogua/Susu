@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DatePicker?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TableColumn?>
@@ -24,6 +25,7 @@
                 <TableColumn fx:id="customerColumn" prefWidth="180" text="Customer"/>
                 <TableColumn fx:id="balanceColumn" prefWidth="110" text="Balance"/>
                 <TableColumn fx:id="cycleColumn" prefWidth="80" text="Cycle"/>
+                <TableColumn fx:id="targetColumn" prefWidth="150" text="Target Progress"/>
                 <TableColumn fx:id="statusColumn" prefWidth="90" text="Status"/>
             </columns>
         </TableView>
@@ -46,8 +48,18 @@
             </HBox>
             <ComboBox fx:id="customerCombo" maxWidth="Infinity" promptText="Select a customer"/>
 
+            <Label styleClass="text-muted" text="Product"/>
+            <ComboBox fx:id="productCombo" maxWidth="Infinity"/>
+
             <Label styleClass="text-muted" text="Daily contribution (GHS)"/>
             <TextField fx:id="contributionField" promptText="5.00"/>
+
+            <VBox fx:id="targetFieldsBox" spacing="6">
+                <Label styleClass="text-muted" text="Target amount (GHS)"/>
+                <TextField fx:id="targetAmountField" promptText="5000.00"/>
+                <Label styleClass="text-muted" text="Maturity date"/>
+                <DatePicker fx:id="maturesAtPicker" maxWidth="Infinity"/>
+            </VBox>
 
             <Label fx:id="openStatusLabel" styleClass="text-danger" wrapText="true"/>
             <Button maxWidth="Infinity" onAction="#onOpenAccount" styleClass="button-primary" text="Open Account"/>

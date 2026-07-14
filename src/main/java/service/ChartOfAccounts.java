@@ -26,6 +26,11 @@ public class ChartOfAccounts {
         return firstOrCreate("4100-COMM", "Susu Commission Income", LedgerAccountType.INCOME, null, null, true);
     }
 
+    /** Withheld from a target-savings withdrawal made before the account's matures_at date. */
+    public LedgerAccount earlyWithdrawalPenaltyIncome() throws SQLException {
+        return firstOrCreate("4500-EWPEN", "Early Withdrawal Penalty Income", LedgerAccountType.INCOME, null, null, true);
+    }
+
     /** The agent's cash-in-hand: expected cash for reconciliation is its balance. */
     public LedgerAccount agentCash(String agentId, String agentName) throws SQLException {
         return firstOrCreate("AGT-" + shortId(agentId), agentName + " Cash In Hand",

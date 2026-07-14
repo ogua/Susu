@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import models.JournalEntry;
 import models.SavingsAccount;
+import models.SavingsProduct;
 import models.WithdrawalRequest;
 
 /** Withdrawal lifecycle: request → approve/reject → pay. Mirrors App\Actions\Savings\*WithdrawalAction. */
@@ -23,6 +24,7 @@ public class WithdrawalService {
     private final LedgerService ledger = new LedgerService();
     private final ChartOfAccounts chart = new ChartOfAccounts();
     private final SavingsAccountService accountService = new SavingsAccountService();
+    private final SavingsProductService productService = new SavingsProductService();
 
     public WithdrawalRequest request(String accountId, String customerId, long amount, String reason,
                                       String requestedBy) throws SQLException {
@@ -36,25 +38,41 @@ public class WithdrawalService {
             throw new IllegalArgumentException("Requested amount exceeds the available balance.");
         }
 
+        long penaltyAmount = earlyWithdrawalPenalty(account, amount);
+
         try (Connection conn = DatabaseConnection.getConnection()) {
             String id = UUID.randomUUID().toString();
             String now = Instant.now().toString();
-            String sql = "INSERT INTO withdrawal_requests (id, savings_account_id, customer_id, amount, reason,"
-                    + " status, requested_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)";
+            String sql = "INSERT INTO withdrawal_requests (id, savings_account_id, customer_id, amount,"
+                    + " penalty_amount, reason, status, requested_by, created_at, updated_at)"
+                    + " VALUES (?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, id);
                 ps.setString(2, accountId);
                 ps.setString(3, customerId);
                 ps.setLong(4, amount);
-                ps.setString(5, reason);
-                ps.setString(6, WithdrawalStatus.PENDING.value());
-                ps.setString(7, requestedBy);
-                ps.setString(8, now);
+                ps.setLong(5, penaltyAmount);
+                ps.setString(6, reason);
+                ps.setString(7, WithdrawalStatus.PENDING.value());
+                ps.setString(8, requestedBy);
                 ps.setString(9, now);
+                ps.setString(10, now);
                 ps.executeUpdate();
             }
             return findById(conn, id);
         }
+    }
+
+    /** Applies only to target-savings accounts withdrawn from before their matures_at date. */
+    private long earlyWithdrawalPenalty(SavingsAccount account, long amount) throws SQLException {
+        if (account.getTargetAmount() == null || account.getMaturedAt() != null) {
+            return 0;
+        }
+        SavingsProduct product = productService.findById(account.getSavingsProductId());
+        if (product == null || !product.isTarget()) {
+            return 0;
+        }
+        return (amount * product.getEarlyWithdrawalPenaltyBps()) / 10_000;
     }
 
     public WithdrawalRequest approve(String requestId, String approvedBy) throws SQLException {
@@ -88,11 +106,18 @@ public class WithdrawalService {
         }
 
         long balanceAfter = account.getBalance() - request.getAmount();
+        long netCash = request.getAmount() - request.getPenaltyAmount();
 
-        JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.WITHDRAWAL, List.of(
+        List<LedgerLine> lines = new ArrayList<>(List.of(
                 LedgerLine.debit(account.getLedgerAccountId(), request.getAmount()),
-                LedgerLine.credit(chart.branchCash().getId(), request.getAmount())
-        )).paymentMethod(PaymentMethod.CASH)
+                LedgerLine.credit(chart.branchCash().getId(), netCash)
+        ));
+        if (request.getPenaltyAmount() > 0) {
+            lines.add(LedgerLine.credit(chart.earlyWithdrawalPenaltyIncome().getId(), request.getPenaltyAmount()));
+        }
+
+        JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.WITHDRAWAL, lines)
+                .paymentMethod(PaymentMethod.CASH)
                 .recordedBy(paidBy)
                 .description("Withdrawal " + account.getAccountNumber()));
 
@@ -188,6 +213,7 @@ public class WithdrawalService {
         request.setSavingsAccountId(rs.getString("savings_account_id"));
         request.setCustomerId(rs.getString("customer_id"));
         request.setAmount(rs.getLong("amount"));
+        request.setPenaltyAmount(rs.getLong("penalty_amount"));
         request.setReason(rs.getString("reason"));
         request.setStatus(WithdrawalStatus.fromValue(rs.getString("status")));
         request.setRequestedBy(rs.getString("requested_by"));

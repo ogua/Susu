@@ -12,7 +12,11 @@ public class SavingsProduct {
     private int cycleLengthDays;
     private CommissionType commissionType;
     private long commissionValue;
+    /** Basis points of a withdrawn amount withheld before a target account's matures_at date. */
+    private int earlyWithdrawalPenaltyBps;
     private boolean active;
+
+    public static final String TYPE_TARGET = "target";
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -37,6 +41,11 @@ public class SavingsProduct {
 
     public long getCommissionValue() { return commissionValue; }
     public void setCommissionValue(long commissionValue) { this.commissionValue = commissionValue; }
+
+    public int getEarlyWithdrawalPenaltyBps() { return earlyWithdrawalPenaltyBps; }
+    public void setEarlyWithdrawalPenaltyBps(int earlyWithdrawalPenaltyBps) { this.earlyWithdrawalPenaltyBps = earlyWithdrawalPenaltyBps; }
+
+    public boolean isTarget() { return TYPE_TARGET.equals(type); }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

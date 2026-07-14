@@ -24,9 +24,17 @@ public class SavingsAccountService {
 
     public SavingsAccount open(String customerId, String productId, String agentId, Long contributionAmountOverride)
             throws SQLException {
+        return open(customerId, productId, agentId, contributionAmountOverride, null, null);
+    }
+
+    public SavingsAccount open(String customerId, String productId, String agentId, Long contributionAmountOverride,
+                                Long targetAmount, String maturesAt) throws SQLException {
         SavingsProduct product = productService.findById(productId);
         if (product == null || !product.isActive()) {
             throw new IllegalArgumentException("This product is no longer offered.");
+        }
+        if (product.isTarget() && (targetAmount == null || maturesAt == null)) {
+            throw new IllegalArgumentException("Target savings accounts require a target amount and maturity date.");
         }
 
         String id = UUID.randomUUID().toString();
@@ -43,14 +51,16 @@ public class SavingsAccountService {
         long contributionAmount = contributionAmountOverride != null
                 ? contributionAmountOverride
                 : product.getContributionAmount();
+        Long effectiveTargetAmount = product.isTarget() ? targetAmount : null;
+        String effectiveMaturesAt = product.isTarget() ? maturesAt : null;
         String now = Instant.now().toString();
 
         SavingsAccount created;
         try (Connection conn = DatabaseConnection.getConnection()) {
             String sql = "INSERT INTO savings_accounts (id, customer_id, savings_product_id, agent_id,"
                     + " ledger_account_id, account_number, contribution_amount, cycle_number, cycle_started_at,"
-                    + " contributions_this_cycle, balance, status, opened_at, created_at, updated_at)"
-                    + " VALUES (?,?,?,?,?,?,?,1,?,0,0,?,?,?,?)";
+                    + " contributions_this_cycle, balance, target_amount, matures_at, status, opened_at,"
+                    + " created_at, updated_at) VALUES (?,?,?,?,?,?,?,1,?,0,0,?,?,?,?,?,?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, id);
                 ps.setString(2, customerId);
@@ -60,10 +70,16 @@ public class SavingsAccountService {
                 ps.setString(6, accountNumber);
                 ps.setLong(7, contributionAmount);
                 ps.setString(8, now);
-                ps.setString(9, AccountStatus.ACTIVE.value());
-                ps.setString(10, now);
-                ps.setString(11, now);
+                if (effectiveTargetAmount != null) {
+                    ps.setLong(9, effectiveTargetAmount);
+                } else {
+                    ps.setNull(9, java.sql.Types.BIGINT);
+                }
+                ps.setString(10, effectiveMaturesAt);
+                ps.setString(11, AccountStatus.ACTIVE.value());
                 ps.setString(12, now);
+                ps.setString(13, now);
+                ps.setString(14, now);
                 ps.executeUpdate();
             }
 
@@ -75,11 +91,16 @@ public class SavingsAccountService {
         // across the desktop and server the moment it syncs — collections recorded against
         // it afterwards resolve correctly. Enqueued on its own connection (not nested in
         // the block above) since the SQLite pool is single-connection.
-        outbox.enqueueIfHybrid("account.open", new JSONObject()
+        JSONObject payload = new JSONObject()
                 .put("customer_id", customerId)
                 .put("savings_product_id", productId)
                 .put("client_reference", id)
-                .put("contribution_amount", contributionAmount));
+                .put("contribution_amount", contributionAmount);
+        if (effectiveTargetAmount != null) {
+            payload.put("target_amount", effectiveTargetAmount);
+            payload.put("matures_at", effectiveMaturesAt);
+        }
+        outbox.enqueueIfHybrid("account.open", payload);
 
         return created;
     }
@@ -107,15 +128,19 @@ public class SavingsAccountService {
 
     public List<SavingsAccount> findAll() throws SQLException {
         List<SavingsAccount> accounts = new ArrayList<>();
+        // Rows are read out and this connection closed *before* resolving customers below —
+        // customerService.findById acquires its own connection, and the SQLite pool is
+        // single-connection, so calling it while this one is still open would self-deadlock.
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT * FROM savings_accounts ORDER BY account_number");
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                SavingsAccount account = map(rs);
-                account.setCustomer(customerService.findById(account.getCustomerId()));
-                accounts.add(account);
+                accounts.add(map(rs));
             }
+        }
+        for (SavingsAccount account : accounts) {
+            account.setCustomer(customerService.findById(account.getCustomerId()));
         }
         return accounts;
     }
@@ -169,6 +194,10 @@ public class SavingsAccountService {
         account.setCycleStartedAt(rs.getString("cycle_started_at"));
         account.setContributionsThisCycle(rs.getInt("contributions_this_cycle"));
         account.setBalance(rs.getLong("balance"));
+        long targetAmount = rs.getLong("target_amount");
+        account.setTargetAmount(rs.wasNull() ? null : targetAmount);
+        account.setMaturesAt(rs.getString("matures_at"));
+        account.setMaturedAt(rs.getString("matured_at"));
         account.setStatus(AccountStatus.fromValue(rs.getString("status")));
         account.setOpenedAt(rs.getString("opened_at"));
         account.setClosedAt(rs.getString("closed_at"));

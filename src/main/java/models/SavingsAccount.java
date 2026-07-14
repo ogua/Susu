@@ -15,6 +15,9 @@ public class SavingsAccount {
     private String cycleStartedAt;
     private int contributionsThisCycle;
     private long balance;
+    private Long targetAmount;
+    private String maturesAt;
+    private String maturedAt;
     private AccountStatus status;
     private String openedAt;
     private String closedAt;
@@ -55,6 +58,23 @@ public class SavingsAccount {
 
     public long getBalance() { return balance; }
     public void setBalance(long balance) { this.balance = balance; }
+
+    public Long getTargetAmount() { return targetAmount; }
+    public void setTargetAmount(Long targetAmount) { this.targetAmount = targetAmount; }
+
+    public String getMaturesAt() { return maturesAt; }
+    public void setMaturesAt(String maturesAt) { this.maturesAt = maturesAt; }
+
+    public String getMaturedAt() { return maturedAt; }
+    public void setMaturedAt(String maturedAt) { this.maturedAt = maturedAt; }
+
+    /** Null for non-target accounts; capped at 100 once the balance meets or exceeds the target. */
+    public Double targetProgressPercent() {
+        if (targetAmount == null || targetAmount <= 0) {
+            return null;
+        }
+        return Math.min(100.0, Math.round((balance * 1000.0 / targetAmount)) / 10.0);
+    }
 
     public AccountStatus getStatus() { return status; }
     public void setStatus(AccountStatus status) { this.status = status; }
