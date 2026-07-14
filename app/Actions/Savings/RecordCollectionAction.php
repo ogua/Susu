@@ -15,6 +15,7 @@ use App\Services\Ledger\LedgerService;
 use App\Services\Savings\CommissionCalculator;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -177,15 +178,45 @@ class RecordCollectionAction
      */
     private function trackDailySummary(User $agent, SavingsAccount $account, int $amount, CarbonInterface $recordedAt): void
     {
-        $summary = AgentDailySummary::firstOrCreate(
-            ['agent_id' => $agent->id, 'summary_date' => $recordedAt->toDateString()],
-            [
-                'company_id' => $account->company_id,
-                'branch_id' => $account->branch_id,
-            ],
-        );
+        $summary = $this->findOrCreateSummary($agent, $account, $recordedAt);
 
         $summary->increment('collections_total', $amount);
         $summary->increment('collections_count');
+    }
+
+    /**
+     * firstOrCreate isn't atomic (it's a SELECT then an INSERT), so two
+     * collections for the same agent/day landing concurrently can both miss
+     * the row and race to insert it. Laravel's own firstOrCreate already
+     * retries once on a unique-constraint violation, but that retry is a
+     * plain SELECT reusing this transaction's REPEATABLE READ snapshot
+     * (taken before the other transaction committed), so it can still find
+     * nothing and rethrow — which is the 500 this was tripping.
+     *
+     * insertOrIgnore is atomic at the storage-engine level: MySQL itself
+     * resolves the "insert unless it already exists" race, so there's no
+     * window where two requests can both believe they need to create the
+     * row. The follow-up lockForUpdate() read is a locking read, which (per
+     * InnoDB semantics) reads the latest committed data rather than this
+     * transaction's snapshot, so it reliably sees whichever row won.
+     */
+    private function findOrCreateSummary(User $agent, SavingsAccount $account, CarbonInterface $recordedAt): AgentDailySummary
+    {
+        $date = $recordedAt->toDateString();
+
+        AgentDailySummary::query()->insertOrIgnore([[
+            'id' => (string) Str::uuid7(),
+            'company_id' => $account->company_id,
+            'branch_id' => $account->branch_id,
+            'agent_id' => $agent->id,
+            'summary_date' => $date,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]]);
+
+        return AgentDailySummary::where('agent_id', $agent->id)
+            ->where('summary_date', $date)
+            ->lockForUpdate()
+            ->firstOrFail();
     }
 }

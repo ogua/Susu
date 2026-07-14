@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AccountStatus;
+use App\Models\AgentDailySummary;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\NotificationLog;
@@ -118,6 +119,38 @@ it('queues exactly one customer notification per payment', function (): void {
     ])->assertCreated();
 
     expect(NotificationLog::where('customer_id', $this->customer->id)->count())->toBe(1);
+});
+
+it('reuses the same day summary row across multiple collections without a duplicate-key error', function (): void {
+    // Simulates the row already having been created by another request for
+    // this agent/day (the scenario that used to trip the unique constraint
+    // when firstOrCreate's internal race-retry couldn't see it).
+    AgentDailySummary::query()->insertOrIgnore([[
+        'id' => (string) Str::uuid7(),
+        'company_id' => $this->branch->company_id,
+        'branch_id' => $this->branch->id,
+        'agent_id' => $this->agent->id,
+        'summary_date' => now()->toDateString(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]]);
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/agent/collections', [
+        'savings_account_id' => $this->account->id,
+        'amount' => 500,
+    ])->assertCreated();
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/agent/collections', [
+        'savings_account_id' => $this->account->id,
+        'amount' => 500,
+    ])->assertCreated();
+
+    $summary = AgentDailySummary::where('agent_id', $this->agent->id)
+        ->where('summary_date', now()->toDateString())
+        ->firstOrFail();
+
+    expect($summary->collections_count)->toBe(2)
+        ->and($summary->collections_total)->toBe(1000);
 });
 
 it('reactivates a dormant account on collection', function (): void {
