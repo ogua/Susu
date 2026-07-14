@@ -35,6 +35,7 @@ public class MainController {
     @FXML private Button navCustomers;
     @FXML private Button navAccounts;
     @FXML private Button navLoans;
+    @FXML private Button navGroups;
     @FXML private Button navDayClose;
     @FXML private Button navPayments;
 
@@ -146,6 +147,11 @@ public class MainController {
     }
 
     @FXML
+    private void showGroups() {
+        load("groups-view.fxml", navGroups);
+    }
+
+    @FXML
     private void showDayClose() {
         load("day-close-view.fxml", navDayClose);
     }
@@ -171,7 +177,7 @@ public class MainController {
             throw new IllegalStateException("Could not load view " + fxml + ": " + e.getMessage(), e);
         }
 
-        for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navLoans, navDayClose, navPayments)) {
+        for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navLoans, navGroups, navDayClose, navPayments)) {
             nav.getStyleClass().remove("nav-button-active");
         }
         activeNav.getStyleClass().add("nav-button-active");

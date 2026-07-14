@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.ogua.susudesktop.GroupsController">
+    <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+    <HBox alignment="CENTER_LEFT" spacing="10">
+        <Label styleClass="page-title" text="Susu Groups"/>
+        <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
+    </HBox>
+
+    <VBox spacing="10" styleClass="card">
+        <Label styleClass="section-title" text="New Group"/>
+        <HBox alignment="CENTER_LEFT" spacing="8">
+            <TextField fx:id="nameField" promptText="Name" HBox.hgrow="ALWAYS"/>
+            <TextField fx:id="codeField" promptText="Code" prefWidth="120"/>
+            <TextField fx:id="contributionField" promptText="Contribution (GHS)" prefWidth="150"/>
+            <ComboBox fx:id="frequencyCombo" prefWidth="120"/>
+            <Button onAction="#onCreateGroup" styleClass="button-primary" text="Create"/>
+        </HBox>
+        <Label fx:id="createStatusLabel" styleClass="text-danger" wrapText="true"/>
+    </VBox>
+
+    <VBox spacing="10" styleClass="card">
+        <Label styleClass="section-title" text="Add Member (draft groups only)"/>
+        <HBox alignment="CENTER_LEFT" spacing="8">
+            <TextField fx:id="customerSearchField" promptText="Search customer" HBox.hgrow="ALWAYS"/>
+            <Button onAction="#onFindCustomer" styleClass="button-secondary" text="Find"/>
+            <ComboBox fx:id="customerCombo" prefWidth="220" promptText="Customer"/>
+            <TextField fx:id="rotationPositionField" promptText="Position #" prefWidth="90"/>
+            <Button onAction="#onAddMember" styleClass="button-primary" text="Add to Selected Group"/>
+        </HBox>
+        <Label fx:id="memberStatusLabel" styleClass="text-danger" wrapText="true"/>
+    </VBox>
+
+    <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label styleClass="section-title" text="All Groups"/>
+            <Button fx:id="activateButton" onAction="#onActivate" styleClass="button-secondary" text="Activate"/>
+            <Button fx:id="contributeButton" onAction="#onContribute" styleClass="button-secondary" text="Record Contribution"/>
+            <Button fx:id="payoutButton" onAction="#onPayout" styleClass="button-secondary" text="Payout Current Round"/>
+        </HBox>
+        <TableView fx:id="table" prefHeight="360" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="nameColumn" prefWidth="180" text="Name"/>
+                <TableColumn fx:id="codeColumn" prefWidth="100" text="Code"/>
+                <TableColumn fx:id="contributionColumn" prefWidth="120" text="Contribution"/>
+                <TableColumn fx:id="statusColumn" prefWidth="100" text="Status"/>
+            </columns>
+        </TableView>
+        <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+    </VBox>
+</VBox>

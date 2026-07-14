@@ -9,7 +9,9 @@ public enum TransactionType {
     ADJUSTMENT("adjustment"),
     DISBURSEMENT("disbursement"),
     REPAYMENT("repayment"),
-    PENALTY("penalty");
+    PENALTY("penalty"),
+    GROUP_CONTRIBUTION("group_contribution"),
+    GROUP_PAYOUT("group_payout");
 
     private final String value;
 

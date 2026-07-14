@@ -61,6 +61,12 @@ public class ChartOfAccounts {
         return firstOrCreate("4400-LNPEN", "Loan Penalty Income", LedgerAccountType.INCOME, null, null, true);
     }
 
+    /** Pooled but not-yet-paid-out contributions for one susu group's current round. */
+    public LedgerAccount groupLiability(String groupId, String groupCode) throws SQLException {
+        return firstOrCreate("GRP-" + groupCode, "Group " + groupCode,
+                LedgerAccountType.LIABILITY, "group", groupId, true);
+    }
+
     private LedgerAccount firstOrCreate(String code, String name, LedgerAccountType type,
                                          String accountableType, String accountableId, boolean system)
             throws SQLException {
