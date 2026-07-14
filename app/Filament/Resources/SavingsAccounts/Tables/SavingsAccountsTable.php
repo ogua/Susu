@@ -11,6 +11,7 @@ use Filament\Actions\EditAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -65,6 +66,11 @@ class SavingsAccountsTable
 
                         Notification::make()->title('Collection recorded')->success()->send();
                     }),
+                Action::make('statement')
+                    ->label('Statement')
+                    ->icon(Heroicon::OutlinedDocumentArrowDown)
+                    ->url(fn (SavingsAccount $record): string => route('savings-accounts.statement', $record))
+                    ->openUrlInNewTab(),
                 EditAction::make(),
             ])
             ->defaultSort('account_number');

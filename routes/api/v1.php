@@ -26,6 +26,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::prefix('agent')->name('agent.')->middleware('role:field_agent|branch_manager|company_admin')->group(function (): void {
         Route::get('/accounts', [Agent\AccountController::class, 'index'])->name('accounts.index');
+        Route::get('/accounts/{account}/statement', [Agent\AccountController::class, 'statement'])->name('accounts.statement');
         Route::post('/customers', [Agent\CustomerController::class, 'store'])->name('customers.store');
         Route::get('/customers/{customer}', [Agent\CustomerController::class, 'show'])->name('customers.show');
         Route::post('/collections', [Agent\CollectionController::class, 'store'])->name('collections.store');
@@ -40,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::prefix('customer')->name('customer.')->middleware('role:customer')->group(function (): void {
         Route::get('/accounts', [Customer\AccountController::class, 'index'])->name('accounts.index');
         Route::get('/accounts/{account}/transactions', [Customer\AccountController::class, 'transactions'])->name('accounts.transactions');
+        Route::get('/accounts/{account}/statement', [Customer\AccountController::class, 'statement'])->name('accounts.statement');
         Route::get('/withdrawal-requests', [Customer\WithdrawalRequestController::class, 'index'])->name('withdrawals.index');
         Route::post('/withdrawal-requests', [Customer\WithdrawalRequestController::class, 'store'])->name('withdrawals.store');
     });
