@@ -136,6 +136,9 @@ export default function AgentDashboard() {
         <Pressable style={styles.tile} onPress={() => router.push('/(agent)/loans')}>
           <ThemedText style={styles.tileText}>Loans</ThemedText>
         </Pressable>
+        <Pressable style={styles.tile} onPress={() => router.push('/(agent)/groups/index')}>
+          <ThemedText style={styles.tileText}>Susu Groups</ThemedText>
+        </Pressable>
         <Pressable style={styles.tile} onPress={() => router.push('/(agent)/sync')}>
           <ThemedText style={styles.tileText}>
             Sync Queue{pending > 0 ? ` (${pending})` : ''}

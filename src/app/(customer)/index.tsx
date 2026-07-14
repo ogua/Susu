@@ -28,21 +28,42 @@ export default function CustomerHome() {
   }
 
   function renderAccount(account: SavingsAccount) {
-    const progress = account.contribution_amount
-      ? account.contributions_this_cycle / (account.product?.cycle_length_days ?? 31)
-      : 0;
+    const isTarget = account.target_amount !== null;
+    const progress = isTarget
+      ? (account.target_progress_percent ?? 0) / 100
+      : account.contribution_amount
+        ? account.contributions_this_cycle / (account.product?.cycle_length_days ?? 31)
+        : 0;
 
     return (
       <Pressable
         key={account.id}
         style={styles.accountCard}
-        onPress={() => router.push({ pathname: '/(customer)/account/[accountId]', params: { accountId: account.id } })}
+        onPress={() =>
+          router.push({
+            pathname: '/(customer)/account/[accountId]',
+            params: {
+              accountId: account.id,
+              targetAmountFormatted: account.target_amount_formatted ?? '',
+              targetProgressPercent: String(account.target_progress_percent ?? ''),
+              maturesAt: account.matures_at ?? '',
+              maturedAt: account.matured_at ?? '',
+            },
+          })
+        }
       >
         <ThemedText type="smallBold">{account.account_number}</ThemedText>
         <ThemedText type="subtitle">{account.balance_formatted}</ThemedText>
-        <ThemedText type="small">
-          {account.contributions_this_cycle}/{account.product?.cycle_length_days ?? 31} days this cycle
-        </ThemedText>
+        {isTarget ? (
+          <ThemedText type="small">
+            {account.target_progress_percent}% of {account.target_amount_formatted} target
+            {account.matured_at ? ' · Matured' : account.matures_at ? ` · Matures ${new Date(account.matures_at).toLocaleDateString()}` : ''}
+          </ThemedText>
+        ) : (
+          <ThemedText type="small">
+            {account.contributions_this_cycle}/{account.product?.cycle_length_days ?? 31} days this cycle
+          </ThemedText>
+        )}
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.min(progress * 100, 100)}%` }]} />
         </View>
@@ -61,6 +82,9 @@ export default function CustomerHome() {
 
       <Pressable style={styles.loansButton} onPress={() => router.push('/(customer)/loans')}>
         <ThemedText style={styles.loansButtonText}>My Loans</ThemedText>
+      </Pressable>
+      <Pressable style={styles.loansButton} onPress={() => router.push('/(customer)/groups/index')}>
+        <ThemedText style={styles.loansButtonText}>My Susu Groups</ThemedText>
       </Pressable>
 
       {accounts.isLoading ? (

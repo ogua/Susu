@@ -16,7 +16,13 @@ const TYPE_LABELS: Record<Transaction['type'], string> = {
 };
 
 export default function AccountDetailScreen() {
-  const { accountId } = useLocalSearchParams<{ accountId: string }>();
+  const { accountId, targetAmountFormatted, targetProgressPercent, maturesAt, maturedAt } = useLocalSearchParams<{
+    accountId: string;
+    targetAmountFormatted?: string;
+    targetProgressPercent?: string;
+    maturesAt?: string;
+    maturedAt?: string;
+  }>();
 
   const transactions = useQuery({
     queryKey: ['customer', 'account', accountId, 'transactions'],
@@ -43,6 +49,19 @@ export default function AccountDetailScreen() {
 
   return (
     <View style={styles.container}>
+      {targetAmountFormatted ? (
+        <View style={styles.targetCard}>
+          <ThemedText type="smallBold">Target: {targetAmountFormatted}</ThemedText>
+          <ThemedText type="small">
+            {targetProgressPercent}% saved
+            {maturedAt ? ' · Matured — no early-withdrawal penalty' : maturesAt ? ` · Matures ${new Date(maturesAt).toLocaleDateString()}` : ''}
+          </ThemedText>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.min(Number(targetProgressPercent) || 0, 100)}%` }]} />
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.actionRow}>
         <Pressable style={styles.depositButton} onPress={() => router.push({ pathname: '/(customer)/deposit', params: { accountId } })}>
           <ThemedText style={styles.depositButtonText}>Deposit via Mobile Money</ThemedText>
@@ -75,6 +94,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   separator: { height: 1, backgroundColor: '#e5e5ea' },
+  targetCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e5',
+    padding: 16,
+    gap: 6,
+    backgroundColor: '#ffffff',
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#e5e5ea',
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', backgroundColor: '#208AEF' },
   actionRow: { gap: 8 },
   depositButton: {
     backgroundColor: '#1a8a3d',

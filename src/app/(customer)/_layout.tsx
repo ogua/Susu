@@ -25,6 +25,8 @@ export default function CustomerLayout() {
       <Stack.Screen name="loans/index" options={{ title: 'My Loans' }} />
       <Stack.Screen name="loans/[loanId]" options={{ title: 'Loan' }} />
       <Stack.Screen name="loans/apply" options={{ title: 'Apply for Loan' }} />
+      <Stack.Screen name="groups/index" options={{ title: 'My Groups' }} />
+      <Stack.Screen name="groups/[groupId]" options={{ title: 'Group' }} />
     </Stack>
   );
 }

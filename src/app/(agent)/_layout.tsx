@@ -27,6 +27,8 @@ export default function AgentLayout() {
       <Stack.Screen name="loans/index" options={{ title: 'Loans' }} />
       <Stack.Screen name="loans/[loanId]" options={{ title: 'Loan' }} />
       <Stack.Screen name="loans/apply/[accountId]" options={{ title: 'Apply for Loan' }} />
+      <Stack.Screen name="groups/index" options={{ title: 'Susu Groups' }} />
+      <Stack.Screen name="groups/[groupId]" options={{ title: 'Group' }} />
     </Stack>
   );
 }

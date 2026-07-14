@@ -82,6 +82,11 @@ export interface SavingsAccount {
   contributions_this_cycle: number;
   balance: number;
   balance_formatted: string;
+  target_amount: number | null;
+  target_amount_formatted: string | null;
+  matures_at: string | null;
+  matured_at: string | null;
+  target_progress_percent: number | null;
   status: 'active' | 'dormant' | 'closed';
   opened_at: string;
   updated_at: string;
@@ -215,6 +220,45 @@ export interface Loan {
 export interface LoanEligibility {
   eligible: boolean;
   reasons: string[];
+}
+
+export type GroupStatus = 'draft' | 'active' | 'completed';
+
+export type GroupRoundStatus = 'pending' | 'collecting' | 'completed';
+
+export interface GroupMember {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  rotation_position: number;
+  status: 'active' | 'left';
+}
+
+export interface GroupRound {
+  id: string;
+  round_number: number;
+  payout_member?: { id: string; customer_id: string; customer_name: string };
+  due_date: string;
+  total_expected: number;
+  total_expected_formatted: string;
+  total_collected: number;
+  total_collected_formatted: string;
+  status: GroupRoundStatus;
+  paid_out_at: string | null;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  code: string;
+  contribution_amount: number;
+  contribution_amount_formatted: string;
+  frequency: 'weekly' | 'monthly';
+  status: GroupStatus;
+  members?: GroupMember[];
+  rounds?: GroupRound[];
+  activated_at: string | null;
+  completed_at: string | null;
 }
 
 export interface Paginated<T> {

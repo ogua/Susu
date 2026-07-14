@@ -44,7 +44,10 @@ export default function AgentAccountsScreen() {
         >
           <View style={{ flex: 1 }}>
             <ThemedText type="smallBold">{customerName || item.account_number}</ThemedText>
-            <ThemedText type="small">{item.account_number}</ThemedText>
+            <ThemedText type="small">
+              {item.account_number}
+              {item.target_amount !== null ? ` · ${item.target_progress_percent}% of ${item.target_amount_formatted} target` : ''}
+            </ThemedText>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <ThemedText>{item.balance_formatted}</ThemedText>
