@@ -15,6 +15,36 @@ beforeEach(function (): void {
     $this->actingAs($this->admin);
 });
 
+it('lists customers scoped to the tenant branch for a branch manager', function (): void {
+    $manager = User::factory()->branchManager($this->branch)->create();
+    $this->actingAs($manager);
+
+    $mine = Customer::factory()->forBranch($this->branch)->create();
+    $otherBranch = Branch::factory()->create(['company_id' => $this->branch->company_id]);
+    Customer::factory()->forBranch($otherBranch)->create();
+
+    bootAdminPanelWithTenant($this->branch);
+
+    livewire(ListCustomers::class)
+        ->assertCanSeeTableRecords([$mine])
+        ->assertCountTableRecords(1);
+});
+
+it('lets a company admin see customers across every branch in their company', function (): void {
+    $mine = Customer::factory()->forBranch($this->branch)->create();
+    $otherBranch = Branch::factory()->create(['company_id' => $this->branch->company_id]);
+    $sameCompany = Customer::factory()->forBranch($otherBranch)->create();
+
+    $otherCompanyBranch = Branch::factory()->create();
+    Customer::factory()->forBranch($otherCompanyBranch)->create();
+
+    bootAdminPanelWithTenant($this->branch);
+
+    livewire(ListCustomers::class)
+        ->assertCanSeeTableRecords([$mine, $sameCompany])
+        ->assertCountTableRecords(2);
+});
+
 /**
  * Booting the panel registers Filament's automatic tenant-association
  * listener, which force-sets branch_id on every NEW Customer to the current
@@ -26,18 +56,6 @@ function bootAdminPanelWithTenant(Branch $branch): void
     Filament::setTenant($branch);
     Filament::bootCurrentPanel();
 }
-
-it('lists customers scoped to the tenant branch', function (): void {
-    $mine = Customer::factory()->forBranch($this->branch)->create();
-    $otherBranch = Branch::factory()->create(['company_id' => $this->branch->company_id]);
-    Customer::factory()->forBranch($otherBranch)->create();
-
-    bootAdminPanelWithTenant($this->branch);
-
-    livewire(ListCustomers::class)
-        ->assertCanSeeTableRecords([$mine])
-        ->assertCountTableRecords(1);
-});
 
 it('creates a customer through CreateCustomerAction, auto-assigning code and branch', function (): void {
     bootAdminPanelWithTenant($this->branch);

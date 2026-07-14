@@ -26,13 +26,35 @@ class CustomerResource extends Resource
     protected static ?string $recordTitleAttribute = 'customer_code';
 
     /**
-     * Explicit branch scoping rather than relying solely on Filament's
-     * automatic tenant global scope — belt-and-suspenders for a financial
-     * multi-tenant app where a scoping gap means cross-branch data leakage.
+     * Company admins and super admins oversee every branch, so they're
+     * exempted from Filament's automatic per-branch tenant scope (see
+     * isScopedToTenant() below) and instead scoped to the whole company.
+     * Everyone else keeps explicit branch scoping rather than relying
+     * solely on Filament's automatic tenant global scope — belt-and-
+     * suspenders for a financial multi-tenant app where a scoping gap
+     * means cross-branch data leakage.
      */
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('branch_id', Filament::getTenant()?->id);
+        $query = parent::getEloquentQuery();
+        $user = auth()->user();
+
+        if ($user?->hasAnyRole(['company_admin', 'super_admin'])) {
+            return $query->where('company_id', $user->company_id);
+        }
+
+        return $query->where('branch_id', Filament::getTenant()?->id);
+    }
+
+    /**
+     * Disables Filament's automatic per-branch tenant global scope for
+     * company/super admins so getEloquentQuery() above can apply its own
+     * company-wide scope instead — otherwise the tenant scope would still
+     * silently restrict them to the current branch underneath it.
+     */
+    public static function isScopedToTenant(): bool
+    {
+        return ! (auth()->user()?->hasAnyRole(['company_admin', 'super_admin']) ?? false);
     }
 
     public static function form(Schema $schema): Schema

@@ -21,6 +21,7 @@ class CustomersTable
                     ->searchable(['first_name', 'last_name'])
                     ->formatStateUsing(fn ($record) => $record->fullName()),
                 TextColumn::make('phone')->searchable(),
+                TextColumn::make('branch.name')->label('Branch')->badge()->searchable(),
                 IconColumn::make('user_id')->label('Has login')->boolean(),
                 TextColumn::make('status')->badge(),
                 TextColumn::make('created_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
