@@ -2,3 +2,4 @@
 # Add new V###__description.sql files here; no code changes required.
 V001__initial_schema.sql
 V002__susu_domain.sql
+V003__loans.sql

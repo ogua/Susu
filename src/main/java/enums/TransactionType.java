@@ -6,7 +6,10 @@ public enum TransactionType {
     WITHDRAWAL("withdrawal"),
     REMITTANCE("remittance"),
     REVERSAL("reversal"),
-    ADJUSTMENT("adjustment");
+    ADJUSTMENT("adjustment"),
+    DISBURSEMENT("disbursement"),
+    REPAYMENT("repayment"),
+    PENALTY("penalty");
 
     private final String value;
 

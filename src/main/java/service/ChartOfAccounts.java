@@ -38,6 +38,24 @@ public class ChartOfAccounts {
                 LedgerAccountType.LIABILITY, "savings_account", savingsAccountId, true);
     }
 
+    /** The outstanding amount owed back on a disbursed loan — its balance IS the loan's outstanding balance. */
+    public LedgerAccount loanReceivable(String loanId, String loanNumber) throws SQLException {
+        return firstOrCreate("LN-" + loanNumber, "Loan " + loanNumber,
+                LedgerAccountType.ASSET, "loan", loanId, true);
+    }
+
+    public LedgerAccount loanInterestIncome() throws SQLException {
+        return firstOrCreate("4200-LNINT", "Loan Interest Income", LedgerAccountType.INCOME, null, null, true);
+    }
+
+    public LedgerAccount loanFeeIncome() throws SQLException {
+        return firstOrCreate("4300-LNFEE", "Loan Fee Income", LedgerAccountType.INCOME, null, null, true);
+    }
+
+    public LedgerAccount loanPenaltyIncome() throws SQLException {
+        return firstOrCreate("4400-LNPEN", "Loan Penalty Income", LedgerAccountType.INCOME, null, null, true);
+    }
+
     private LedgerAccount firstOrCreate(String code, String name, LedgerAccountType type,
                                          String accountableType, String accountableId, boolean system)
             throws SQLException {
