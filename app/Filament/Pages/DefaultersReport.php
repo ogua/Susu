@@ -6,6 +6,7 @@ use App\Enums\InstallmentStatus;
 use App\Models\LoanInstallment;
 use App\Support\Money;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -33,6 +34,22 @@ class DefaultersReport extends Page implements HasTable
     public static function canAccess(): bool
     {
         return Filament::auth()->user()?->hasRole(['company_admin', 'branch_manager', 'field_agent']) ?? false;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('downloadPdf')
+                ->label('Download PDF')
+                ->icon(Heroicon::OutlinedDocumentArrowDown)
+                ->url(fn (): string => route('reports.defaulters.pdf', Filament::getTenant()))
+                ->openUrlInNewTab(),
+            Action::make('downloadExcel')
+                ->label('Download Excel')
+                ->icon(Heroicon::OutlinedTableCells)
+                ->url(fn (): string => route('reports.defaulters.excel', Filament::getTenant()))
+                ->openUrlInNewTab(),
+        ];
     }
 
     public function table(Table $table): Table

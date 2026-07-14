@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Actions\Reports\BuildTrialBalanceAction;
 use App\Models\LedgerAccount;
 use App\Support\Money;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -39,16 +41,12 @@ class TrialBalance extends Page implements HasTable
 
     public function totalDebits(): int
     {
-        return $this->accountsQuery()
-            ->get()
-            ->sum(fn (LedgerAccount $account) => $account->type->normalBalance() === 'debit' ? $account->balance : 0);
+        return app(BuildTrialBalanceAction::class)->execute(Filament::getTenant()->company)['totalDebits'];
     }
 
     public function totalCredits(): int
     {
-        return $this->accountsQuery()
-            ->get()
-            ->sum(fn (LedgerAccount $account) => $account->type->normalBalance() === 'credit' ? $account->balance : 0);
+        return app(BuildTrialBalanceAction::class)->execute(Filament::getTenant()->company)['totalCredits'];
     }
 
     public function isBalanced(): bool
@@ -62,6 +60,22 @@ class TrialBalance extends Page implements HasTable
     private function accountsQuery(): Builder
     {
         return LedgerAccount::query()->where('company_id', Filament::getTenant()?->company_id);
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('downloadPdf')
+                ->label('Download PDF')
+                ->icon(Heroicon::OutlinedDocumentArrowDown)
+                ->url(fn (): string => route('reports.trial-balance.pdf', Filament::getTenant()))
+                ->openUrlInNewTab(),
+            Action::make('downloadExcel')
+                ->label('Download Excel')
+                ->icon(Heroicon::OutlinedTableCells)
+                ->url(fn (): string => route('reports.trial-balance.excel', Filament::getTenant()))
+                ->openUrlInNewTab(),
+        ];
     }
 
     public function table(Table $table): Table

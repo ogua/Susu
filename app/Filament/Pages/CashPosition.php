@@ -6,6 +6,7 @@ use App\Models\LedgerAccount;
 use App\Models\User;
 use App\Support\Money;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -40,6 +41,22 @@ class CashPosition extends Page implements HasTable
     public function totalCash(): int
     {
         return $this->accountsQuery()->get()->sum('balance');
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('downloadPdf')
+                ->label('Download PDF')
+                ->icon(Heroicon::OutlinedDocumentArrowDown)
+                ->url(fn (): string => route('reports.cash-position.pdf', Filament::getTenant()))
+                ->openUrlInNewTab(),
+            Action::make('downloadExcel')
+                ->label('Download Excel')
+                ->icon(Heroicon::OutlinedTableCells)
+                ->url(fn (): string => route('reports.cash-position.excel', Filament::getTenant()))
+                ->openUrlInNewTab(),
+        ];
     }
 
     /**
