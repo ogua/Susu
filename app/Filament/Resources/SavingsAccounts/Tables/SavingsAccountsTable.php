@@ -27,8 +27,16 @@ class SavingsAccountsTable
                     ->formatStateUsing(fn ($record) => $record->customer->fullName())
                     ->searchable(['customer.first_name', 'customer.last_name']),
                 TextColumn::make('agent.name')->label('Agent'),
+                TextColumn::make('product.type')->label('Type')->badge(),
                 TextColumn::make('balance')->formatStateUsing(fn (int $state): string => Money::format($state)),
                 TextColumn::make('cycle_number')->label('Cycle'),
+                TextColumn::make('target_progress')
+                    ->label('Progress')
+                    ->state(fn (SavingsAccount $record): ?string => $record->targetProgressPercent() !== null
+                        ? $record->targetProgressPercent().'% of '.Money::format($record->target_amount)
+                        : null)
+                    ->placeholder('—'),
+                TextColumn::make('matures_at')->label('Matures')->date()->placeholder('—'),
                 TextColumn::make('status')->badge(),
             ])
             ->filters([

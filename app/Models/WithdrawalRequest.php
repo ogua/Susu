@@ -20,6 +20,7 @@ class WithdrawalRequest extends Model
         'savings_account_id',
         'customer_id',
         'amount',
+        'penalty_amount',
         'reason',
         'status',
         'requested_by',
@@ -35,6 +36,7 @@ class WithdrawalRequest extends Model
     {
         return [
             'amount' => 'integer',
+            'penalty_amount' => 'integer',
             'status' => WithdrawalStatus::class,
         ];
     }

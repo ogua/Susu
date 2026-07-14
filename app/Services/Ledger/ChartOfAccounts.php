@@ -142,4 +142,17 @@ class ChartOfAccounts
             ],
         );
     }
+
+    /** Withheld from a target-savings withdrawal made before the account's matures_at date. */
+    public function earlyWithdrawalPenaltyIncome(Company $company): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $company->id, 'code' => '4500-EWPEN'],
+            [
+                'name' => 'Early Withdrawal Penalty Income',
+                'type' => LedgerAccountType::Income,
+                'is_system' => true,
+            ],
+        );
+    }
 }

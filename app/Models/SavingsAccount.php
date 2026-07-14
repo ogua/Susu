@@ -29,6 +29,9 @@ class SavingsAccount extends Model
         'cycle_started_at',
         'contributions_this_cycle',
         'balance',
+        'target_amount',
+        'matures_at',
+        'matured_at',
         'status',
         'opened_at',
         'closed_at',
@@ -46,6 +49,9 @@ class SavingsAccount extends Model
             'cycle_started_at' => 'date',
             'contributions_this_cycle' => 'integer',
             'balance' => 'integer',
+            'target_amount' => 'integer',
+            'matures_at' => 'date',
+            'matured_at' => 'datetime',
             'status' => AccountStatus::class,
             'opened_at' => 'datetime',
             'closed_at' => 'datetime',
@@ -85,6 +91,16 @@ class SavingsAccount extends Model
     public function withdrawalRequests(): HasMany
     {
         return $this->hasMany(WithdrawalRequest::class);
+    }
+
+    /** Null for non-target accounts; capped at 100 once the balance meets or exceeds the target. */
+    public function targetProgressPercent(): ?float
+    {
+        if ($this->target_amount === null || $this->target_amount <= 0) {
+            return null;
+        }
+
+        return min(100.0, round(($this->balance / $this->target_amount) * 100, 1));
     }
 
     /** Journal entries posted to this account's ledger account, oldest first. */

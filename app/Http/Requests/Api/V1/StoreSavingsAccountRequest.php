@@ -31,6 +31,8 @@ class StoreSavingsAccountRequest extends FormRequest
             'customer_id' => ['required', 'uuid'],
             'savings_product_id' => ['required', 'uuid'],
             'contribution_amount' => ['nullable', 'integer', 'min:1'],
+            'target_amount' => ['nullable', 'integer', 'min:1'],
+            'matures_at' => ['nullable', 'date', 'after:today'],
             'client_reference' => ['nullable', 'uuid'],
         ];
     }

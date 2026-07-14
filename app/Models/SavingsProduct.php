@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CommissionType;
+use App\Enums\SavingsProductType;
 use Database\Factories\SavingsProductFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -25,6 +26,7 @@ class SavingsProduct extends Model
         'cycle_length_days',
         'commission_type',
         'commission_value',
+        'early_withdrawal_penalty_bps',
         'is_active',
     ];
 
@@ -34,10 +36,12 @@ class SavingsProduct extends Model
     protected function casts(): array
     {
         return [
+            'type' => SavingsProductType::class,
             'contribution_amount' => 'integer',
             'cycle_length_days' => 'integer',
             'commission_type' => CommissionType::class,
             'commission_value' => 'integer',
+            'early_withdrawal_penalty_bps' => 'integer',
             'is_active' => 'boolean',
         ];
     }

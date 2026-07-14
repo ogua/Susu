@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('loans:flag-arrears')->dailyAt('01:00');
+Schedule::command('savings:mature-target-accounts')->dailyAt('01:30');

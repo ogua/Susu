@@ -39,14 +39,20 @@ class PayWithdrawalAction
             }
 
             $balanceAfter = $account->balance - $request->amount;
+            $netCash = $request->amount - $request->penalty_amount;
+
+            $lines = [
+                ['account' => $account->ledgerAccount, 'debit' => $request->amount],
+                ['account' => $this->chart->branchCash($account->branch), 'credit' => $netCash],
+            ];
+            if ($request->penalty_amount > 0) {
+                $lines[] = ['account' => $this->chart->earlyWithdrawalPenaltyIncome($account->company), 'credit' => $request->penalty_amount];
+            }
 
             $entry = $this->ledger->post(new EntryData(
                 company: $account->company,
                 type: TransactionType::Withdrawal,
-                lines: [
-                    ['account' => $account->ledgerAccount, 'debit' => $request->amount],
-                    ['account' => $this->chart->branchCash($account->branch), 'credit' => $request->amount],
-                ],
+                lines: $lines,
                 branch: $account->branch,
                 recordedBy: $paidBy,
                 description: "Withdrawal {$account->account_number}",
@@ -54,7 +60,7 @@ class PayWithdrawalAction
                     'customer_id' => $account->customer_id,
                     'savings_account_id' => $account->id,
                     'withdrawal_request_id' => $request->id,
-                    'amount' => $request->amount,
+                    'amount' => $netCash,
                     'balance_after' => $balanceAfter,
                 ],
             ));

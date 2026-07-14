@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\User;
+use Carbon\Carbon;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateSavingsAccount extends CreateRecord
@@ -24,6 +25,8 @@ class CreateSavingsAccount extends CreateRecord
             product: SavingsProduct::findOrFail($data['savings_product_id']),
             agent: isset($data['agent_id']) ? User::find($data['agent_id']) : null,
             contributionAmount: $data['contribution_amount'],
+            targetAmount: $data['target_amount'] ?? null,
+            maturesAt: isset($data['matures_at']) ? Carbon::parse($data['matures_at']) : null,
         );
     }
 }

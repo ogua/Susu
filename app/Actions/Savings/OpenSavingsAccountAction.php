@@ -2,11 +2,13 @@
 
 namespace App\Actions\Savings;
 
+use App\Enums\SavingsProductType;
 use App\Models\Customer;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\User;
 use App\Services\Ledger\ChartOfAccounts;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -20,6 +22,8 @@ class OpenSavingsAccountAction
         ?User $agent = null,
         ?int $contributionAmount = null,
         ?string $clientReference = null,
+        ?int $targetAmount = null,
+        ?CarbonInterface $maturesAt = null,
     ): SavingsAccount {
         if ($clientReference !== null) {
             $existing = SavingsAccount::where('client_reference', $clientReference)->first();
@@ -37,8 +41,13 @@ class OpenSavingsAccountAction
         if ($agent !== null && $agent->company_id !== $customer->company_id) {
             throw ValidationException::withMessages(['agent' => 'Agent not found in this company.']);
         }
+        if ($product->type === SavingsProductType::Target && ($targetAmount === null || $maturesAt === null)) {
+            throw ValidationException::withMessages([
+                'target_amount' => 'Target savings accounts require a target amount and maturity date.',
+            ]);
+        }
 
-        return DB::transaction(function () use ($customer, $product, $agent, $contributionAmount, $clientReference): SavingsAccount {
+        return DB::transaction(function () use ($customer, $product, $agent, $contributionAmount, $clientReference, $targetAmount, $maturesAt): SavingsAccount {
             $account = new SavingsAccount([
                 'company_id' => $customer->company_id,
                 'branch_id' => $customer->branch_id,
@@ -51,6 +60,8 @@ class OpenSavingsAccountAction
                 'cycle_started_at' => now()->toDateString(),
                 'contributions_this_cycle' => 0,
                 'balance' => 0,
+                'target_amount' => $product->type === SavingsProductType::Target ? $targetAmount : null,
+                'matures_at' => $product->type === SavingsProductType::Target ? $maturesAt : null,
                 'status' => 'active',
                 'opened_at' => now(),
                 'client_reference' => $clientReference,

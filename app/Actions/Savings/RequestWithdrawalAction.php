@@ -3,6 +3,7 @@
 namespace App\Actions\Savings;
 
 use App\Enums\AccountStatus;
+use App\Enums\SavingsProductType;
 use App\Enums\WithdrawalStatus;
 use App\Models\SavingsAccount;
 use App\Models\User;
@@ -33,9 +34,20 @@ class RequestWithdrawalAction
             'savings_account_id' => $account->id,
             'customer_id' => $account->customer_id,
             'amount' => $amount,
+            'penalty_amount' => $this->earlyWithdrawalPenalty($account, $amount),
             'reason' => $reason,
             'status' => WithdrawalStatus::Pending,
             'requested_by' => $requestedBy->id,
         ]);
+    }
+
+    /** Applies only to target-savings accounts withdrawn from before their matures_at date. */
+    private function earlyWithdrawalPenalty(SavingsAccount $account, int $amount): int
+    {
+        if ($account->product->type !== SavingsProductType::Target || $account->matured_at !== null) {
+            return 0;
+        }
+
+        return intdiv($amount * $account->product->early_withdrawal_penalty_bps, 10_000);
     }
 }

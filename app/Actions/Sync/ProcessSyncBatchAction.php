@@ -188,6 +188,8 @@ class ProcessSyncBatchAction
             agent: $actor,
             contributionAmount: isset($payload['contribution_amount']) ? (int) $payload['contribution_amount'] : null,
             clientReference: $payload['client_reference'] ?? $opId,
+            targetAmount: isset($payload['target_amount']) ? (int) $payload['target_amount'] : null,
+            maturesAt: isset($payload['matures_at']) ? Carbon::parse($payload['matures_at']) : null,
         );
 
         return ['account_id' => $account->id, 'account_number' => $account->account_number];

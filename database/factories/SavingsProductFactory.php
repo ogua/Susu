@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\CommissionType;
+use App\Enums\SavingsProductType;
 use App\Models\Company;
 use App\Models\SavingsProduct;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -43,6 +44,15 @@ class SavingsProductFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'commission_type' => CommissionType::FlatPerCycle,
             'commission_value' => $amountPerCycle,
+        ]);
+    }
+
+    public function target(int $penaltyBps = 1000): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'name' => 'Target Savings '.fake()->unique()->numberBetween(1, 999),
+            'type' => SavingsProductType::Target,
+            'early_withdrawal_penalty_bps' => $penaltyBps,
         ]);
     }
 }
