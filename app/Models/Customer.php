@@ -10,11 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Customer extends Model
 {
     /** @use HasFactory<CustomerFactory> */
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, HasUuids, LogsActivity, SoftDeletes;
 
     protected $fillable = [
         'company_id',
@@ -79,5 +81,31 @@ class Customer extends Model
     public function fullName(): string
     {
         return trim($this->first_name.' '.$this->last_name);
+    }
+
+    /**
+     * Excludes id_number/id_photo_path/photo_path: logging them here would
+     * defeat kyc:purge-expired's redaction (AD-16) by leaving a copy in the
+     * audit trail.
+     */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'branch_id',
+                'customer_code',
+                'first_name',
+                'last_name',
+                'phone',
+                'gender',
+                'next_of_kin_name',
+                'next_of_kin_phone',
+                'next_of_kin_relationship',
+                'address',
+                'status',
+            ])
+            ->logOnlyDirty()
+            ->useLogName('customer')
+            ->dontSubmitEmptyLogs();
     }
 }
