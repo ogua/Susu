@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { openBrowserAsync } from 'expo-web-browser';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
-import { getAccountTransactions } from '@/api/accounts';
+import { getAccountTransactions, getCustomerStatementUrl } from '@/api/accounts';
+import { apiErrorMessage } from '@/api/client';
 import { ThemedText } from '@/components/themed-text';
 import type { Transaction } from '@/types/api';
 
@@ -29,6 +32,20 @@ export default function AccountDetailScreen() {
     queryFn: () => getAccountTransactions(accountId),
     enabled: !!accountId,
   });
+
+  const [downloadingStatement, setDownloadingStatement] = useState(false);
+
+  async function handleDownloadStatement() {
+    setDownloadingStatement(true);
+    try {
+      const url = await getCustomerStatementUrl(accountId);
+      await openBrowserAsync(url);
+    } catch (err) {
+      Alert.alert('Could not open statement', apiErrorMessage(err));
+    } finally {
+      setDownloadingStatement(false);
+    }
+  }
 
   function renderItem({ item }: { item: Transaction }) {
     const isCredit = item.type === 'withdrawal';
@@ -68,6 +85,15 @@ export default function AccountDetailScreen() {
         </Pressable>
         <Pressable style={styles.withdrawButton} onPress={() => router.push({ pathname: '/(customer)/withdraw', params: { accountId } })}>
           <ThemedText style={styles.withdrawButtonText}>Request Withdrawal</ThemedText>
+        </Pressable>
+        <Pressable
+          style={styles.statementButton}
+          disabled={downloadingStatement}
+          onPress={handleDownloadStatement}
+        >
+          <ThemedText style={styles.statementButtonText}>
+            {downloadingStatement ? 'Opening…' : 'Download Statement'}
+          </ThemedText>
         </Pressable>
       </View>
 
@@ -124,5 +150,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   withdrawButtonText: { color: '#ffffff', fontWeight: '600' },
+  statementButton: {
+    borderWidth: 1,
+    borderColor: '#208AEF',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  statementButtonText: { color: '#208AEF', fontWeight: '600' },
   empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
 });

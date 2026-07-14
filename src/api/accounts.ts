@@ -26,3 +26,21 @@ export async function getAccountTransactions(
 
   return data;
 }
+
+/**
+ * A short-lived signed URL the in-app browser can open directly — it can't
+ * attach the Bearer token, so this hits the `/statement-url` endpoint
+ * (which re-checks ownership) instead of the Bearer-authed `/statement`
+ * download the web/desktop clients use.
+ */
+export async function getCustomerStatementUrl(accountId: string): Promise<string> {
+  const { data } = await api.get<{ url: string }>(`/customer/accounts/${accountId}/statement-url`);
+
+  return data.url;
+}
+
+export async function getAgentStatementUrl(accountId: string): Promise<string> {
+  const { data } = await api.get<{ url: string }>(`/agent/accounts/${accountId}/statement-url`);
+
+  return data.url;
+}

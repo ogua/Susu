@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import { openBrowserAsync } from 'expo-web-browser';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -10,17 +12,31 @@ import {
   View,
 } from 'react-native';
 
-import { getAgentAccounts } from '@/api/accounts';
+import { getAgentAccounts, getAgentStatementUrl } from '@/api/accounts';
+import { apiErrorMessage } from '@/api/client';
 import { ThemedText } from '@/components/themed-text';
 import type { SavingsAccount } from '@/types/api';
 
 export default function AgentAccountsScreen() {
   const [search, setSearch] = useState('');
+  const [statementAccountId, setStatementAccountId] = useState<string | null>(null);
 
   const accounts = useQuery({
     queryKey: ['agent', 'accounts', search],
     queryFn: () => getAgentAccounts(search || undefined),
   });
+
+  async function handleDownloadStatement(accountId: string) {
+    setStatementAccountId(accountId);
+    try {
+      const url = await getAgentStatementUrl(accountId);
+      await openBrowserAsync(url);
+    } catch (err) {
+      Alert.alert('Could not open statement', apiErrorMessage(err));
+    } finally {
+      setStatementAccountId(null);
+    }
+  }
 
   function renderItem({ item }: { item: SavingsAccount }) {
     const customerName = item.customer ? `${item.customer.first_name} ${item.customer.last_name}` : '';
@@ -64,6 +80,15 @@ export default function AgentAccountsScreen() {
           }
         >
           <ThemedText type="small" style={styles.loanButtonText}>Loan</ThemedText>
+        </Pressable>
+        <Pressable
+          style={styles.statementButton}
+          disabled={statementAccountId === item.id}
+          onPress={() => handleDownloadStatement(item.id)}
+        >
+          <ThemedText type="small" style={styles.statementButtonText}>
+            {statementAccountId === item.id ? 'Opening…' : 'Statement'}
+          </ThemedText>
         </Pressable>
       </View>
     );
@@ -119,6 +144,15 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   loanButtonText: { color: '#208AEF', fontWeight: '600' },
+  statementButton: {
+    borderWidth: 1,
+    borderColor: '#8a8a8f',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginLeft: 8,
+  },
+  statementButtonText: { color: '#8a8a8f', fontWeight: '600' },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
