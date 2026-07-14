@@ -57,3 +57,31 @@ it('lets the assigned agent download an account statement', function (): void {
 
     $response->assertOk()->assertHeader('content-type', 'application/pdf');
 });
+
+it('mints a signed statement URL a customer can open without an auth header', function (): void {
+    $response = $this->actingAs($this->customerUser, 'sanctum')
+        ->getJson("/api/v1/customer/accounts/{$this->account->id}/statement-url");
+
+    $response->assertOk()->assertJsonStructure(['url']);
+
+    $signedUrl = $response->json('url');
+    $this->get($signedUrl)->assertOk()->assertHeader('content-type', 'application/pdf');
+});
+
+it('rejects a signed statement URL once it has expired', function (): void {
+    $this->travelTo(now()->subMinutes(10));
+    $response = $this->actingAs($this->customerUser, 'sanctum')
+        ->getJson("/api/v1/customer/accounts/{$this->account->id}/statement-url");
+    $signedUrl = $response->json('url');
+    $this->travelBack();
+
+    $this->get($signedUrl)->assertForbidden();
+});
+
+it('mints a signed statement URL for an agent too', function (): void {
+    $response = $this->actingAs($this->agent, 'sanctum')
+        ->getJson("/api/v1/agent/accounts/{$this->account->id}/statement-url");
+
+    $response->assertOk()->assertJsonStructure(['url']);
+    $this->get($response->json('url'))->assertOk()->assertHeader('content-type', 'application/pdf');
+});
