@@ -17,9 +17,20 @@ class SmsService
 {
     public function settingsFor(Company $company): CompanySmsSetting
     {
+        // Explicit rather than relying on the migration's column defaults:
+        // Eloquent's create() never reflects those back onto the in-memory
+        // model firstOrCreate() returns, so the very first lookup for a
+        // company (before any row exists) would otherwise see
+        // notifications_enabled/provider as null instead of their real
+        // defaults — silently dropping that company's first notification.
         return CompanySmsSetting::firstOrCreate(
             ['company_id' => $company->id],
-            ['quiet_hours_start' => '21:00', 'quiet_hours_end' => '07:00'],
+            [
+                'provider' => 'log',
+                'notifications_enabled' => true,
+                'quiet_hours_start' => '21:00',
+                'quiet_hours_end' => '07:00',
+            ],
         );
     }
 
