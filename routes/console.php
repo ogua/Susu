@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('loans:flag-arrears')->dailyAt('01:00');
 Schedule::command('savings:mature-target-accounts')->dailyAt('01:30');
+Schedule::command('kyc:purge-expired')->dailyAt('02:00');
