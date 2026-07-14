@@ -6,12 +6,18 @@ use App\Actions\Agents\RecordLocationPingsAction;
 use App\Actions\Agents\SubmitAgentDailySummaryAction;
 use App\Actions\Customers\CreateCustomerAction;
 use App\Actions\Loans\ApplyForLoanAction;
+use App\Actions\Loans\ApproveLoanAction;
+use App\Actions\Loans\DisburseLoanAction;
 use App\Actions\Loans\RecordLoanRepaymentAction;
+use App\Actions\Loans\RejectLoanAction;
 use App\Actions\Savings\OpenSavingsAccountAction;
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
 use App\Enums\SyncOpType;
+use App\Http\Requests\Api\V1\ApproveLoanRequest;
+use App\Http\Requests\Api\V1\DisburseLoanRequest;
 use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
+use App\Http\Requests\Api\V1\RejectLoanRequest;
 use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
 use App\Http\Requests\Api\V1\StoreLoanApplicationRequest;
@@ -46,6 +52,9 @@ class ProcessSyncBatchAction
         private RecordLocationPingsAction $recordPings,
         private ApplyForLoanAction $applyForLoan,
         private RecordLoanRepaymentAction $recordLoanRepayment,
+        private ApproveLoanAction $approveLoan,
+        private RejectLoanAction $rejectLoan,
+        private DisburseLoanAction $disburseLoan,
     ) {}
 
     /**
@@ -120,6 +129,9 @@ class ProcessSyncBatchAction
             SyncOpType::RecordLocationPings => ['stored' => $this->recordPings->execute($actor, $payload['pings'])],
             SyncOpType::ApplyForLoan => $this->applyLoanApplication($actor, $payload, $op['op_id']),
             SyncOpType::RecordLoanRepayment => $this->applyLoanRepayment($actor, $origin, $payload, $op['op_id'], $recordedAt),
+            SyncOpType::ApproveLoan => $this->applyApproveLoan($actor, $payload),
+            SyncOpType::RejectLoan => $this->applyRejectLoan($actor, $payload),
+            SyncOpType::DisburseLoan => $this->applyDisburseLoan($actor, $payload),
         };
     }
 
@@ -137,6 +149,9 @@ class ProcessSyncBatchAction
             SyncOpType::RecordLocationPings => StoreLocationPingsRequest::payloadRules(),
             SyncOpType::ApplyForLoan => StoreLoanApplicationRequest::payloadRules(),
             SyncOpType::RecordLoanRepayment => RecordLoanRepaymentRequest::payloadRules(),
+            SyncOpType::ApproveLoan => ApproveLoanRequest::payloadRules(),
+            SyncOpType::RejectLoan => RejectLoanRequest::payloadRules(),
+            SyncOpType::DisburseLoan => DisburseLoanRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -281,6 +296,42 @@ class ProcessSyncBatchAction
             'loan_status' => $result->loan->status->value,
             'was_duplicate' => $result->duplicate,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyApproveLoan(User $actor, array $payload): array
+    {
+        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->approveLoan->execute($loan, $actor);
+
+        return ['loan_id' => $loan->id, 'status' => $loan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyRejectLoan(User $actor, array $payload): array
+    {
+        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->rejectLoan->execute($loan, $actor, $payload['reason']);
+
+        return ['loan_id' => $loan->id, 'status' => $loan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyDisburseLoan(User $actor, array $payload): array
+    {
+        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->disburseLoan->execute($loan, $actor);
+
+        return ['loan_id' => $loan->id, 'status' => $loan->status->value, 'outstanding_balance' => $loan->outstanding_balance];
     }
 
     /**

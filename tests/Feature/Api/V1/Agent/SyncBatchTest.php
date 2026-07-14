@@ -1,8 +1,11 @@
 <?php
 
+use App\Actions\Loans\ApplyForLoanAction;
+use App\Enums\LoanStatus;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\JournalEntry;
+use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\SyncOp;
@@ -146,4 +149,75 @@ it('applies a full offline provisioning chain in one batch with matching ids', f
     expect(Customer::find($customerRef))->not->toBeNull()
         ->and(SavingsAccount::find($accountRef))->not->toBeNull()
         ->and(SavingsAccount::find($accountRef)->contributions_this_cycle)->toBe(1);
+});
+
+it('lets a branch manager approve and disburse a loan through the sync batch', function (): void {
+    // This is the desktop hybrid-mode scenario: company_admin approves/
+    // disburses locally, then the outcome is synced up for audit visibility.
+    $manager = User::factory()->branchManager($this->branch)->create();
+
+    $product = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'min_amount' => 100_00,
+        'max_amount' => 1_000_00,
+    ]);
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $product,
+        requestedAmount: 300_00,
+    );
+
+    $response = $this->actingAs($manager, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [
+            [
+                'op_id' => (string) Str::uuid(),
+                'op_type' => 'loan.approve',
+                'payload' => ['loan_id' => $loan->id],
+                'recorded_at' => now()->toISOString(),
+            ],
+            [
+                'op_id' => (string) Str::uuid(),
+                'op_type' => 'loan.disburse',
+                'payload' => ['loan_id' => $loan->id],
+                'recorded_at' => now()->toISOString(),
+            ],
+        ],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('results.0.status', 'applied')
+        ->assertJsonPath('results.0.result.status', 'approved')
+        ->assertJsonPath('results.1.status', 'applied')
+        ->assertJsonPath('results.1.result.status', 'disbursed');
+
+    expect($loan->refresh()->status)->toBe(LoanStatus::Disbursed);
+});
+
+it('rejects loan approve/disburse ops from a field agent', function (): void {
+    $product = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'min_amount' => 100_00,
+        'max_amount' => 1_000_00,
+    ]);
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $product,
+        requestedAmount: 300_00,
+    );
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'loan.approve',
+            'payload' => ['loan_id' => $loan->id],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
+    expect($loan->refresh()->status)->toBe(LoanStatus::Applied);
 });

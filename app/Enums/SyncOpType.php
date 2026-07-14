@@ -11,6 +11,9 @@ enum SyncOpType: string
     case RecordLocationPings = 'locations.record';
     case ApplyForLoan = 'loan.apply';
     case RecordLoanRepayment = 'loan.repayment.record';
+    case ApproveLoan = 'loan.approve';
+    case RejectLoan = 'loan.reject';
+    case DisburseLoan = 'loan.disburse';
 
     /**
      * Op types each role may push through /sync/batch.
@@ -29,6 +32,8 @@ enum SyncOpType: string
                 self::ApplyForLoan,
                 self::RecordLoanRepayment,
             ],
+            // Loan approve/reject/disburse mirror LoanPolicy: agents can apply
+            // and record repayments, but only managers/admins decide loans.
             'branch_manager', 'company_admin' => self::cases(),
             default => [],
         };
