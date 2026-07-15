@@ -37,6 +37,9 @@
             <Button fx:id="navGroups" maxWidth="Infinity" onAction="#showGroups" styleClass="nav-button" text="Susu Groups"/>
             <Button fx:id="navDayClose" maxWidth="Infinity" onAction="#showDayClose" styleClass="nav-button" text="Day Summary"/>
             <Button fx:id="navPayments" maxWidth="Infinity" onAction="#showPayments" styleClass="nav-button" text="Mobile Money Payments"/>
+            <Button fx:id="navTrialBalance" maxWidth="Infinity" onAction="#showTrialBalance" styleClass="nav-button" text="Trial Balance"/>
+            <Button fx:id="navDefaulters" maxWidth="Infinity" onAction="#showDefaulters" styleClass="nav-button" text="Defaulters"/>
+            <Button fx:id="navCashPosition" maxWidth="Infinity" onAction="#showCashPosition" styleClass="nav-button" text="Cash Position"/>
             <Region VBox.vgrow="ALWAYS"/>
             <Label fx:id="storageLabel" styleClass="caption" wrapText="true"/>
         </VBox>

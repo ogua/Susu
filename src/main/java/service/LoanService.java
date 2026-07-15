@@ -456,6 +456,82 @@ public class LoanService {
         return installments;
     }
 
+    /**
+     * Flags installments overdue past their grace period and accrues a
+     * one-time late penalty — the standalone-mode mirror of the backend's
+     * scheduled {@code loans:flag-arrears} command. This desktop app has no
+     * background scheduler, so {@code MainController} runs this once per app
+     * launch instead of daily; the {@code penalty_due = 0} guard still makes
+     * repeat runs (multiple opens per day) a no-op for installments already
+     * flagged, keeping loan.outstanding_balance in sync the same way.
+     */
+    public int flagArrears() throws SQLException {
+        record Candidate(String installmentId, String loanId, LocalDate dueDate, long remainingPrincipal,
+                          long remainingInterest, int gracePeriodDays, int penaltyRateBps) {}
+
+        List<Candidate> candidates = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT li.id AS installment_id, li.loan_id, li.due_date,"
+                     + " (li.principal_due - li.principal_paid) AS remaining_principal,"
+                     + " (li.interest_due - li.interest_paid) AS remaining_interest,"
+                     + " l.grace_period_days, l.penalty_rate_bps"
+                     + " FROM loan_installments li JOIN loans l ON l.id = li.loan_id"
+                     + " WHERE li.status IN ('pending', 'partially_paid') AND li.penalty_due = 0"
+                     + " AND l.status = 'disbursed'");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                candidates.add(new Candidate(
+                        rs.getString("installment_id"),
+                        rs.getString("loan_id"),
+                        LocalDate.parse(rs.getString("due_date")),
+                        Math.max(0, rs.getLong("remaining_principal")),
+                        Math.max(0, rs.getLong("remaining_interest")),
+                        rs.getInt("grace_period_days"),
+                        rs.getInt("penalty_rate_bps")));
+            }
+        }
+
+        LocalDate today = LocalDate.now();
+        int flagged = 0;
+        for (Candidate c : candidates) {
+            LocalDate graceDeadline = c.dueDate().plusDays(c.gracePeriodDays());
+            if (!today.isAfter(graceDeadline)) {
+                continue;
+            }
+
+            long overdueAmount = c.remainingPrincipal() + c.remainingInterest();
+            long penalty = (overdueAmount * c.penaltyRateBps()) / 10_000;
+            String now = Instant.now().toString();
+
+            try (Connection conn = DatabaseConnection.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(
+                         "UPDATE loan_installments SET status = 'overdue', penalty_due = ?, updated_at = ?"
+                         + " WHERE id = ?")) {
+                ps.setLong(1, penalty);
+                ps.setString(2, now);
+                ps.setString(3, c.installmentId());
+                ps.executeUpdate();
+            }
+
+            if (penalty > 0) {
+                try (Connection conn = DatabaseConnection.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(
+                             "UPDATE loans SET outstanding_balance = outstanding_balance + ?, updated_at = ?"
+                             + " WHERE id = ?")) {
+                    ps.setLong(1, penalty);
+                    ps.setString(2, now);
+                    ps.setString(3, c.loanId());
+                    ps.executeUpdate();
+                }
+            }
+
+            flagged++;
+        }
+
+        return flagged;
+    }
+
     private Loan findByClientReference(String clientReference) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT * FROM loans WHERE client_reference = ?")) {

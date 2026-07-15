@@ -14,6 +14,7 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import models.LocalUser;
+import service.LoanService;
 import service.OutboxService;
 import service.SyncService;
 
@@ -38,9 +39,13 @@ public class MainController {
     @FXML private Button navGroups;
     @FXML private Button navDayClose;
     @FXML private Button navPayments;
+    @FXML private Button navTrialBalance;
+    @FXML private Button navDefaulters;
+    @FXML private Button navCashPosition;
 
     private final OutboxService outbox = new OutboxService();
     private final SyncService syncService = new SyncService();
+    private final LoanService loanService = new LoanService();
 
     @FXML
     private void initialize() {
@@ -64,6 +69,7 @@ public class MainController {
         navPayments.setManaged(AppConfig.isSyncEnabled());
         refreshSyncStatus();
         pullProductsInBackground();
+        flagArrearsInBackground();
 
         showDashboard();
     }
@@ -75,6 +81,24 @@ public class MainController {
             return;
         }
         Thread thread = new Thread(syncService::pullProducts, "product-pull-startup");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * This app has no background scheduler, so {@link LoanService#flagArrears()}
+     * (the standalone mirror of the backend's daily {@code loans:flag-arrears}
+     * command) runs once per launch instead — the Defaulters report is only
+     * ever as fresh as the last time someone opened the app.
+     */
+    private void flagArrearsInBackground() {
+        Thread thread = new Thread(() -> {
+            try {
+                loanService.flagArrears();
+            } catch (Exception ignored) {
+                // Best-effort: a failure here shouldn't block the app from opening.
+            }
+        }, "loan-arrears-startup");
         thread.setDaemon(true);
         thread.start();
     }
@@ -162,6 +186,21 @@ public class MainController {
     }
 
     @FXML
+    private void showTrialBalance() {
+        load("trial-balance-view.fxml", navTrialBalance);
+    }
+
+    @FXML
+    private void showDefaulters() {
+        load("defaulters-view.fxml", navDefaulters);
+    }
+
+    @FXML
+    private void showCashPosition() {
+        load("cash-position-view.fxml", navCashPosition);
+    }
+
+    @FXML
     private void onLogout() {
         SessionManager.clearSession();
         Navigator.showLogin((Stage) userLabel.getScene().getWindow());
@@ -177,7 +216,8 @@ public class MainController {
             throw new IllegalStateException("Could not load view " + fxml + ": " + e.getMessage(), e);
         }
 
-        for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navLoans, navGroups, navDayClose, navPayments)) {
+        for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navLoans, navGroups, navDayClose, navPayments,
+                navTrialBalance, navDefaulters, navCashPosition)) {
             nav.getStyleClass().remove("nav-button-active");
         }
         activeNav.getStyleClass().add("nav-button-active");
