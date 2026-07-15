@@ -35,6 +35,12 @@ public class AuthService {
 
     public LoginResult login(String email, String password) {
         String sql = "SELECT * FROM local_users WHERE email = ?";
+        String id, lockedUntil, passwordHash, serverUserId, name, phone, role;
+        int isActive, failedAttempts;
+        // The row is fully read out before the connection/ResultSet close below —
+        // registerFailedAttempt/clearFailedAttempts each acquire their own connection,
+        // and the SQLite pool is single-connection, so calling them while this one is
+        // still open would have the thread wait on itself until Hikari's 30s timeout.
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, email.trim().toLowerCase());
@@ -42,38 +48,39 @@ public class AuthService {
                 if (!rs.next()) {
                     return new LoginResult(LoginResult.Status.INVALID, null, "Invalid email or password.");
                 }
-
-                String lockedUntil = rs.getString("locked_until");
-                if (lockedUntil != null && Instant.parse(lockedUntil).isAfter(Instant.now())) {
-                    return new LoginResult(LoginResult.Status.LOCKED, null,
-                            "Account locked after repeated failures. Try again later.");
-                }
-
-                if (!BCrypt.checkpw(password, rs.getString("password_hash"))) {
-                    registerFailedAttempt(rs.getString("id"), rs.getInt("failed_attempts"));
-                    return new LoginResult(LoginResult.Status.INVALID, null, "Invalid email or password.");
-                }
-
-                if (rs.getInt("is_active") == 0) {
-                    return new LoginResult(LoginResult.Status.INACTIVE, null, "This account has been deactivated.");
-                }
-
-                clearFailedAttempts(rs.getString("id"));
-                LocalUser user = new LocalUser(
-                        rs.getString("id"),
-                        rs.getString("server_user_id"),
-                        rs.getString("name"),
-                        rs.getString("email"),
-                        rs.getString("phone"),
-                        rs.getString("role"),
-                        true);
-                refreshApiTokenIfHybrid(email, password);
-                return new LoginResult(LoginResult.Status.SUCCESS, user, null);
+                id = rs.getString("id");
+                lockedUntil = rs.getString("locked_until");
+                passwordHash = rs.getString("password_hash");
+                isActive = rs.getInt("is_active");
+                failedAttempts = rs.getInt("failed_attempts");
+                serverUserId = rs.getString("server_user_id");
+                name = rs.getString("name");
+                phone = rs.getString("phone");
+                role = rs.getString("role");
             }
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Login failed: {0}", e.getMessage());
             return new LoginResult(LoginResult.Status.ERROR, null, "Could not reach the local database.");
         }
+
+        if (lockedUntil != null && Instant.parse(lockedUntil).isAfter(Instant.now())) {
+            return new LoginResult(LoginResult.Status.LOCKED, null,
+                    "Account locked after repeated failures. Try again later.");
+        }
+
+        if (!BCrypt.checkpw(password, passwordHash)) {
+            registerFailedAttempt(id, failedAttempts);
+            return new LoginResult(LoginResult.Status.INVALID, null, "Invalid email or password.");
+        }
+
+        if (isActive == 0) {
+            return new LoginResult(LoginResult.Status.INACTIVE, null, "This account has been deactivated.");
+        }
+
+        clearFailedAttempts(id);
+        LocalUser user = new LocalUser(id, serverUserId, name, email, phone, role, true);
+        refreshApiTokenIfHybrid(email, password);
+        return new LoginResult(LoginResult.Status.SUCCESS, user, null);
     }
 
     /** Create a local user (setup wizard / user management). Returns the new id. */
