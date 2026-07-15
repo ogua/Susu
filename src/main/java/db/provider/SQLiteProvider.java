@@ -25,10 +25,22 @@ public class SQLiteProvider implements DatabaseProvider {
             AppConfig.applySQLiteDefaults();
         }
 
+        this.dataSource = buildDataSource(AppConfig.get("db.url"));
+    }
+
+    /**
+     * Construct a provider against an explicit JDBC URL — used by the
+     * engine-migration wizard to probe/populate a target SQLite file without
+     * touching AppConfig until the copy has already succeeded.
+     */
+    public SQLiteProvider(String jdbcUrl) {
+        this.dataSource = buildDataSource(jdbcUrl);
+    }
+
+    private static HikariDataSource buildDataSource(String rawUrl) {
         // Embed WAL mode and busy_timeout directly in the URL — this is the only
         // reliable path when HikariCP uses driverClassName (DriverManager mode).
         // addDataSourceProperty() is silently ignored in this mode for SQLite JDBC.
-        String rawUrl = AppConfig.get("db.url");
         String jdbcUrl = rawUrl.contains("journal_mode=")
                 ? rawUrl
                 : rawUrl + (rawUrl.contains("?") ? "&" : "?")
@@ -43,8 +55,9 @@ public class SQLiteProvider implements DatabaseProvider {
         config.setConnectionTimeout(30_000);
         config.setPoolName("SusuSQLite");
 
-        dataSource = new HikariDataSource(config);
+        HikariDataSource dataSource = new HikariDataSource(config);
         LOGGER.info("SQLiteProvider pool created.");
+        return dataSource;
     }
 
     @Override

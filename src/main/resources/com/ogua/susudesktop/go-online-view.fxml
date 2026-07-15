@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.GoOnlineController">
+    <content>
+        <VBox spacing="16" style="-fx-background-color: -ogua-bg;">
+            <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+            <Label styleClass="page-title" text="Go Online"/>
+            <Label styleClass="text-muted" wrapText="true"
+                   text="Connect this standalone install to a SusuApp server and upload its full history. Every customer, account, collection, and loan event recorded here so far will be replayed to the server; this install will then sync going forward like any hybrid-mode desktop."/>
+            <Label styleClass="text-danger" wrapText="true"
+                   text="Known gaps: withdrawal requests and susu-group creation/payouts are not part of the sync protocol yet, so their history will not transfer. Every backfilled event will be attributed to the account you sign in with below, not the original agent/manager who recorded it at the time."/>
+
+            <VBox spacing="14" styleClass="card">
+                <Label styleClass="card-title" text="Server"/>
+                <GridPane hgap="12" vgap="10">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                    <Label text="Server URL" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                    <TextField fx:id="apiBaseUrl" maxWidth="Infinity" promptText="https://susu.example.com" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                    <Label text="Email" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                    <TextField fx:id="emailField" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                    <Label text="Password" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+                    <PasswordField fx:id="passwordField" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                </GridPane>
+            </VBox>
+
+            <Label fx:id="progressLabel" styleClass="text-muted" wrapText="true"/>
+            <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+            <Button fx:id="goOnlineButton" maxWidth="Infinity" onAction="#onGoOnline" styleClass="button-primary" text="Upload history and go online"/>
+        </VBox>
+    </content>
+</ScrollPane>

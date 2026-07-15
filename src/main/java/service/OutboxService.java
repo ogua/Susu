@@ -28,7 +28,15 @@ public class OutboxService {
         if (!AppConfig.isSyncEnabled()) {
             return;
         }
+        enqueue(opType, payload);
+    }
 
+    /**
+     * Enqueues unconditionally, regardless of {@code sync.enabled} — used by
+     * {@link GoOnlineService} while backfilling a standalone company's
+     * history, since that runs before (or right as) hybrid mode is turned on.
+     */
+    public void enqueue(String opType, JSONObject payload) throws SQLException {
         String opId = UUID.randomUUID().toString();
         String now = Instant.now().toString();
 

@@ -47,6 +47,8 @@ public class MainController {
     @FXML private Button navTrialBalance;
     @FXML private Button navDefaulters;
     @FXML private Button navCashPosition;
+    @FXML private Button navEngineSwitch;
+    @FXML private Button navGoOnline;
 
     private final OutboxService outbox = new OutboxService();
     private final SyncService syncService = new SyncService();
@@ -73,6 +75,17 @@ public class MainController {
         // have no server to pull them from at all.
         navPayments.setVisible(AppConfig.isSyncEnabled());
         navPayments.setManaged(AppConfig.isSyncEnabled());
+
+        // Engine-switch/go-online are admin-level, install-wide decisions —
+        // hidden from field agents/branch managers. Go Online only makes
+        // sense once, before hybrid mode is already on.
+        boolean isCompanyAdmin = user != null && "company_admin".equals(user.getRole());
+        navEngineSwitch.setVisible(isCompanyAdmin);
+        navEngineSwitch.setManaged(isCompanyAdmin);
+        boolean showGoOnline = isCompanyAdmin && !AppConfig.isSyncEnabled();
+        navGoOnline.setVisible(showGoOnline);
+        navGoOnline.setManaged(showGoOnline);
+
         refreshSyncStatus();
         pullProductsInBackground();
         flagArrearsInBackground();
@@ -261,6 +274,16 @@ public class MainController {
     }
 
     @FXML
+    private void showEngineSwitch() {
+        load("engine-switch-view.fxml", navEngineSwitch);
+    }
+
+    @FXML
+    private void showGoOnline() {
+        load("go-online-view.fxml", navGoOnline);
+    }
+
+    @FXML
     private void onLogout() {
         if (licenseWatch != null) {
             licenseWatch.stop();
@@ -280,7 +303,7 @@ public class MainController {
         }
 
         for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navLoans, navGroups, navDayClose, navPayments,
-                navTrialBalance, navDefaulters, navCashPosition)) {
+                navTrialBalance, navDefaulters, navCashPosition, navEngineSwitch, navGoOnline)) {
             nav.getStyleClass().remove("nav-button-active");
         }
         activeNav.getStyleClass().add("nav-button-active");

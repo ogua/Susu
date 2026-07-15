@@ -41,6 +41,8 @@
             <Button fx:id="navTrialBalance" maxWidth="Infinity" onAction="#showTrialBalance" styleClass="nav-button" text="Trial Balance"/>
             <Button fx:id="navDefaulters" maxWidth="Infinity" onAction="#showDefaulters" styleClass="nav-button" text="Defaulters"/>
             <Button fx:id="navCashPosition" maxWidth="Infinity" onAction="#showCashPosition" styleClass="nav-button" text="Cash Position"/>
+            <Button fx:id="navEngineSwitch" maxWidth="Infinity" onAction="#showEngineSwitch" styleClass="nav-button" text="Switch Storage Engine"/>
+            <Button fx:id="navGoOnline" maxWidth="Infinity" onAction="#showGoOnline" styleClass="nav-button" text="Go Online"/>
             <Region VBox.vgrow="ALWAYS"/>
             <Label fx:id="storageLabel" styleClass="caption" wrapText="true"/>
         </VBox>

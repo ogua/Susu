@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.RadioButton?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.EngineSwitchController">
+    <content>
+        <VBox spacing="16" style="-fx-background-color: -ogua-bg;">
+            <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+            <Label styleClass="page-title" text="Switch Storage Engine"/>
+            <Label fx:id="currentEngineLabel" styleClass="text-muted" wrapText="true"/>
+            <Label styleClass="text-muted" wrapText="true"
+                   text="Copies every table into a new database, verifies the row counts match, then switches this install over. The old database is left untouched as a backup."/>
+
+            <VBox spacing="14" styleClass="card">
+                <Label styleClass="card-title" text="Target engine"/>
+
+                <fx:define><ToggleGroup fx:id="engineGroup"/></fx:define>
+                <RadioButton fx:id="sqliteRadio" selected="true" text="SQLite — this computer only" toggleGroup="$engineGroup"/>
+                <RadioButton fx:id="mysqlRadio" text="MySQL server — shared by several computers on the office network" toggleGroup="$engineGroup" wrapText="true"/>
+
+                <GridPane fx:id="mysqlPane" disable="true" hgap="12" vgap="10">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                    <Label text="Host" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                    <TextField fx:id="mysqlHost" maxWidth="Infinity" text="127.0.0.1" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                    <Label text="Port" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                    <TextField fx:id="mysqlPort" maxWidth="Infinity" text="3306" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                    <Label text="Database" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+                    <TextField fx:id="mysqlDatabase" maxWidth="Infinity" text="susuapp_desktop" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                    <Label text="Username" GridPane.columnIndex="0" GridPane.rowIndex="3"/>
+                    <TextField fx:id="mysqlUsername" maxWidth="Infinity" text="root" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+                    <Label text="Password" GridPane.columnIndex="0" GridPane.rowIndex="4"/>
+                    <PasswordField fx:id="mysqlPassword" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="4"/>
+                </GridPane>
+            </VBox>
+
+            <Label fx:id="progressLabel" styleClass="text-muted" wrapText="true"/>
+            <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+            <Button fx:id="migrateButton" maxWidth="Infinity" onAction="#onMigrate" styleClass="button-primary" text="Copy data and switch"/>
+        </VBox>
+    </content>
+</ScrollPane>

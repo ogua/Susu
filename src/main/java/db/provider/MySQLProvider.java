@@ -5,10 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import db.AppConfig;
 import db.migration.MigrationRunner;
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -75,27 +72,5 @@ public class MySQLProvider implements DatabaseProvider {
     @Override
     public String getType() {
         return "mysql";
-    }
-
-    /**
-     * True when the target DB already holds SusuApp data (setup wizard skips
-     * local provisioning). A missing companies table means a genuinely fresh
-     * database (false); any other failure is rethrown so a broken connection
-     * is never mistaken for an empty database.
-     */
-    public boolean hasExistingData() throws SQLException {
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM companies")) {
-            return rs.next() && rs.getInt(1) > 0;
-        } catch (SQLException e) {
-            String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
-            if (msg.contains("doesn't exist") || msg.contains("no such table")
-                    || msg.contains("unknown table")) {
-                return false; // fresh, un-migrated database
-            }
-            LOGGER.log(Level.WARNING, "Could not check existing data: {0}", e.getMessage());
-            throw e;
-        }
     }
 }
