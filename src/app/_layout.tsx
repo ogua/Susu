@@ -7,6 +7,7 @@ import { useColorScheme } from 'react-native';
 
 import '@/location/backgroundTracking';
 
+import { SyncToast } from '@/components/sync-toast';
 import { useAuthStore } from '@/stores/authStore';
 import { watchConnectivity } from '@/sync/engine';
 
@@ -43,6 +44,7 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }} />
+        <SyncToast />
       </ThemeProvider>
     </QueryClientProvider>
   );

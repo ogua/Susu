@@ -1,0 +1,83 @@
+{
+  "project_info": {
+    "project_number": "358977683240",
+    "firebase_url": "https://oguachat.firebaseio.com",
+    "project_id": "oguachat",
+    "storage_bucket": "oguachat.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:358977683240:android:5b57f4df250cc5431e9a1d",
+        "android_client_info": {
+          "package_name": "com.ogua.OguaSchoolz"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "358977683240-tk6pga4re3cnj1c7il39h0sedv6eq9hh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCh28wzE9vAyYJmWqPW7_56Q12kwhwDcHY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "358977683240-mhquda12rihlb2i5u7f6rm19d426f597.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "358977683240-psdpvn4ou8libpjprjd8vpoe94shput4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.oguaschoolz.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:358977683240:android:f56f323a9d512af81e9a1d",
+        "android_client_info": {
+          "package_name": "com.oguaschoolz.susuapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "358977683240-tk6pga4re3cnj1c7il39h0sedv6eq9hh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCh28wzE9vAyYJmWqPW7_56Q12kwhwDcHY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "358977683240-mhquda12rihlb2i5u7f6rm19d426f597.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "358977683240-psdpvn4ou8libpjprjd8vpoe94shput4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.oguaschoolz.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

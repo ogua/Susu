@@ -1,15 +1,15 @@
-import * as SecureStore from 'expo-secure-store';
-import { create } from 'zustand';
+import * as SecureStore from "expo-secure-store";
+import { create } from "zustand";
 
-import type { User } from '@/types/api';
+import type { User } from "@/types/api";
 
-const TOKEN_KEY = 'susu.auth.token';
-const USER_KEY = 'susu.auth.user';
-const BASE_URL_KEY = 'susu.api.baseUrl';
+const TOKEN_KEY = "susu.auth.token";
+const USER_KEY = "susu.auth.user";
+const BASE_URL_KEY = "susu.api.baseUrl";
 
 /** Default points at the local dev server; changeable on the login screen
  *  so the app can target cloud or on-prem/LAN backends at runtime. */
-export const DEFAULT_BASE_URL = 'http://localhost:8000';
+export const DEFAULT_BASE_URL = "http://172.20.10.3:7000";
 
 interface AuthState {
   hydrated: boolean;
@@ -58,7 +58,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   setBaseUrl: async (url) => {
-    const trimmed = url.replace(/\/+$/, '');
+    const trimmed = url.replace(/\/+$/, "");
     await SecureStore.setItemAsync(BASE_URL_KEY, trimmed);
     set({ baseUrl: trimmed });
   },

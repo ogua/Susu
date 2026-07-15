@@ -7,6 +7,7 @@ import {
   markSynced,
   pendingItems,
 } from '@/sync/outbox';
+import { useSyncToastStore } from '@/stores/syncToastStore';
 
 /**
  * Outbox drain engine. Pushes queued ops to POST /api/v1/sync/batch and maps
@@ -25,6 +26,7 @@ export interface SyncSummary {
   duplicates: number;
   rejected: number;
   skipped: 'offline' | 'empty' | 'in-flight' | null;
+  error: string | null;
 }
 
 interface SyncOpResult {
@@ -36,7 +38,14 @@ interface SyncOpResult {
 let inFlight = false;
 
 export async function drainOutbox(): Promise<SyncSummary> {
-  const summary: SyncSummary = { pushed: 0, applied: 0, duplicates: 0, rejected: 0, skipped: null };
+  const summary: SyncSummary = {
+    pushed: 0,
+    applied: 0,
+    duplicates: 0,
+    rejected: 0,
+    skipped: null,
+    error: null,
+  };
 
   if (inFlight) {
     summary.skipped = 'in-flight';
@@ -86,12 +95,42 @@ export async function drainOutbox(): Promise<SyncSummary> {
   } catch (error) {
     // Whole-batch transport failure: bump attempts, keep everything pending.
     const message = error instanceof Error ? error.message : 'Network error';
+    summary.error = message;
     await Promise.all(items.map((item) => bumpAttempt(item.op_id, message)));
   } finally {
     inFlight = false;
   }
 
+  notify(summary);
+
   return summary;
+}
+
+/** Surfaces the outcome of a real drain attempt (not a skip) as an app-wide
+ * toast — the only feedback an agent gets for the silent background sync
+ * triggered by `watchConnectivity`. */
+function notify(summary: SyncSummary): void {
+  if (summary.skipped) {
+    return;
+  }
+
+  const { show } = useSyncToastStore.getState();
+
+  if (summary.error) {
+    show('Sync failed — will retry automatically.', 'warning');
+
+    return;
+  }
+
+  const synced = summary.applied + summary.duplicates;
+
+  if (summary.rejected > 0) {
+    show(`${synced} synced, ${summary.rejected} rejected — review in Sync Queue.`, 'warning');
+
+    return;
+  }
+
+  show(`Synced ${synced} item${synced === 1 ? '' : 's'}.`, 'success');
 }
 
 /** Drain whenever connectivity returns. Returns an unsubscribe function. */

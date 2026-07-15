@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -8,21 +8,21 @@ import {
   StyleSheet,
   TextInput,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { apiErrorMessage } from '@/api/client';
-import { login } from '@/api/auth';
-import { ThemedText } from '@/components/themed-text';
-import { useAuthStore } from '@/stores/authStore';
+import { login } from "@/api/auth";
+import { apiErrorMessage } from "@/api/client";
+import { ThemedText } from "@/components/themed-text";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function LoginScreen() {
   const baseUrl = useAuthStore((state) => state.baseUrl);
   const setBaseUrl = useAuthStore((state) => state.setBaseUrl);
   const setSession = useAuthStore((state) => state.setSession);
 
-  const [loginId, setLoginId] = useState('');
-  const [password, setPassword] = useState('');
+  const [loginId, setLoginId] = useState("");
+  const [password, setPassword] = useState("");
   const [serverUrl, setServerUrl] = useState(baseUrl);
   const [showServer, setShowServer] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +37,9 @@ export default function LoginScreen() {
       }
       const response = await login(loginId.trim(), password);
       await setSession(response.token, response.user);
-      router.replace(response.user.role === 'customer' ? '/(customer)' : '/(agent)');
+      router.replace(
+        response.user.role === "customer" ? "/(customer)" : "/(agent)",
+      );
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -48,11 +50,11 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
         <View style={styles.header}>
-          <ThemedText type="title">SusuApp</ThemedText>
+          <ThemedText type="title">OguaFinance</ThemedText>
           <ThemedText type="small">Sign in to continue</ThemedText>
         </View>
 
@@ -102,7 +104,7 @@ export default function LoginScreen() {
 
           <Pressable onPress={() => setShowServer((visible) => !visible)}>
             <ThemedText type="small" style={styles.serverToggle}>
-              {showServer ? 'Hide server settings' : 'Change server'}
+              {showServer ? "Hide server settings" : "Change server"}
             </ThemedText>
           </Pressable>
         </View>
@@ -113,28 +115,32 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  header: { alignItems: 'center', marginBottom: 32, gap: 4 },
+  container: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
+  header: { alignItems: "center", marginBottom: 32, gap: 4 },
   form: { gap: 12 },
   input: {
     borderWidth: 1,
-    borderColor: '#c7c7cc',
+    borderColor: "#c7c7cc",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: '#ffffff',
-    color: '#111111',
+    backgroundColor: "#ffffff",
+    color: "#111111",
   },
   button: {
-    backgroundColor: '#208AEF',
+    backgroundColor: "#208AEF",
     borderRadius: 10,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 4,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '600' },
-  error: { color: '#d11a2a' },
-  serverToggle: { textAlign: 'center', marginTop: 8, textDecorationLine: 'underline' },
+  buttonText: { color: "#ffffff", fontWeight: "600" },
+  error: { color: "#d11a2a" },
+  serverToggle: {
+    textAlign: "center",
+    marginTop: 8,
+    textDecorationLine: "underline",
+  },
 });
