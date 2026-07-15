@@ -5,6 +5,8 @@ import db.DatabaseConnection;
 import db.SessionManager;
 import java.io.IOException;
 import java.util.List;
+import javafx.animation.Timeline;
+import javafx.animation.KeyFrame;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -13,7 +15,9 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 import models.LocalUser;
+import service.LicenseManager;
 import service.LoanService;
 import service.OutboxService;
 import service.SyncService;
@@ -30,6 +34,7 @@ public class MainController {
     @FXML private Label storageLabel;
     @FXML private Label syncStatusLabel;
     @FXML private Button syncNowButton;
+    @FXML private Label licenseWarningLabel;
     @FXML private StackPane contentArea;
 
     @FXML private Button navDashboard;
@@ -46,6 +51,7 @@ public class MainController {
     private final OutboxService outbox = new OutboxService();
     private final SyncService syncService = new SyncService();
     private final LoanService loanService = new LoanService();
+    private Timeline licenseWatch;
 
     @FXML
     private void initialize() {
@@ -70,8 +76,62 @@ public class MainController {
         refreshSyncStatus();
         pullProductsInBackground();
         flagArrearsInBackground();
+        startLicenseWatch();
 
         showDashboard();
+    }
+
+    /**
+     * Re-checks the license every 6 hours for as long as this session stays
+     * open (mirrors Oguaschoolz's {@code LicenseWatch}) — a session that
+     * outlasts its grace period gets locked out mid-use, not just at the
+     * next launch. An immediate check also drives the expiry-warning banner.
+     */
+    private void startLicenseWatch() {
+        Runnable check = () -> {
+            Task<LicenseManager.LicenseStatus> task = new Task<>() {
+                @Override
+                protected LicenseManager.LicenseStatus call() {
+                    return LicenseManager.getLicenseStatus();
+                }
+            };
+            task.setOnSucceeded(event -> applyLicenseStatus(task.getValue()));
+            new Thread(task, "license-watch-check").start();
+        };
+
+        check.run();
+        licenseWatch = new Timeline(new KeyFrame(Duration.hours(6), event -> check.run()));
+        licenseWatch.setCycleCount(Timeline.INDEFINITE);
+        licenseWatch.play();
+    }
+
+    private void applyLicenseStatus(LicenseManager.LicenseStatus status) {
+        if (status == LicenseManager.LicenseStatus.EXPIRED
+                || status == LicenseManager.LicenseStatus.MISSING
+                || status == LicenseManager.LicenseStatus.TAMPERED) {
+            if (licenseWatch != null) {
+                licenseWatch.stop();
+            }
+            SessionManager.clearSession();
+            LicenseManager.pendingStatus = status;
+            Navigator.showLicense((Stage) userLabel.getScene().getWindow());
+            return;
+        }
+
+        if (status == LicenseManager.LicenseStatus.GRACE_PERIOD) {
+            licenseWarningLabel.setText("License expired — renew within " + LicenseManager.GRACE_DAYS
+                    + " days of expiry to avoid a lockout.");
+            licenseWarningLabel.setVisible(true);
+            licenseWarningLabel.setManaged(true);
+        } else if (LicenseManager.shouldShowExpiryWarning()) {
+            long daysLeft = LicenseManager.getDaysUntilExpiry();
+            licenseWarningLabel.setText("License expires in " + daysLeft + " day(s) — renew soon.");
+            licenseWarningLabel.setVisible(true);
+            licenseWarningLabel.setManaged(true);
+        } else {
+            licenseWarningLabel.setVisible(false);
+            licenseWarningLabel.setManaged(false);
+        }
     }
 
     /** Best-effort catalogue refresh on startup, so a freshly opened session has
@@ -202,6 +262,9 @@ public class MainController {
 
     @FXML
     private void onLogout() {
+        if (licenseWatch != null) {
+            licenseWatch.stop();
+        }
         SessionManager.clearSession();
         Navigator.showLogin((Stage) userLabel.getScene().getWindow());
     }

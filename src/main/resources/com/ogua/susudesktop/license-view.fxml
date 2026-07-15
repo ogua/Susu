@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<StackPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="com.ogua.susudesktop.LicenseController">
+    <Region styleClass="login-background-image"/>
+    <Region styleClass="login-scrim"/>
+
+    <VBox alignment="CENTER" spacing="16">
+        <padding><Insets bottom="32" left="32" right="32" top="32"/></padding>
+
+        <VBox alignment="CENTER" maxWidth="380" spacing="14" styleClass="card">
+            <ImageView fitHeight="56" fitWidth="56" preserveRatio="true" smooth="true">
+                <Image url="@images/susu-logo.png"/>
+            </ImageView>
+            <Label styleClass="page-title" text="Activate SusuApp Desktop"/>
+            <Label fx:id="contextLabel" styleClass="text-muted" wrapText="true"/>
+
+            <VBox spacing="4">
+                <Label styleClass="caption" text="Install ID (share this to request a key)"/>
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <Label fx:id="installIdLabel" styleClass="body-text" wrapText="true" HBox.hgrow="ALWAYS"/>
+                    <Button onAction="#onCopyInstallId" styleClass="button-secondary" text="Copy"/>
+                </HBox>
+            </VBox>
+
+            <TextArea fx:id="keyField" maxWidth="Infinity" prefRowCount="4" promptText="Paste activation key"
+                      wrapText="true"/>
+
+            <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+            <Button fx:id="activateButton" defaultButton="true" maxWidth="Infinity" onAction="#onActivate"
+                    styleClass="button-primary" text="Activate"/>
+        </VBox>
+    </VBox>
+</StackPane>

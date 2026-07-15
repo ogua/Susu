@@ -22,6 +22,7 @@
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="syncStatusLabel" styleClass="text-muted"/>
             <Button fx:id="syncNowButton" onAction="#onSyncNow" styleClass="button-secondary" text="Sync Now"/>
+            <Label fx:id="licenseWarningLabel" styleClass="text-danger" visible="false" managed="false"/>
             <Label fx:id="modeLabel" styleClass="text-muted"/>
             <Label fx:id="userLabel" styleClass="body-text"/>
             <Button onAction="#onLogout" styleClass="button-secondary" text="Sign out"/>

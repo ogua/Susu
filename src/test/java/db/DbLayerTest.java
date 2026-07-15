@@ -58,7 +58,7 @@ class DbLayerTest {
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM schema_migrations")) {
                 assertTrue(rs.next());
-                assertEquals(5, rs.getInt(1), "V001-V005 should each be recorded exactly once");
+                assertEquals(6, rs.getInt(1), "V001-V006 should each be recorded exactly once");
             }
 
             // Idempotency: a second run must be a no-op, not a failure.

@@ -5,3 +5,4 @@ V002__susu_domain.sql
 V003__loans.sql
 V004__target_savings.sql
 V005__groups.sql
+V006__license_tamper_guard.sql

@@ -27,6 +27,10 @@ public final class Navigator {
         show(stage, "login-view.fxml", 440, 420, 400, 400);
     }
 
+    public static void showLicense(Stage stage) {
+        show(stage, "license-view.fxml", 480, 560, 420, 480);
+    }
+
     public static void showMain(Stage stage) {
         show(stage, "main-view.fxml", 1024, 680, 760, 480);
     }

@@ -89,6 +89,21 @@ public class AppConfig {
         set("api.token", token);
     }
 
+    /**
+     * A random id generated once per install and persisted alongside the
+     * rest of the config — binds an activation key to this specific
+     * machine/config directory (a key minted for one install's id won't
+     * validate on another's).
+     */
+    public static String getInstallId() {
+        String id = get("install.id");
+        if (id == null) {
+            id = java.util.UUID.randomUUID().toString();
+            set("install.id", id);
+        }
+        return id;
+    }
+
     /** Returns the app data directory, creating it if necessary. */
     public static File getAppDir() {
         File dir = new File(System.getProperty("user.home"), APP_DIR_NAME);

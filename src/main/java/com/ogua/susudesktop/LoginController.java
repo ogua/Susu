@@ -9,6 +9,7 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 import service.AuthService;
+import service.LicenseManager;
 
 public class LoginController {
 
@@ -19,6 +20,8 @@ public class LoginController {
 
     private final AuthService authService = new AuthService();
 
+    private record LoginOutcome(AuthService.LoginResult result, LicenseManager.LicenseStatus licenseStatus) {}
+
     @FXML
     private void onLogin() {
         statusLabel.setText("");
@@ -27,21 +30,38 @@ public class LoginController {
         String email = emailField.getText();
         String password = passwordField.getText();
 
-        Task<AuthService.LoginResult> task = new Task<>() {
+        Task<LoginOutcome> task = new Task<>() {
             @Override
-            protected AuthService.LoginResult call() {
-                return authService.login(email, password);
+            protected LoginOutcome call() {
+                AuthService.LoginResult result = authService.login(email, password);
+                // Re-checked here (not just at app startup) so a session that
+                // outlives its license — or is opened while a background
+                // renewal never landed — still gets caught before the main
+                // shell loads.
+                LicenseManager.LicenseStatus licenseStatus = result.status() == AuthService.LoginResult.Status.SUCCESS
+                        ? LicenseManager.getLicenseStatus() : null;
+                return new LoginOutcome(result, licenseStatus);
             }
         };
 
         task.setOnSucceeded(event -> {
-            AuthService.LoginResult result = task.getValue();
-            if (result.status() == AuthService.LoginResult.Status.SUCCESS) {
-                SessionManager.setCurrentUser(result.user());
-                Navigator.showMain((Stage) loginButton.getScene().getWindow());
-            } else {
+            LoginOutcome outcome = task.getValue();
+            AuthService.LoginResult result = outcome.result();
+
+            if (result.status() != AuthService.LoginResult.Status.SUCCESS) {
                 loginButton.setDisable(false);
                 statusLabel.setText(result.message());
+                return;
+            }
+
+            Stage stage = (Stage) loginButton.getScene().getWindow();
+            if (outcome.licenseStatus() == LicenseManager.LicenseStatus.VALID
+                    || outcome.licenseStatus() == LicenseManager.LicenseStatus.GRACE_PERIOD) {
+                SessionManager.setCurrentUser(result.user());
+                Navigator.showMain(stage);
+            } else {
+                LicenseManager.pendingStatus = outcome.licenseStatus();
+                Navigator.showLicense(stage);
             }
         });
         task.setOnFailed(event -> {
