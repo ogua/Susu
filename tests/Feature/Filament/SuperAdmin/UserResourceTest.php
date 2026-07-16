@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Spatie\Permission\Models\Role;
+use STS\FilamentImpersonate\Facades\Impersonation;
 
 beforeEach(function (): void {
     seedRoles();
@@ -56,6 +57,24 @@ it('lets a super admin create a user with company, branches, and roles', functio
     expect($user)->not->toBeNull()
         ->and($user->hasRole('branch_manager'))->toBeTrue()
         ->and($user->branches->pluck('id'))->toContain($branch->id);
+});
+
+it('lets a super admin impersonate a branch manager and land on their admin panel', function (): void {
+    $branch = Branch::factory()->create();
+    $manager = User::factory()->branchManager($branch)->create();
+
+    livewire(ListUsers::class)
+        ->callTableAction('impersonate', $manager);
+
+    expect(Impersonation::isImpersonating())->toBeTrue()
+        ->and(auth()->user()->is($manager))->toBeTrue();
+});
+
+it('does not show the impersonate action for another super admin', function (): void {
+    $otherSuperAdmin = User::factory()->superAdmin()->create();
+
+    livewire(ListUsers::class)
+        ->assertTableActionHidden('impersonate', $otherSuperAdmin);
 });
 
 it('denies non-super-admins access to the users list', function (): void {

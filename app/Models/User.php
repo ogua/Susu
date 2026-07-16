@@ -102,6 +102,18 @@ class User extends Authenticatable implements HasTenants
         return ! $this->hasRole('customer');
     }
 
+    /** stechstudio/filament-impersonate guard: only platform operators may impersonate. */
+    public function canImpersonate(): bool
+    {
+        return $this->hasRole('super_admin');
+    }
+
+    /** stechstudio/filament-impersonate guard: never impersonate another platform operator. */
+    public function canBeImpersonated(): bool
+    {
+        return ! $this->hasRole('super_admin') && $this->is_active;
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
