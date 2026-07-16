@@ -1,9 +1,15 @@
 <?php
 
 use App\Http\Controllers\License\LicenseCheckoutController;
+use App\Http\Controllers\Reports\AgentPerformanceReportController;
 use App\Http\Controllers\Reports\CashPositionReportController;
+use App\Http\Controllers\Reports\CollectionsReportController;
+use App\Http\Controllers\Reports\CustomerBalancesReportController;
 use App\Http\Controllers\Reports\DefaultersReportController;
+use App\Http\Controllers\Reports\GroupReportController;
+use App\Http\Controllers\Reports\LoanPortfolioReportController;
 use App\Http\Controllers\Reports\TrialBalanceReportController;
+use App\Http\Controllers\Reports\WithdrawalsReportController;
 use App\Http\Controllers\SavingsAccountStatementController;
 use App\Http\Controllers\SignedAccountStatementController;
 use Illuminate\Support\Facades\Route;
@@ -37,4 +43,16 @@ Route::middleware('auth')->prefix('reports/{branch}')->name('reports.')->group(f
     Route::get('/defaulters.xlsx', [DefaultersReportController::class, 'excel'])->name('defaulters.excel');
     Route::get('/cash-position.pdf', [CashPositionReportController::class, 'pdf'])->name('cash-position.pdf');
     Route::get('/cash-position.xlsx', [CashPositionReportController::class, 'excel'])->name('cash-position.excel');
+    Route::get('/collections.pdf', [CollectionsReportController::class, 'pdf'])->name('collections.pdf');
+    Route::get('/collections.xlsx', [CollectionsReportController::class, 'excel'])->name('collections.excel');
+    Route::get('/loan-portfolio.pdf', [LoanPortfolioReportController::class, 'pdf'])->name('loan-portfolio.pdf');
+    Route::get('/loan-portfolio.xlsx', [LoanPortfolioReportController::class, 'excel'])->name('loan-portfolio.excel');
+    Route::get('/agent-performance.pdf', [AgentPerformanceReportController::class, 'pdf'])->name('agent-performance.pdf');
+    Route::get('/agent-performance.xlsx', [AgentPerformanceReportController::class, 'excel'])->name('agent-performance.excel');
+    Route::get('/withdrawals.pdf', [WithdrawalsReportController::class, 'pdf'])->name('withdrawals.pdf');
+    Route::get('/withdrawals.xlsx', [WithdrawalsReportController::class, 'excel'])->name('withdrawals.excel');
+    Route::get('/groups.pdf', [GroupReportController::class, 'pdf'])->name('groups.pdf');
+    Route::get('/groups.xlsx', [GroupReportController::class, 'excel'])->name('groups.excel');
+    Route::get('/customer-balances.pdf', [CustomerBalancesReportController::class, 'pdf'])->name('customer-balances.pdf');
+    Route::get('/customer-balances.xlsx', [CustomerBalancesReportController::class, 'excel'])->name('customer-balances.excel');
 });
