@@ -38,7 +38,19 @@ class SmsService
     {
         $settings = $this->settingsFor($company);
 
-        return $this->driver($settings)->send($to, $body, $settings->sender_id);
+        return $this->driver($settings->provider)->send($to, $body, $settings->sender_id);
+    }
+
+    /**
+     * For notifications with no Company context (e.g. desktop license-key
+     * delivery to a guest purchaser) — uses the platform-level driver config
+     * (services.platform_sms) instead of a company's CompanySmsSetting.
+     */
+    public function sendSystem(string $to, string $body): ?string
+    {
+        $senderId = config('services.platform_sms.sender_id');
+
+        return $this->driver(config('services.platform_sms.provider', 'log'))->send($to, $body, $senderId);
     }
 
     /**
@@ -65,12 +77,12 @@ class SmsService
         return $inWindow ? max(0, $now->diffInSeconds($release, false)) : 0;
     }
 
-    protected function driver(CompanySmsSetting $settings): SmsDriver
+    protected function driver(string $provider): SmsDriver
     {
-        return match ($settings->provider) {
+        return match ($provider) {
             'log' => new LogSmsDriver,
             default => throw new InvalidArgumentException(
-                "SMS provider '{$settings->provider}' is not implemented yet."
+                "SMS provider '{$provider}' is not implemented yet."
             ),
         };
     }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Webhooks\PaystackWebhookController;
+use App\Http\Controllers\License\LicenseWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
@@ -12,3 +13,9 @@ Route::prefix('v1')
 Route::post('/webhooks/paystack', PaystackWebhookController::class)
     ->middleware('paystack.signature')
     ->name('webhooks.paystack');
+
+// Separate from the susu-payment webhook above so a license sale's
+// fulfillment path never touches that money-movement code (see plan Phase 6).
+Route::post('/webhooks/paystack/license', LicenseWebhookController::class)
+    ->middleware('paystack.signature')
+    ->name('webhooks.paystack.license');

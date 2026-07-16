@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\License\LicenseCheckoutController;
 use App\Http\Controllers\Reports\CashPositionReportController;
 use App\Http\Controllers\Reports\DefaultersReportController;
 use App\Http\Controllers\Reports\TrialBalanceReportController;
@@ -20,6 +21,14 @@ Route::get('/savings-accounts/{account}/statement', SavingsAccountStatementContr
 Route::get('/statements/{account}/signed', SignedAccountStatementController::class)
     ->middleware('signed')
     ->name('statements.signed');
+
+// Guest desktop-license purchase flow (see plan Phase 6) — the desktop app's
+// activation screen links here; no auth, no Company context.
+Route::middleware('throttle:20,1')->prefix('license')->name('license.')->group(function (): void {
+    Route::get('/activate/{installId?}', [LicenseCheckoutController::class, 'showActivationForm'])->name('activate');
+    Route::post('/checkout', [LicenseCheckoutController::class, 'initiateCheckout'])->name('checkout');
+    Route::get('/callback', [LicenseCheckoutController::class, 'handleCallback'])->name('callback');
+});
 
 Route::middleware('auth')->prefix('reports/{branch}')->name('reports.')->group(function (): void {
     Route::get('/trial-balance.pdf', [TrialBalanceReportController::class, 'pdf'])->name('trial-balance.pdf');

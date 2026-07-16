@@ -41,4 +41,15 @@ return [
         'base_url' => env('PAYSTACK_BASE_URL', 'https://api.paystack.co'),
     ],
 
+    /*
+     * Platform-level SMS (no Company context), used for scenarios like
+     * license-key delivery where the recipient isn't a company's customer.
+     * Separate from company_sms_settings (App\Services\Sms\SmsService::send()),
+     * which requires a Company.
+     */
+    'platform_sms' => [
+        'provider' => env('PLATFORM_SMS_PROVIDER', 'log'),
+        'sender_id' => env('PLATFORM_SMS_SENDER_ID'),
+    ],
+
 ];
