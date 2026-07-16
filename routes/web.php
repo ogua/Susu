@@ -2,11 +2,14 @@
 
 use App\Http\Controllers\License\LicenseCheckoutController;
 use App\Http\Controllers\Reports\AgentPerformanceReportController;
+use App\Http\Controllers\Reports\BalanceSheetReportController;
 use App\Http\Controllers\Reports\CashPositionReportController;
 use App\Http\Controllers\Reports\CollectionsReportController;
 use App\Http\Controllers\Reports\CustomerBalancesReportController;
 use App\Http\Controllers\Reports\DefaultersReportController;
+use App\Http\Controllers\Reports\GeneralLedgerReportController;
 use App\Http\Controllers\Reports\GroupReportController;
+use App\Http\Controllers\Reports\IncomeStatementReportController;
 use App\Http\Controllers\Reports\LoanPortfolioReportController;
 use App\Http\Controllers\Reports\TrialBalanceReportController;
 use App\Http\Controllers\Reports\WithdrawalsReportController;
@@ -55,4 +58,10 @@ Route::middleware('auth')->prefix('reports/{branch}')->name('reports.')->group(f
     Route::get('/groups.xlsx', [GroupReportController::class, 'excel'])->name('groups.excel');
     Route::get('/customer-balances.pdf', [CustomerBalancesReportController::class, 'pdf'])->name('customer-balances.pdf');
     Route::get('/customer-balances.xlsx', [CustomerBalancesReportController::class, 'excel'])->name('customer-balances.excel');
+    Route::get('/general-ledger.pdf', [GeneralLedgerReportController::class, 'pdf'])->name('general-ledger.pdf');
+    Route::get('/general-ledger.xlsx', [GeneralLedgerReportController::class, 'excel'])->name('general-ledger.excel');
+    Route::get('/income-statement.pdf', [IncomeStatementReportController::class, 'pdf'])->name('income-statement.pdf');
+    Route::get('/income-statement.xlsx', [IncomeStatementReportController::class, 'excel'])->name('income-statement.excel');
+    Route::get('/balance-sheet.pdf', [BalanceSheetReportController::class, 'pdf'])->name('balance-sheet.pdf');
+    Route::get('/balance-sheet.xlsx', [BalanceSheetReportController::class, 'excel'])->name('balance-sheet.excel');
 });

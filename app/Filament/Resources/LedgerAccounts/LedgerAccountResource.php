@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\LedgerAccounts;
 
+use App\Filament\Resources\LedgerAccounts\Pages\AccountLedger;
 use App\Filament\Resources\LedgerAccounts\Pages\ListLedgerAccounts;
 use App\Filament\Resources\LedgerAccounts\Tables\LedgerAccountsTable;
 use App\Models\LedgerAccount;
@@ -42,6 +43,7 @@ class LedgerAccountResource extends Resource
     {
         return [
             'index' => ListLedgerAccounts::route('/'),
+            'ledger' => AccountLedger::route('/{record}/ledger'),
         ];
     }
 }
