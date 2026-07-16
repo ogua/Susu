@@ -1,45 +1,21 @@
 <?php
 
-namespace App\Filament\SuperAdmin\Pages;
+namespace App\Filament\SuperAdmin\Resources\DesktopLicenseSales\Pages;
 
 use App\Actions\License\GenerateLicenseKeyAction;
 use App\Enums\LicenseSaleStatus;
+use App\Filament\SuperAdmin\Resources\DesktopLicenseSales\DesktopLicenseSaleResource;
 use App\Models\DesktopLicenseSale;
-use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
+use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Concerns\InteractsWithTable;
-use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
-/**
- * Mints a desktop activation key directly (no payment) — for support cases,
- * comps, or manually-collected payment outside the web checkout flow (see
- * plan Phase 6). Not scoped to any Company/branch, so this lives in the
- * SuperAdmin panel rather than the tenant admin panel.
- */
-class GenerateLicenseKey extends Page implements HasTable
+class ListDesktopLicenseSales extends ListRecords
 {
-    use InteractsWithTable;
-
-    protected string $view = 'filament.super-admin.pages.generate-license-key';
-
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedKey;
-
-    protected static ?string $navigationLabel = 'Generate License Key';
-
-    public ?DesktopLicenseSale $lastGenerated = null;
-
-    public static function canAccess(): bool
-    {
-        return Filament::auth()->user()?->hasRole('super_admin') ?? false;
-    }
+    protected static string $resource = DesktopLicenseSaleResource::class;
 
     protected function getHeaderActions(): array
     {
@@ -80,35 +56,10 @@ class GenerateLicenseKey extends Page implements HasTable
                         'source' => 'admin_manual',
                     ]);
 
-                    $this->lastGenerated = app(GenerateLicenseKeyAction::class)->execute($sale);
+                    app(GenerateLicenseKeyAction::class)->execute($sale);
 
                     Notification::make()->title('License key generated')->success()->send();
                 }),
         ];
-    }
-
-    /**
-     * @return Builder<DesktopLicenseSale>
-     */
-    private function salesQuery(): Builder
-    {
-        return DesktopLicenseSale::query()->where('source', 'admin_manual');
-    }
-
-    public function table(Table $table): Table
-    {
-        return $table
-            ->query($this->salesQuery())
-            ->columns([
-                TextColumn::make('install_id')->searchable(),
-                TextColumn::make('customer_name')->label('Customer'),
-                TextColumn::make('duration_days')->label('Days'),
-                TextColumn::make('expires_at')->date(),
-                TextColumn::make('status')->badge(),
-                TextColumn::make('issuedBy.name')->label('Issued By'),
-                TextColumn::make('created_at')->dateTime()->sortable(),
-            ])
-            ->defaultSort('created_at', 'desc')
-            ->emptyStateHeading('No keys generated from this panel yet.');
     }
 }
