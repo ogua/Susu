@@ -14,6 +14,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use UnitEnum;
 
 /**
  * Every overdue loan installment for the tenant branch, oldest-first — the
@@ -28,6 +29,8 @@ class DefaultersReport extends Page implements HasTable
     protected string $view = 'filament.pages.defaulters-report';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedExclamationTriangle;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Reports';
 
     protected static ?string $navigationLabel = 'Defaulters';
 

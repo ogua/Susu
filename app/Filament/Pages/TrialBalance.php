@@ -15,6 +15,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 /**
  * Every ledger account for the company, split into its normal-balance
@@ -31,6 +32,8 @@ class TrialBalance extends Page implements HasTable
     protected string $view = 'filament.pages.trial-balance';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalculator;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Reports';
 
     protected static ?string $navigationLabel = 'Trial Balance';
 

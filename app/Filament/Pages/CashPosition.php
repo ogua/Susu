@@ -15,6 +15,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 /**
  * Where the branch's physical cash currently sits: the branch cash account
@@ -30,6 +31,8 @@ class CashPosition extends Page implements HasTable
     protected string $view = 'filament.pages.cash-position';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Reports';
 
     protected static ?string $navigationLabel = 'Cash Position';
 

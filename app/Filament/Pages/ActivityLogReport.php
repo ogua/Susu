@@ -17,6 +17,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Spatie\Activitylog\Models\Activity;
+use UnitEnum;
 
 /**
  * Read-only audit trail (AD-16) for master-data models that opted into
@@ -32,6 +33,8 @@ class ActivityLogReport extends Page implements HasTable
     protected string $view = 'filament.pages.activity-log-report';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Reports';
 
     protected static ?string $navigationLabel = 'Activity Log';
 
