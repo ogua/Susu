@@ -14,7 +14,14 @@ trait ResolvesReportRequest
 {
     private function authorizeStaffAccess(Request $request, Branch $branch): void
     {
+        // Signed URLs (minted by the API after its own role checks, validated
+        // by the 'signed' route middleware) carry no session user.
+        if ($request->hasValidSignature()) {
+            return;
+        }
+
         $user = $request->user();
+        abort_unless($user !== null, 403);
         abort_unless($user->hasRole(['company_admin', 'branch_manager']), 403);
         abort_unless($user->company_id === $branch->company_id, 404);
     }

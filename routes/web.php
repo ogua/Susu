@@ -11,6 +11,7 @@ use App\Http\Controllers\Reports\GeneralLedgerReportController;
 use App\Http\Controllers\Reports\GroupReportController;
 use App\Http\Controllers\Reports\IncomeStatementReportController;
 use App\Http\Controllers\Reports\LoanPortfolioReportController;
+use App\Http\Controllers\Reports\SignedReportDownloadController;
 use App\Http\Controllers\Reports\TrialBalanceReportController;
 use App\Http\Controllers\Reports\WithdrawalsReportController;
 use App\Http\Controllers\SavingsAccountStatementController;
@@ -65,3 +66,10 @@ Route::middleware('auth')->prefix('reports/{branch}')->name('reports.')->group(f
     Route::get('/balance-sheet.pdf', [BalanceSheetReportController::class, 'pdf'])->name('balance-sheet.pdf');
     Route::get('/balance-sheet.xlsx', [BalanceSheetReportController::class, 'excel'])->name('balance-sheet.excel');
 });
+
+// Headerless report downloads for the mobile/desktop apps — the API mints a
+// short-lived signed URL after its own role checks (see the signed account
+// statement route above for the same pattern).
+Route::get('/signed-reports/{branch}/{report}.{format}', SignedReportDownloadController::class)
+    ->middleware('signed')
+    ->name('reports.signed');

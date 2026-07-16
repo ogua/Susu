@@ -3,9 +3,12 @@
 use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Customer;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\GroupController;
+use App\Http\Controllers\Api\V1\LedgerController;
 use App\Http\Controllers\Api\V1\LoanController;
 use App\Http\Controllers\Api\V1\PaymentController;
+use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SyncController;
 use Illuminate\Support\Facades\Route;
 
@@ -78,6 +81,32 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/{loan}/repayments', [LoanController::class, 'recordRepayment'])
             ->middleware('role:field_agent|branch_manager|company_admin')
             ->name('repayments.store');
+    });
+
+    // Role-shaped dashboard stats — one endpoint per home screen.
+    Route::prefix('dashboard')->name('dashboard.')->middleware('throttle:30,1')->group(function (): void {
+        Route::get('/agent', [DashboardController::class, 'agent'])
+            ->middleware('role:field_agent|branch_manager|company_admin')
+            ->name('agent');
+        Route::get('/branch', [DashboardController::class, 'branch'])
+            ->middleware('role:branch_manager|company_admin')
+            ->name('branch');
+        Route::get('/customer', [DashboardController::class, 'customer'])
+            ->middleware('role:customer')
+            ->name('customer');
+    });
+
+    // Back-office reports: JSON data plus short-lived signed download URLs
+    // onto the web PDF/Excel routes.
+    Route::prefix('reports')->name('reports.')->middleware(['role:branch_manager|company_admin', 'throttle:30,1'])->group(function (): void {
+        Route::get('/{report}', [ReportController::class, 'show'])->name('show');
+        Route::get('/{report}/download-url', [ReportController::class, 'downloadUrl'])->name('download-url');
+    });
+
+    // Chart of accounts + per-account journal entries (desktop hybrid views).
+    Route::prefix('ledger')->name('ledger.')->middleware(['role:branch_manager|company_admin', 'throttle:30,1'])->group(function (): void {
+        Route::get('/accounts', [LedgerController::class, 'accounts'])->name('accounts');
+        Route::get('/accounts/{account}/entries', [LedgerController::class, 'entries'])->name('accounts.entries');
     });
 
     // Shared by agent (records contributions in the field) and customer

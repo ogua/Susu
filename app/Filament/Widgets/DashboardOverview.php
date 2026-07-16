@@ -2,20 +2,16 @@
 
 namespace App\Filament\Widgets;
 
-use App\Enums\AccountStatus;
-use App\Enums\InstallmentStatus;
-use App\Enums\LedgerAccountType;
-use App\Enums\LoanStatus;
-use App\Models\AgentDailySummary;
-use App\Models\LedgerAccount;
-use App\Models\Loan;
-use App\Models\SavingsAccount;
-use App\Models\User;
+use App\Actions\Dashboard\BuildBranchDashboardAction;
 use App\Support\Money;
 use Filament\Facades\Filament;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
+/**
+ * Thin presenter over BuildBranchDashboardAction — the same numbers the
+ * chart widgets and /api/v1/dashboard/branch serve, so every platform agrees.
+ */
 class DashboardOverview extends StatsOverviewWidget
 {
     /**
@@ -23,76 +19,30 @@ class DashboardOverview extends StatsOverviewWidget
      */
     protected function getStats(): array
     {
-        $branchId = Filament::getTenant()?->id;
+        $branch = Filament::getTenant();
+
+        if ($branch === null) {
+            return [];
+        }
+
+        $stats = app(BuildBranchDashboardAction::class)->execute($branch)['stats'];
 
         return [
-            $this->collectionsToday($branchId),
-            $this->activeAccounts($branchId),
-            $this->cashInField($branchId),
-            $this->portfolioAtRisk($branchId),
+            Stat::make('Collections Today', Money::format($stats['collections_today']))
+                ->description($stats['collections_count_today'].' collection(s) recorded')
+                ->icon('heroicon-o-banknotes')
+                ->color('success'),
+            Stat::make('Active Accounts', (string) $stats['active_accounts'])
+                ->icon('heroicon-o-users')
+                ->color('info'),
+            Stat::make('Cash In Field', Money::format($stats['cash_in_field']))
+                ->description('Total agent cash-in-hand')
+                ->icon('heroicon-o-wallet')
+                ->color('warning'),
+            Stat::make('Portfolio At Risk', $stats['par_percent'].'%')
+                ->description(Money::format($stats['at_risk']).' of '.Money::format($stats['outstanding']).' outstanding')
+                ->icon('heroicon-o-exclamation-triangle')
+                ->color($stats['par_percent'] > 10 ? 'danger' : 'success'),
         ];
-    }
-
-    private function collectionsToday(?string $branchId): Stat
-    {
-        $summaries = AgentDailySummary::query()
-            ->where('branch_id', $branchId)
-            ->where('summary_date', now()->toDateString())
-            ->get();
-
-        return Stat::make('Collections Today', Money::format((int) $summaries->sum('collections_total')))
-            ->description($summaries->sum('collections_count').' collection(s) recorded')
-            ->icon('heroicon-o-banknotes')
-            ->color('success');
-    }
-
-    private function activeAccounts(?string $branchId): Stat
-    {
-        $count = SavingsAccount::query()
-            ->where('branch_id', $branchId)
-            ->where('status', AccountStatus::Active)
-            ->count();
-
-        return Stat::make('Active Accounts', (string) $count)
-            ->icon('heroicon-o-users')
-            ->color('info');
-    }
-
-    /** Sum of every agent's cash-in-hand ledger account for this branch — the day's field float. */
-    private function cashInField(?string $branchId): Stat
-    {
-        $agentIds = User::query()->where('branch_id', $branchId)->pluck('id');
-
-        $total = LedgerAccount::query()
-            ->where('branch_id', $branchId)
-            ->where('type', LedgerAccountType::Asset)
-            ->where('accountable_type', User::class)
-            ->whereIn('accountable_id', $agentIds)
-            ->sum('balance');
-
-        return Stat::make('Cash In Field', Money::format((int) $total))
-            ->description('Total agent cash-in-hand')
-            ->icon('heroicon-o-wallet')
-            ->color('warning');
-    }
-
-    /** Standard microfinance PAR: a loan with any overdue installment counts its whole outstanding balance as at-risk. */
-    private function portfolioAtRisk(?string $branchId): Stat
-    {
-        $disbursed = Loan::query()
-            ->where('branch_id', $branchId)
-            ->where('status', LoanStatus::Disbursed);
-
-        $totalOutstanding = (clone $disbursed)->sum('outstanding_balance');
-        $atRiskOutstanding = (clone $disbursed)
-            ->whereHas('installments', fn ($query) => $query->where('status', InstallmentStatus::Overdue))
-            ->sum('outstanding_balance');
-
-        $parPercent = $totalOutstanding > 0 ? round(($atRiskOutstanding / $totalOutstanding) * 100, 1) : 0.0;
-
-        return Stat::make('Portfolio At Risk', $parPercent.'%')
-            ->description(Money::format((int) $atRiskOutstanding).' of '.Money::format((int) $totalOutstanding).' outstanding')
-            ->icon('heroicon-o-exclamation-triangle')
-            ->color($parPercent > 10 ? 'danger' : 'success');
     }
 }

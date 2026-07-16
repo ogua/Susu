@@ -35,7 +35,12 @@ class TrialBalanceReportController extends Controller
 
     private function authorizeAccess(Request $request, Branch $branch): void
     {
+        if ($request->hasValidSignature()) {
+            return;
+        }
+
         $user = $request->user();
+        abort_unless($user !== null, 403);
         abort_unless($user->hasRole(['company_admin', 'branch_manager']), 403);
         abort_unless($user->company_id === $branch->company_id, 404);
     }

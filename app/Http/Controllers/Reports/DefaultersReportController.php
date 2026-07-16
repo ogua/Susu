@@ -35,7 +35,12 @@ class DefaultersReportController extends Controller
 
     private function authorizeAccess(Request $request, Branch $branch): void
     {
+        if ($request->hasValidSignature()) {
+            return;
+        }
+
         $user = $request->user();
+        abort_unless($user !== null, 403);
         abort_unless($user->hasRole(['company_admin', 'branch_manager', 'field_agent']), 403);
 
         $allowed = $user->hasRole('company_admin')
