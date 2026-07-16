@@ -7,7 +7,6 @@ module com.ogua.susudesktop {
     requires net.synedra.validatorfx;
     requires org.kordamp.ikonli.javafx;
     requires org.kordamp.bootstrapfx.core;
-    requires eu.hansolo.tilesfx;
 
     requires java.sql;
     requires java.net.http;
