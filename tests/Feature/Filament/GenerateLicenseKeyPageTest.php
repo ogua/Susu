@@ -5,19 +5,12 @@ use App\Filament\SuperAdmin\Pages\GenerateLicenseKey;
 use App\Models\Branch;
 use App\Models\DesktopLicenseSale;
 use App\Models\User;
-use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Config;
 
 beforeEach(function (): void {
     seedRoles();
     Config::set('license.private_key_path', __DIR__.'/../../Fixtures/license/test_private_key.pem');
 });
-
-function bootSuperAdminPanel(): void
-{
-    Filament::setCurrentPanel('superadmin');
-    Filament::bootCurrentPanel();
-}
 
 it('lets a super admin generate a key from the panel', function (): void {
     $superAdmin = User::factory()->superAdmin()->create();

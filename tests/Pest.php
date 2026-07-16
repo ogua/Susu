@@ -1,6 +1,7 @@
 <?php
 
 use Database\Seeders\RoleSeeder;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -64,4 +65,14 @@ function livewire(string $component, array $params = []): Testable
 function seedRoles(): void
 {
     (new RoleSeeder)->run();
+}
+
+/**
+ * Boots the SuperAdmin panel context for a Livewire test — that panel has no
+ * tenancy, so (unlike bootAdminPanelWithTenant()) there's no tenant to set.
+ */
+function bootSuperAdminPanel(): void
+{
+    Filament::setCurrentPanel('superadmin');
+    Filament::bootCurrentPanel();
 }

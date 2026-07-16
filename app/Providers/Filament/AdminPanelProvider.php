@@ -22,6 +22,7 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Swis\Filament\Backgrounds\FilamentBackgroundsPlugin;
 use Swis\Filament\Backgrounds\ImageProviders\MyImages;
@@ -93,11 +94,11 @@ class AdminPanelProvider extends PanelProvider
         $user = Auth::user();
 
         if ($user instanceof User && $user->company?->logo) {
-            return $user->company->logo;
+            return Storage::disk('public')->url($user->company->logo);
         }
 
         $company = Cache::get('domain_company_'.request()->getHost());
 
-        return $company?->logo ?? asset('images/logo.png');
+        return $company?->logo ? Storage::disk('public')->url($company->logo) : asset('images/logo.png');
     }
 }
