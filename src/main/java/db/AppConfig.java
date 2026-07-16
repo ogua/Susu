@@ -80,6 +80,19 @@ public class AppConfig {
         return get("api.base_url", "http://localhost:8000");
     }
 
+    /**
+     * Where the "Buy / Renew License" link opens — SusuApp's own public web
+     * presence (the guest checkout at /license/activate/{installId}), which
+     * is a different host than {@link #getApiBaseUrl()} in standalone mode:
+     * that URL points at a specific company's own (possibly LAN-only,
+     * possibly never configured) backend, not a place that can sell a
+     * license. Placeholder default — set the real production domain via
+     * config.properties ({@code license.purchase_base_url}) before shipping.
+     */
+    public static String getLicensePurchaseBaseUrl() {
+        return get("license.purchase_base_url", "https://susuapp.example.com");
+    }
+
     /** Sanctum token cached after the last successful online login (hybrid mode). */
     public static String getApiToken() {
         return get("api.token");

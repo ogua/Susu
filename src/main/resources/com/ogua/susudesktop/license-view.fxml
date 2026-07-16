@@ -34,6 +34,9 @@
                 </HBox>
             </VBox>
 
+            <Button maxWidth="Infinity" onAction="#onBuyLicense" styleClass="button-secondary"
+                    text="Buy / Renew License Online"/>
+
             <TextArea fx:id="keyField" maxWidth="Infinity" prefRowCount="4" promptText="Paste activation key"
                       wrapText="true"/>
 

@@ -1,6 +1,10 @@
 package com.ogua.susudesktop;
 
 import db.AppConfig;
+import java.awt.Desktop;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -48,6 +52,21 @@ public class LicenseController {
         Clipboard.getSystemClipboard().setContent(content);
         statusLabel.getStyleClass().setAll("text-success");
         statusLabel.setText("Install ID copied to clipboard.");
+    }
+
+    @FXML
+    private void onBuyLicense() {
+        statusLabel.getStyleClass().setAll("text-danger");
+        statusLabel.setText("");
+
+        try {
+            String installId = URLEncoder.encode(AppConfig.getInstallId(), StandardCharsets.UTF_8);
+            String url = AppConfig.getLicensePurchaseBaseUrl() + "/license/activate/" + installId;
+            Desktop.getDesktop().browse(new URI(url));
+        } catch (Exception e) {
+            statusLabel.setText("Could not open the browser. Visit "
+                    + AppConfig.getLicensePurchaseBaseUrl() + "/license/activate and enter your install ID manually.");
+        }
     }
 
     @FXML
