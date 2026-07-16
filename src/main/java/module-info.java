@@ -11,6 +11,7 @@ module com.ogua.susudesktop {
 
     requires java.sql;
     requires java.net.http;
+    requires java.desktop;
     requires com.zaxxer.hikari;
     requires org.xerial.sqlitejdbc;
     requires jbcrypt;
