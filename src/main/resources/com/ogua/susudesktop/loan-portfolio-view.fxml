@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DatePicker?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.ogua.susudesktop.LoanPortfolioController">
+    <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+    <HBox alignment="CENTER_LEFT" spacing="10">
+        <Label styleClass="page-title" text="Loan Portfolio"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button onAction="#exportPdf" styleClass="button-secondary" text="Export PDF"/>
+        <Button onAction="#exportCsv" styleClass="button-secondary" text="Export CSV"/>
+    </HBox>
+
+    <VBox spacing="10" styleClass="card">
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label styleClass="body-text" text="Applied from"/>
+            <DatePicker fx:id="fromDate"/>
+            <Label styleClass="body-text" text="Until"/>
+            <DatePicker fx:id="untilDate"/>
+            <Label styleClass="body-text" text="Status"/>
+            <ComboBox fx:id="statusFilter" prefWidth="130"/>
+            <Button onAction="#refresh" styleClass="button-secondary" text="Apply"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="totalLabel" styleClass="section-title"/>
+        </HBox>
+    </VBox>
+
+    <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" prefHeight="420" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="loanNumberColumn" prefWidth="120" text="Loan #"/>
+                <TableColumn fx:id="customerColumn" prefWidth="160" text="Customer"/>
+                <TableColumn fx:id="agentColumn" prefWidth="130" text="Agent"/>
+                <TableColumn fx:id="statusColumn" prefWidth="90" text="Status"/>
+                <TableColumn fx:id="appliedColumn" prefWidth="100" text="Applied"/>
+                <TableColumn fx:id="disbursedColumn" prefWidth="100" text="Disbursed"/>
+                <TableColumn fx:id="principalColumn" prefWidth="110" text="Principal"/>
+                <TableColumn fx:id="outstandingColumn" prefWidth="110" text="Outstanding"/>
+            </columns>
+        </TableView>
+        <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+    </VBox>
+</VBox>

@@ -28,6 +28,7 @@
     -ogua-border: #E2E8F0;
     -ogua-text-primary: #0F172A;
     -ogua-text-secondary: #64748B;
+    -ogua-selection-bg: rgba(245,158,11,0.20);
 
     -fx-font-family: "Segoe UI";
     -fx-font-size: 13px;

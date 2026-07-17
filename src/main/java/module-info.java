@@ -15,6 +15,7 @@ module com.ogua.susudesktop {
     requires org.xerial.sqlitejdbc;
     requires jbcrypt;
     requires org.json;
+    requires com.github.librepdf.openpdf;
 
     opens com.ogua.susudesktop to javafx.fxml;
     opens db to javafx.fxml;

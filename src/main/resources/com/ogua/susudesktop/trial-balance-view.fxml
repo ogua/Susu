@@ -6,6 +6,7 @@
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
 <VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
@@ -15,6 +16,9 @@
     <HBox alignment="CENTER_LEFT" spacing="10">
         <Label styleClass="page-title" text="Trial Balance"/>
         <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button onAction="#exportPdf" styleClass="button-secondary" text="Export PDF"/>
+        <Button onAction="#exportCsv" styleClass="button-secondary" text="Export CSV"/>
     </HBox>
 
     <VBox spacing="10" styleClass="card">

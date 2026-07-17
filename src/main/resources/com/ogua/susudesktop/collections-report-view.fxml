@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.DatePicker?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
@@ -10,26 +11,38 @@
 <?import javafx.scene.layout.VBox?>
 
 <VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.DefaultersController">
+      fx:controller="com.ogua.susudesktop.CollectionsReportController">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <HBox alignment="CENTER_LEFT" spacing="10">
-        <Label styleClass="page-title" text="Defaulters"/>
-        <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
+        <Label styleClass="page-title" text="Collections Report"/>
         <Region HBox.hgrow="ALWAYS"/>
         <Button onAction="#exportPdf" styleClass="button-secondary" text="Export PDF"/>
         <Button onAction="#exportCsv" styleClass="button-secondary" text="Export CSV"/>
     </HBox>
 
+    <VBox spacing="10" styleClass="card">
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label styleClass="body-text" text="From"/>
+            <DatePicker fx:id="fromDate"/>
+            <Label styleClass="body-text" text="Until"/>
+            <DatePicker fx:id="untilDate"/>
+            <Button onAction="#refresh" styleClass="button-secondary" text="Apply"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="totalLabel" styleClass="section-title"/>
+        </HBox>
+    </VBox>
+
     <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
         <TableView fx:id="table" prefHeight="420" VBox.vgrow="ALWAYS">
             <columns>
-                <TableColumn fx:id="loanNumberColumn" prefWidth="120" text="Loan #"/>
-                <TableColumn fx:id="customerColumn" prefWidth="160" text="Customer"/>
-                <TableColumn fx:id="phoneColumn" prefWidth="120" text="Phone"/>
+                <TableColumn fx:id="dateColumn" prefWidth="140" text="Date"/>
+                <TableColumn fx:id="referenceColumn" prefWidth="160" text="Reference"/>
                 <TableColumn fx:id="agentColumn" prefWidth="140" text="Agent"/>
-                <TableColumn fx:id="daysOverdueColumn" prefWidth="110" text="Days Overdue"/>
-                <TableColumn fx:id="remainingColumn" prefWidth="120" text="Amount Due"/>
+                <TableColumn fx:id="descriptionColumn" prefWidth="200" text="Description"/>
+                <TableColumn fx:id="methodColumn" prefWidth="90" text="Method"/>
+                <TableColumn fx:id="statusColumn" prefWidth="90" text="Status"/>
+                <TableColumn fx:id="amountColumn" prefWidth="110" text="Amount"/>
             </columns>
         </TableView>
         <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>

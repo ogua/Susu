@@ -10,26 +10,32 @@
 <?import javafx.scene.layout.VBox?>
 
 <VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.DefaultersController">
+      fx:controller="com.ogua.susudesktop.GroupsReportController">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <HBox alignment="CENTER_LEFT" spacing="10">
-        <Label styleClass="page-title" text="Defaulters"/>
+        <Label styleClass="page-title" text="Susu Groups Report"/>
         <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
         <Region HBox.hgrow="ALWAYS"/>
         <Button onAction="#exportPdf" styleClass="button-secondary" text="Export PDF"/>
         <Button onAction="#exportCsv" styleClass="button-secondary" text="Export CSV"/>
     </HBox>
 
+    <VBox spacing="10" styleClass="card">
+        <Label fx:id="totalLabel" styleClass="section-title"/>
+    </VBox>
+
     <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
         <TableView fx:id="table" prefHeight="420" VBox.vgrow="ALWAYS">
             <columns>
-                <TableColumn fx:id="loanNumberColumn" prefWidth="120" text="Loan #"/>
-                <TableColumn fx:id="customerColumn" prefWidth="160" text="Customer"/>
-                <TableColumn fx:id="phoneColumn" prefWidth="120" text="Phone"/>
-                <TableColumn fx:id="agentColumn" prefWidth="140" text="Agent"/>
-                <TableColumn fx:id="daysOverdueColumn" prefWidth="110" text="Days Overdue"/>
-                <TableColumn fx:id="remainingColumn" prefWidth="120" text="Amount Due"/>
+                <TableColumn fx:id="nameColumn" prefWidth="160" text="Group"/>
+                <TableColumn fx:id="codeColumn" prefWidth="90" text="Code"/>
+                <TableColumn fx:id="statusColumn" prefWidth="90" text="Status"/>
+                <TableColumn fx:id="membersColumn" prefWidth="80" text="Members"/>
+                <TableColumn fx:id="roundColumn" prefWidth="70" text="Round"/>
+                <TableColumn fx:id="roundProgressColumn" prefWidth="180" text="Round Collected / Expected"/>
+                <TableColumn fx:id="paidOutColumn" prefWidth="100" text="Paid Out"/>
+                <TableColumn fx:id="lifetimeColumn" prefWidth="130" text="Lifetime Collected"/>
             </columns>
         </TableView>
         <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>

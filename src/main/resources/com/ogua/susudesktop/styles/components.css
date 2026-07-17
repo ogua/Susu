@@ -155,3 +155,18 @@
 }
 .table-row-cell:odd  { -fx-background-color: -ogua-surface; }
 .table-row-cell:even { -fx-background-color: -ogua-bg; }
+.table-row-cell:filled:hover {
+    -fx-background-color: -ogua-neutral-bg;
+}
+/* Author stylesheets win over Modena's user-agent rules regardless of specificity, so the
+   :odd/:even rules above fully replace Modena's default :selected row background — but not
+   its white selected-text rule. Without setting our own background + text-fill here, a
+   selected row rendered white-on-white text was invisible. */
+.table-row-cell:filled:selected,
+.table-row-cell:filled:selected:hover,
+.table-row-cell:filled:selected:focused {
+    -fx-background-color: -ogua-selection-bg;
+}
+.table-row-cell:filled:selected .table-cell {
+    -fx-text-fill: -ogua-text-primary;
+}

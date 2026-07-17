@@ -1,5 +1,6 @@
 package com.ogua.susudesktop;
 
+import java.util.ArrayList;
 import java.util.List;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -24,6 +25,7 @@ public class DefaultersController {
     @FXML private Label statusLabel;
 
     private final ReportService reportService = new ReportService();
+    private List<DefaulterRow> current = List.of();
 
     @FXML
     private void initialize() {
@@ -49,12 +51,38 @@ public class DefaultersController {
             }
         };
         task.setOnSucceeded(event -> {
-            table.setItems(FXCollections.observableArrayList(task.getValue()));
-            statusLabel.setText(task.getValue().isEmpty()
+            current = task.getValue();
+            table.setItems(FXCollections.observableArrayList(current));
+            statusLabel.setText(current.isEmpty()
                     ? "No defaulters — every installment is current." : "");
         });
         task.setOnFailed(event -> statusLabel.setText(
                 "Could not load defaulters: " + task.getException().getMessage()));
         new Thread(task, "defaulters-refresh").start();
+    }
+
+    @FXML
+    private void exportPdf() {
+        ReportExporter.exportPdf(table.getScene().getWindow(), "defaulters",
+                "Defaulters Report", List.of(), headers(), rows(), statusLabel);
+    }
+
+    @FXML
+    private void exportCsv() {
+        ReportExporter.exportCsv(table.getScene().getWindow(), "defaulters",
+                headers(), rows(), statusLabel);
+    }
+
+    private List<String> headers() {
+        return List.of("Loan #", "Customer", "Phone", "Agent", "Days Overdue", "Amount Due");
+    }
+
+    private List<List<String>> rows() {
+        List<List<String>> rows = new ArrayList<>();
+        for (DefaulterRow row : current) {
+            rows.add(List.of(row.getLoanNumber(), row.getCustomerName(), row.getCustomerPhone(),
+                    row.getAgentName(), String.valueOf(row.getDaysOverdue()), Money.format(row.getRemaining())));
+        }
+        return rows;
     }
 }

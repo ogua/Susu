@@ -47,6 +47,12 @@ public class MainController {
     @FXML private Button navTrialBalance;
     @FXML private Button navDefaulters;
     @FXML private Button navCashPosition;
+    @FXML private Button navCollections;
+    @FXML private Button navLoanPortfolio;
+    @FXML private Button navAgentPerformance;
+    @FXML private Button navWithdrawalsReport;
+    @FXML private Button navGroupsReport;
+    @FXML private Button navCustomerBalances;
     @FXML private Button navEngineSwitch;
     @FXML private Button navGoOnline;
 
@@ -274,6 +280,36 @@ public class MainController {
     }
 
     @FXML
+    private void showCollectionsReport() {
+        load("collections-report-view.fxml", navCollections);
+    }
+
+    @FXML
+    private void showLoanPortfolio() {
+        load("loan-portfolio-view.fxml", navLoanPortfolio);
+    }
+
+    @FXML
+    private void showAgentPerformance() {
+        load("agent-performance-view.fxml", navAgentPerformance);
+    }
+
+    @FXML
+    private void showWithdrawalsReport() {
+        load("withdrawals-report-view.fxml", navWithdrawalsReport);
+    }
+
+    @FXML
+    private void showGroupsReport() {
+        load("groups-report-view.fxml", navGroupsReport);
+    }
+
+    @FXML
+    private void showCustomerBalances() {
+        load("customer-balances-view.fxml", navCustomerBalances);
+    }
+
+    @FXML
     private void showEngineSwitch() {
         load("engine-switch-view.fxml", navEngineSwitch);
     }
@@ -303,7 +339,9 @@ public class MainController {
         }
 
         for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navLoans, navGroups, navDayClose, navPayments,
-                navTrialBalance, navDefaulters, navCashPosition, navEngineSwitch, navGoOnline)) {
+                navTrialBalance, navDefaulters, navCashPosition, navCollections, navLoanPortfolio,
+                navAgentPerformance, navWithdrawalsReport, navGroupsReport, navCustomerBalances,
+                navEngineSwitch, navGoOnline)) {
             nav.getStyleClass().remove("nav-button-active");
         }
         activeNav.getStyleClass().add("nav-button-active");

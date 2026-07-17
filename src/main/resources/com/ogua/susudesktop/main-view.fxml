@@ -5,6 +5,7 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.image.Image?>
 <?import javafx.scene.image.ImageView?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -29,23 +30,37 @@
         </HBox>
     </top>
     <left>
-        <VBox spacing="4" style="-fx-background-color: -ogua-surface; -fx-min-width: 190; -fx-border-color: transparent -ogua-border transparent transparent; -fx-border-width: 0 1 0 0;">
-            <padding><Insets bottom="16" left="10" right="10" top="16"/></padding>
-            <Button fx:id="navDashboard" maxWidth="Infinity" onAction="#showDashboard" styleClass="nav-button" text="Dashboard"/>
-            <Button fx:id="navCustomers" maxWidth="Infinity" onAction="#showCustomers" styleClass="nav-button" text="Customers"/>
-            <Button fx:id="navAccounts" maxWidth="Infinity" onAction="#showAccounts" styleClass="nav-button" text="Savings Accounts"/>
-            <Button fx:id="navLoans" maxWidth="Infinity" onAction="#showLoans" styleClass="nav-button" text="Loans"/>
-            <Button fx:id="navGroups" maxWidth="Infinity" onAction="#showGroups" styleClass="nav-button" text="Susu Groups"/>
-            <Button fx:id="navDayClose" maxWidth="Infinity" onAction="#showDayClose" styleClass="nav-button" text="Day Summary"/>
-            <Button fx:id="navPayments" maxWidth="Infinity" onAction="#showPayments" styleClass="nav-button" text="Mobile Money Payments"/>
-            <Button fx:id="navTrialBalance" maxWidth="Infinity" onAction="#showTrialBalance" styleClass="nav-button" text="Trial Balance"/>
-            <Button fx:id="navDefaulters" maxWidth="Infinity" onAction="#showDefaulters" styleClass="nav-button" text="Defaulters"/>
-            <Button fx:id="navCashPosition" maxWidth="Infinity" onAction="#showCashPosition" styleClass="nav-button" text="Cash Position"/>
-            <Button fx:id="navEngineSwitch" maxWidth="Infinity" onAction="#showEngineSwitch" styleClass="nav-button" text="Switch Storage Engine"/>
-            <Button fx:id="navGoOnline" maxWidth="Infinity" onAction="#showGoOnline" styleClass="nav-button" text="Go Online"/>
-            <Region VBox.vgrow="ALWAYS"/>
-            <Label fx:id="storageLabel" styleClass="caption" wrapText="true"/>
-        </VBox>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" style="-fx-background-color: -ogua-surface; -fx-background: -ogua-surface; -fx-min-width: 200; -fx-border-color: transparent -ogua-border transparent transparent; -fx-border-width: 0 1 0 0;">
+            <VBox spacing="4" style="-fx-background-color: -ogua-surface;">
+                <padding><Insets bottom="16" left="10" right="10" top="16"/></padding>
+                <Button fx:id="navDashboard" maxWidth="Infinity" onAction="#showDashboard" styleClass="nav-button" text="Dashboard"/>
+                <Button fx:id="navCustomers" maxWidth="Infinity" onAction="#showCustomers" styleClass="nav-button" text="Customers"/>
+                <Button fx:id="navAccounts" maxWidth="Infinity" onAction="#showAccounts" styleClass="nav-button" text="Savings Accounts"/>
+                <Button fx:id="navLoans" maxWidth="Infinity" onAction="#showLoans" styleClass="nav-button" text="Loans"/>
+                <Button fx:id="navGroups" maxWidth="Infinity" onAction="#showGroups" styleClass="nav-button" text="Susu Groups"/>
+                <Button fx:id="navDayClose" maxWidth="Infinity" onAction="#showDayClose" styleClass="nav-button" text="Day Summary"/>
+                <Button fx:id="navPayments" maxWidth="Infinity" onAction="#showPayments" styleClass="nav-button" text="Mobile Money Payments"/>
+                <Label styleClass="caption" text="REPORTS">
+                    <padding><Insets left="8" top="10"/></padding>
+                </Label>
+                <Button fx:id="navTrialBalance" maxWidth="Infinity" onAction="#showTrialBalance" styleClass="nav-button" text="Trial Balance"/>
+                <Button fx:id="navDefaulters" maxWidth="Infinity" onAction="#showDefaulters" styleClass="nav-button" text="Defaulters"/>
+                <Button fx:id="navCashPosition" maxWidth="Infinity" onAction="#showCashPosition" styleClass="nav-button" text="Cash Position"/>
+                <Button fx:id="navCollections" maxWidth="Infinity" onAction="#showCollectionsReport" styleClass="nav-button" text="Collections"/>
+                <Button fx:id="navLoanPortfolio" maxWidth="Infinity" onAction="#showLoanPortfolio" styleClass="nav-button" text="Loan Portfolio"/>
+                <Button fx:id="navAgentPerformance" maxWidth="Infinity" onAction="#showAgentPerformance" styleClass="nav-button" text="Agent Performance"/>
+                <Button fx:id="navWithdrawalsReport" maxWidth="Infinity" onAction="#showWithdrawalsReport" styleClass="nav-button" text="Withdrawals"/>
+                <Button fx:id="navGroupsReport" maxWidth="Infinity" onAction="#showGroupsReport" styleClass="nav-button" text="Groups Report"/>
+                <Button fx:id="navCustomerBalances" maxWidth="Infinity" onAction="#showCustomerBalances" styleClass="nav-button" text="Customer Balances"/>
+                <Label styleClass="caption" text="ADMIN">
+                    <padding><Insets left="8" top="10"/></padding>
+                </Label>
+                <Button fx:id="navEngineSwitch" maxWidth="Infinity" onAction="#showEngineSwitch" styleClass="nav-button" text="Switch Storage Engine"/>
+                <Button fx:id="navGoOnline" maxWidth="Infinity" onAction="#showGoOnline" styleClass="nav-button" text="Go Online"/>
+                <Region VBox.vgrow="ALWAYS"/>
+                <Label fx:id="storageLabel" styleClass="caption" wrapText="true"/>
+            </VBox>
+        </ScrollPane>
     </left>
     <center>
         <StackPane fx:id="contentArea" style="-fx-background-color: -ogua-bg;"/>

@@ -1,16 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.CategoryAxis?>
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.chart.PieChart?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox spacing="16" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.DashboardController">
+<ScrollPane fitToWidth="true" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.DashboardController">
+<VBox spacing="16">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <Label styleClass="page-title" text="Dashboard"/>
 
+    <Label styleClass="section-title" text="Portfolio"/>
     <FlowPane hgap="16" vgap="16">
         <VBox prefWidth="220" spacing="6" styleClass="card">
             <Label styleClass="text-muted" text="Customers"/>
@@ -21,12 +29,56 @@
             <Label fx:id="accountsTile" styleClass="page-title"/>
         </VBox>
         <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Closed Accounts"/>
+            <Label fx:id="closedAccountsTile" styleClass="page-title"/>
+        </VBox>
+        <VBox prefWidth="220" spacing="6" styleClass="card">
             <Label styleClass="text-muted" text="Portfolio Balance"/>
             <Label fx:id="portfolioTile" styleClass="section-title"/>
         </VBox>
         <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Avg. Balance / Account"/>
+            <Label fx:id="avgBalanceTile" styleClass="section-title"/>
+        </VBox>
+    </FlowPane>
+
+    <Label styleClass="section-title" text="Activity"/>
+    <FlowPane hgap="16" vgap="16">
+        <VBox prefWidth="220" spacing="6" styleClass="card">
             <Label styleClass="text-muted" text="Your Collections Today"/>
             <Label fx:id="collectionsTile" styleClass="section-title"/>
         </VBox>
+        <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Your Day Sheet"/>
+            <Label fx:id="daySheetTile" styleClass="section-title"/>
+        </VBox>
+        <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Pending Withdrawals"/>
+            <Label fx:id="pendingWithdrawalsTile" styleClass="section-title"/>
+        </VBox>
+        <VBox prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Commission Earned (All-Time)"/>
+            <Label fx:id="commissionTile" styleClass="section-title"/>
+        </VBox>
+        <VBox fx:id="pendingSyncCard" prefWidth="220" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Pending Sync"/>
+            <Label fx:id="pendingSyncTile" styleClass="section-title"/>
+        </VBox>
     </FlowPane>
+
+    <Label styleClass="section-title" text="Trends"/>
+    <HBox spacing="16">
+        <VBox spacing="6" styleClass="card" HBox.hgrow="ALWAYS">
+            <Label styleClass="text-muted" text="Collections — Last 30 Days (GHS)"/>
+            <LineChart fx:id="collectionsChart" animated="false" createSymbols="false" legendVisible="false" prefHeight="260">
+                <xAxis><CategoryAxis fx:id="collectionsChartX" tickLabelRotation="60"/></xAxis>
+                <yAxis><NumberAxis fx:id="collectionsChartY"/></yAxis>
+            </LineChart>
+        </VBox>
+        <VBox prefWidth="340" spacing="6" styleClass="card">
+            <Label styleClass="text-muted" text="Loan Portfolio by Status"/>
+            <PieChart fx:id="loanStatusChart" animated="false" labelsVisible="true" prefHeight="260"/>
+        </VBox>
+    </HBox>
 </VBox>
+</ScrollPane>

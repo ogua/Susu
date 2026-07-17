@@ -1,5 +1,6 @@
 package com.ogua.susudesktop;
 
+import java.util.ArrayList;
 import java.util.List;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -26,6 +27,7 @@ public class TrialBalanceController {
     @FXML private Label statusLabel;
 
     private final ReportService reportService = new ReportService();
+    private List<LedgerAccount> current = List.of();
 
     @FXML
     private void initialize() {
@@ -51,6 +53,7 @@ public class TrialBalanceController {
         };
         task.setOnSucceeded(event -> {
             List<LedgerAccount> accounts = task.getValue();
+            current = accounts;
             table.setItems(FXCollections.observableArrayList(accounts));
 
             long totalDebits = accounts.stream()
@@ -69,5 +72,32 @@ public class TrialBalanceController {
         task.setOnFailed(event -> statusLabel.setText(
                 "Could not load trial balance: " + task.getException().getMessage()));
         new Thread(task, "trial-balance-refresh").start();
+    }
+
+    @FXML
+    private void exportPdf() {
+        ReportExporter.exportPdf(table.getScene().getWindow(), "trial-balance",
+                "Trial Balance", List.of(), headers(), rows(), statusLabel);
+    }
+
+    @FXML
+    private void exportCsv() {
+        ReportExporter.exportCsv(table.getScene().getWindow(), "trial-balance",
+                headers(), rows(), statusLabel);
+    }
+
+    private List<String> headers() {
+        return List.of("Code", "Name", "Type", "Debit", "Credit");
+    }
+
+    private List<List<String>> rows() {
+        List<List<String>> rows = new ArrayList<>();
+        for (LedgerAccount account : current) {
+            boolean debitNormal = account.getType().isNormalBalanceDebit();
+            rows.add(List.of(account.getCode(), account.getName(), account.getType().value(),
+                    debitNormal ? Money.format(account.getBalance()) : "",
+                    !debitNormal ? Money.format(account.getBalance()) : ""));
+        }
+        return rows;
     }
 }
