@@ -53,7 +53,27 @@ public class CustomersController {
         idTypeCombo.setItems(FXCollections.observableArrayList("ghana_card", "voters_id", "passport", "drivers_license"));
         idTypeCombo.getSelectionModel().select("ghana_card");
 
+        table.setRowFactory(tableView -> {
+            javafx.scene.control.TableRow<Customer> row = new javafx.scene.control.TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !row.isEmpty()) {
+                    CustomerDetailController.show(table.getScene().getWindow(), row.getItem());
+                }
+            });
+            return row;
+        });
+
         refresh(null);
+    }
+
+    @FXML
+    private void onViewDetail() {
+        Customer selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            statusLabel.setText("Select a customer first (or double-click a row).");
+            return;
+        }
+        CustomerDetailController.show(table.getScene().getWindow(), selected);
     }
 
     @FXML

@@ -23,6 +23,7 @@
         <HBox spacing="8">
             <TextField fx:id="searchField" onAction="#onSearch" promptText="Search by name, phone, or code" HBox.hgrow="ALWAYS"/>
             <Button onAction="#onSearch" styleClass="button-secondary" text="Search"/>
+            <Button onAction="#onViewDetail" styleClass="button-secondary" text="View Detail"/>
         </HBox>
 
         <TableView fx:id="table" VBox.vgrow="ALWAYS">

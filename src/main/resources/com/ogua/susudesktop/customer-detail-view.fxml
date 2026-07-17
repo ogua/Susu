@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.ogua.susudesktop.CustomerDetailController">
+    <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+    <VBox spacing="6" styleClass="card">
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label fx:id="nameLabel" styleClass="page-title"/>
+            <Label fx:id="codeLabel" styleClass="text-muted"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="statusValueLabel" styleClass="section-title"/>
+        </HBox>
+        <HBox spacing="24">
+            <VBox spacing="2">
+                <Label styleClass="text-muted" text="Phone"/>
+                <Label fx:id="phoneLabel" styleClass="body-text"/>
+            </VBox>
+            <VBox spacing="2">
+                <Label styleClass="text-muted" text="Next of kin"/>
+                <Label fx:id="kinLabel" styleClass="body-text"/>
+            </VBox>
+            <VBox spacing="2">
+                <Label styleClass="text-muted" text="Address"/>
+                <Label fx:id="addressLabel" styleClass="body-text" wrapText="true"/>
+            </VBox>
+        </HBox>
+    </VBox>
+
+    <SplitPane dividerPositions="0.38" orientation="VERTICAL" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;">
+        <VBox spacing="8" styleClass="card">
+            <Label styleClass="section-title" text="Savings Accounts"/>
+            <TableView fx:id="accountsTable" VBox.vgrow="ALWAYS">
+                <columns>
+                    <TableColumn fx:id="accountNumberColumn" prefWidth="180" text="Account #"/>
+                    <TableColumn fx:id="accountStatusColumn" prefWidth="100" text="Status"/>
+                    <TableColumn fx:id="accountOpenedColumn" prefWidth="110" text="Opened"/>
+                    <TableColumn fx:id="accountBalanceColumn" prefWidth="130" text="Balance"/>
+                </columns>
+            </TableView>
+        </VBox>
+
+        <VBox spacing="8" styleClass="card">
+            <Label fx:id="transactionsTitleLabel" styleClass="section-title" text="Transactions"/>
+            <TableView fx:id="transactionsTable" VBox.vgrow="ALWAYS">
+                <columns>
+                    <TableColumn fx:id="txnDateColumn" prefWidth="150" text="Date"/>
+                    <TableColumn fx:id="txnTypeColumn" prefWidth="110" text="Type"/>
+                    <TableColumn fx:id="txnDescriptionColumn" prefWidth="220" text="Description"/>
+                    <TableColumn fx:id="txnDebitColumn" prefWidth="100" text="Debit"/>
+                    <TableColumn fx:id="txnCreditColumn" prefWidth="100" text="Credit"/>
+                    <TableColumn fx:id="txnBalanceColumn" prefWidth="110" text="Balance"/>
+                </columns>
+            </TableView>
+            <Label fx:id="statusLabel" styleClass="text-muted" wrapText="true"/>
+        </VBox>
+    </SplitPane>
+</VBox>

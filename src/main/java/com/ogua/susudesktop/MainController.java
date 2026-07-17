@@ -53,6 +53,8 @@ public class MainController {
     @FXML private Button navWithdrawalsReport;
     @FXML private Button navGroupsReport;
     @FXML private Button navCustomerBalances;
+    @FXML private Button navChartOfAccounts;
+    @FXML private Button navProducts;
     @FXML private Button navEngineSwitch;
     @FXML private Button navGoOnline;
 
@@ -86,6 +88,12 @@ public class MainController {
         // hidden from field agents/branch managers. Go Online only makes
         // sense once, before hybrid mode is already on.
         boolean isCompanyAdmin = user != null && "company_admin".equals(user.getRole());
+        // Product management mirrors the web admin's product resources —
+        // back-office only, not a field-agent concern.
+        boolean isBackOffice = isCompanyAdmin
+                || (user != null && "branch_manager".equals(user.getRole()));
+        navProducts.setVisible(isBackOffice);
+        navProducts.setManaged(isBackOffice);
         navEngineSwitch.setVisible(isCompanyAdmin);
         navEngineSwitch.setManaged(isCompanyAdmin);
         boolean showGoOnline = isCompanyAdmin && !AppConfig.isSyncEnabled();
@@ -310,6 +318,16 @@ public class MainController {
     }
 
     @FXML
+    private void showChartOfAccounts() {
+        load("chart-of-accounts-view.fxml", navChartOfAccounts);
+    }
+
+    @FXML
+    private void showProducts() {
+        load("products-view.fxml", navProducts);
+    }
+
+    @FXML
     private void showEngineSwitch() {
         load("engine-switch-view.fxml", navEngineSwitch);
     }
@@ -341,7 +359,7 @@ public class MainController {
         for (Button nav : List.of(navDashboard, navCustomers, navAccounts, navLoans, navGroups, navDayClose, navPayments,
                 navTrialBalance, navDefaulters, navCashPosition, navCollections, navLoanPortfolio,
                 navAgentPerformance, navWithdrawalsReport, navGroupsReport, navCustomerBalances,
-                navEngineSwitch, navGoOnline)) {
+                navChartOfAccounts, navProducts, navEngineSwitch, navGoOnline)) {
             nav.getStyleClass().remove("nav-button-active");
         }
         activeNav.getStyleClass().add("nav-button-active");

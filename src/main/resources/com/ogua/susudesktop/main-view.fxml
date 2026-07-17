@@ -52,9 +52,11 @@
                 <Button fx:id="navWithdrawalsReport" maxWidth="Infinity" onAction="#showWithdrawalsReport" styleClass="nav-button" text="Withdrawals"/>
                 <Button fx:id="navGroupsReport" maxWidth="Infinity" onAction="#showGroupsReport" styleClass="nav-button" text="Groups Report"/>
                 <Button fx:id="navCustomerBalances" maxWidth="Infinity" onAction="#showCustomerBalances" styleClass="nav-button" text="Customer Balances"/>
+                <Button fx:id="navChartOfAccounts" maxWidth="Infinity" onAction="#showChartOfAccounts" styleClass="nav-button" text="Chart of Accounts"/>
                 <Label styleClass="caption" text="ADMIN">
                     <padding><Insets left="8" top="10"/></padding>
                 </Label>
+                <Button fx:id="navProducts" maxWidth="Infinity" onAction="#showProducts" styleClass="nav-button" text="Products"/>
                 <Button fx:id="navEngineSwitch" maxWidth="Infinity" onAction="#showEngineSwitch" styleClass="nav-button" text="Switch Storage Engine"/>
                 <Button fx:id="navGoOnline" maxWidth="Infinity" onAction="#showGoOnline" styleClass="nav-button" text="Go Online"/>
                 <Region VBox.vgrow="ALWAYS"/>
