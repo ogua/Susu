@@ -1,5 +1,6 @@
 import { Redirect, Stack } from 'expo-router';
 
+import { Palette } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 
 /** Staff experience (field agents; managers/admins reviewing on the go). */
@@ -16,8 +17,14 @@ export default function AgentLayout() {
   }
 
   return (
-    <Stack>
-      <Stack.Screen name="index" options={{ title: 'Agent Dashboard' }} />
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: Palette.primary500 },
+        headerTintColor: '#ffffff',
+        headerTitleStyle: { fontWeight: '600' },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: 'OguaFinance' }} />
       <Stack.Screen name="accounts" options={{ title: 'My Accounts' }} />
       <Stack.Screen name="collect/[accountId]" options={{ title: 'Record Collection' }} />
       <Stack.Screen name="register-customer" options={{ title: 'Register Customer' }} />

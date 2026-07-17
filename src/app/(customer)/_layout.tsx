@@ -1,5 +1,6 @@
 import { Redirect, Stack } from 'expo-router';
 
+import { Palette } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 
 /** Customer experience (online-first: balances, history, requests). */
@@ -16,8 +17,14 @@ export default function CustomerLayout() {
   }
 
   return (
-    <Stack>
-      <Stack.Screen name="index" options={{ title: 'My Susu' }} />
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: Palette.primary500 },
+        headerTintColor: '#ffffff',
+        headerTitleStyle: { fontWeight: '600' },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: 'OguaFinance' }} />
       <Stack.Screen name="account/[accountId]" options={{ title: 'Account' }} />
       <Stack.Screen name="withdraw" options={{ title: 'Request Withdrawal' }} />
       <Stack.Screen name="deposit" options={{ title: 'Deposit' }} />

@@ -1,12 +1,10 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,9 +12,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { login } from "@/api/auth";
 import { apiErrorMessage } from "@/api/client";
 import { ThemedText } from "@/components/themed-text";
+import { Button, Card, Input } from "@/components/ui";
+import { Palette, Radii } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 import { useAuthStore } from "@/stores/authStore";
 
 export default function LoginScreen() {
+  const theme = useTheme();
   const baseUrl = useAuthStore((state) => state.baseUrl);
   const setBaseUrl = useAuthStore((state) => state.setBaseUrl);
   const setSession = useAuthStore((state) => state.setSession);
@@ -48,38 +50,46 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
         <View style={styles.header}>
+          <View style={styles.logoMark}>
+            <ThemedText type="title" style={styles.logoText}>
+              O
+            </ThemedText>
+          </View>
           <ThemedText type="title">OguaFinance</ThemedText>
-          <ThemedText type="small">Sign in to continue</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Susu savings, loans &amp; groups
+          </ThemedText>
         </View>
 
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email or phone"
+        <Card style={styles.form}>
+          <Input
+            label="Email or phone"
+            placeholder="you@example.com"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
             value={loginId}
             onChangeText={setLoginId}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
+          <Input
+            label="Password"
+            placeholder="••••••••"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            error={error}
           />
 
           {showServer ? (
-            <TextInput
-              style={styles.input}
-              placeholder="Server address (e.g. https://susu.example.com)"
+            <Input
+              label="Server address"
+              placeholder="https://susu.example.com"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
@@ -88,26 +98,19 @@ export default function LoginScreen() {
             />
           ) : null}
 
-          {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-
-          <Pressable
-            style={[styles.button, busy && styles.buttonDisabled]}
-            disabled={busy || !loginId || !password}
+          <Button
+            title="Sign in"
+            loading={busy}
+            disabled={!loginId || !password}
             onPress={handleLogin}
-          >
-            {busy ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.buttonText}>Sign in</ThemedText>
-            )}
-          </Pressable>
+          />
 
           <Pressable onPress={() => setShowServer((visible) => !visible)}>
-            <ThemedText type="small" style={styles.serverToggle}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.serverToggle}>
               {showServer ? "Hide server settings" : "Change server"}
             </ThemedText>
           </Pressable>
-        </View>
+        </Card>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -116,31 +119,21 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
-  header: { alignItems: "center", marginBottom: 32, gap: 4 },
-  form: { gap: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#c7c7cc",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: "#ffffff",
-    color: "#111111",
-  },
-  button: {
-    backgroundColor: "#208AEF",
-    borderRadius: 10,
-    paddingVertical: 14,
+  header: { alignItems: "center", marginBottom: 24, gap: 4 },
+  logoMark: {
+    width: 64,
+    height: 64,
+    borderRadius: Radii.lg,
+    backgroundColor: Palette.primary500,
     alignItems: "center",
-    marginTop: 4,
+    justifyContent: "center",
+    marginBottom: 8,
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#ffffff", fontWeight: "600" },
-  error: { color: "#d11a2a" },
+  logoText: { color: "#ffffff" },
+  form: { gap: 14 },
   serverToggle: {
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 4,
     textDecorationLine: "underline",
   },
 });

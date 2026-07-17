@@ -30,15 +30,17 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
   );
 }
 
+// Sizes come from the token scale in constants/theme.ts (Type) — the old
+// 48/32px title/subtitle read like splash text inside ordinary screens.
 const styles = StyleSheet.create({
   small: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: 500,
   },
   smallBold: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: 700,
   },
   default: {
@@ -47,23 +49,23 @@ const styles = StyleSheet.create({
     fontWeight: 500,
   },
   title: {
-    fontSize: 48,
-    fontWeight: 600,
-    lineHeight: 52,
+    fontSize: 28,
+    fontWeight: 700,
+    lineHeight: 34,
   },
   subtitle: {
-    fontSize: 32,
-    lineHeight: 44,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: 600,
   },
   link: {
-    lineHeight: 30,
+    lineHeight: 24,
     fontSize: 14,
   },
   linkPrimary: {
-    lineHeight: 30,
+    lineHeight: 24,
     fontSize: 14,
-    color: '#3c87f7',
+    color: '#208AEF',
   },
   code: {
     fontFamily: Fonts.mono,
