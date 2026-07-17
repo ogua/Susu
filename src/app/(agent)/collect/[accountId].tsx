@@ -1,16 +1,13 @@
 import { useLocalSearchParams, router } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { apiErrorMessage } from '@/api/client';
 import { chargeMobileMoney } from '@/api/payments';
 import { ThemedText } from '@/components/themed-text';
+import { Button, Card, Input, Screen } from '@/components/ui';
+import { Palette, Radii } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { drainOutbox } from '@/sync/engine';
 import { enqueueCollection } from '@/sync/ops';
 import type { MobileMoneyProvider } from '@/types/api';
@@ -28,6 +25,7 @@ const PROVIDERS: { value: MobileMoneyProvider; label: string }[] = [
  * verify screen once the charge is initiated.
  */
 export default function CollectScreen() {
+  const theme = useTheme();
   const params = useLocalSearchParams<{
     accountId: string;
     accountNumber?: string;
@@ -104,138 +102,106 @@ export default function CollectScreen() {
     }
   }
 
+  function segment(options: { value: string; label: string }[], selected: string, onSelect: (value: string) => void) {
+    return (
+      <View style={styles.segmentRow}>
+        {options.map((option) => {
+          const active = selected === option.value;
+
+          return (
+            <Pressable
+              key={option.value}
+              style={[
+                styles.segment,
+                { borderColor: active ? Palette.primary500 : theme.border },
+                active && styles.segmentActive,
+              ]}
+              onPress={() => onSelect(option.value)}
+            >
+              <ThemedText type="smallBold" style={active ? styles.segmentTextActive : undefined}>
+                {option.label}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
+    <Screen>
+      <Card>
         <ThemedText type="subtitle">{params.customerName || 'Customer'}</ThemedText>
-        <ThemedText type="small">{params.accountNumber}</ThemedText>
-        {params.balanceFormatted ? (
-          <ThemedText type="small">Current balance: {params.balanceFormatted}</ThemedText>
-        ) : null}
-      </View>
+        <ThemedText type="small" themeColor="textSecondary">
+          {params.accountNumber}
+          {params.balanceFormatted ? ` · Balance ${params.balanceFormatted}` : ''}
+        </ThemedText>
+      </Card>
 
-      <View style={styles.methodRow}>
-        <Pressable
-          style={[styles.methodButton, method === 'cash' && styles.methodButtonActive]}
-          onPress={() => setMethod('cash')}
-        >
-          <ThemedText style={method === 'cash' ? styles.methodTextActive : undefined}>Cash</ThemedText>
-        </Pressable>
-        <Pressable
-          style={[styles.methodButton, method === 'mobile_money' && styles.methodButtonActive]}
-          onPress={() => setMethod('mobile_money')}
-        >
-          <ThemedText style={method === 'mobile_money' ? styles.methodTextActive : undefined}>Mobile Money</ThemedText>
-        </Pressable>
-      </View>
-
-      <ThemedText type="small">Amount (GHS)</ThemedText>
-      <TextInput
-        style={styles.input}
-        keyboardType="decimal-pad"
-        value={amount}
-        onChangeText={setAmount}
-        placeholder="0.00"
-        autoFocus
-      />
-
-      {method === 'mobile_money' ? (
-        <>
-          <ThemedText type="small">Mobile money number</ThemedText>
-          <TextInput
-            style={styles.phoneInput}
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="024xxxxxxx"
-          />
-
-          <View style={styles.methodRow}>
-            {PROVIDERS.map((option) => (
-              <Pressable
-                key={option.value}
-                style={[styles.methodButton, provider === option.value && styles.methodButtonActive]}
-                onPress={() => setProvider(option.value)}
-              >
-                <ThemedText style={provider === option.value ? styles.methodTextActive : undefined}>
-                  {option.label}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-      {savedMessage ? <ThemedText style={styles.success}>{savedMessage}</ThemedText> : null}
-
-      <Pressable style={[styles.button, submitting && styles.buttonDisabled]} onPress={handleSubmit} disabled={submitting}>
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <ThemedText style={styles.buttonText}>
-            {method === 'cash' ? 'Save Collection' : 'Charge Mobile Money'}
-          </ThemedText>
+      <Card style={styles.form}>
+        {segment(
+          [
+            { value: 'cash', label: 'Cash' },
+            { value: 'mobile_money', label: 'Mobile Money' },
+          ],
+          method,
+          (value) => setMethod(value as 'cash' | 'mobile_money'),
         )}
-      </Pressable>
 
-      <ThemedText type="small" style={styles.hint}>
-        {method === 'cash'
-          ? 'Works offline — this is saved on your device immediately and synced when you have a connection.'
-          : 'Requires an internet connection — the customer will get a PIN prompt on their phone.'}
-      </ThemedText>
-    </View>
+        <Input
+          label="Amount (GHS)"
+          keyboardType="decimal-pad"
+          value={amount}
+          onChangeText={setAmount}
+          placeholder="0.00"
+          autoFocus
+          style={styles.amountInput}
+          error={error}
+        />
+
+        {method === 'mobile_money' ? (
+          <>
+            <Input
+              label="Mobile money number"
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="024xxxxxxx"
+            />
+            {segment(PROVIDERS, provider, (value) => setProvider(value as MobileMoneyProvider))}
+          </>
+        ) : null}
+
+        {savedMessage ? <ThemedText style={{ color: Palette.success }}>{savedMessage}</ThemedText> : null}
+
+        <Button
+          title={method === 'cash' ? 'Save Collection' : 'Charge Mobile Money'}
+          loading={submitting}
+          onPress={handleSubmit}
+        />
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+          {method === 'cash'
+            ? 'Works offline — this is saved on your device immediately and synced when you have a connection.'
+            : 'Requires an internet connection — the customer will get a PIN prompt on their phone.'}
+        </ThemedText>
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e5',
-    padding: 16,
-    gap: 4,
-    backgroundColor: '#ffffff',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#c7c7cc',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 22,
-    fontWeight: '600',
-  },
-  phoneInput: {
-    borderWidth: 1,
-    borderColor: '#c7c7cc',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  methodRow: { flexDirection: 'row', gap: 8 },
-  methodButton: {
+  form: { gap: 12 },
+  amountInput: { fontSize: 22, fontWeight: '600' },
+  segmentRow: { flexDirection: 'row', gap: 8 },
+  segment: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#c7c7cc',
-    borderRadius: 10,
+    borderRadius: Radii.sm,
     paddingVertical: 10,
     alignItems: 'center',
   },
-  methodButtonActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
-  methodTextActive: { color: '#ffffff', fontWeight: '700' },
-  button: {
-    backgroundColor: '#208AEF',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  error: { color: '#d11a2a' },
-  success: { color: '#1a8a3d' },
-  hint: { textAlign: 'center', opacity: 0.6, marginTop: 8 },
+  segmentActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
+  segmentTextActive: { color: '#ffffff' },
+  hint: { textAlign: 'center' },
 });

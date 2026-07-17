@@ -6,6 +6,7 @@ import { apiErrorMessage } from '@/api/client';
 import { submitChargeOtp, verifyPaymentIntent } from '@/api/payments';
 import { ThemedText } from '@/components/themed-text';
 import type { PaymentIntent } from '@/types/api';
+import { Palette } from '@/constants/theme';
 
 const POLL_INTERVAL_MS = 3_000;
 const POLL_WINDOW_MS = 90_000;
@@ -186,7 +187,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e0e0e5',
+    borderColor: Palette.border,
     padding: 24,
     gap: 14,
     backgroundColor: '#ffffff',
@@ -197,7 +198,7 @@ const styles = StyleSheet.create({
   otpInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#c7c7cc',
+    borderColor: Palette.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   button: {
-    backgroundColor: '#208AEF',
+    backgroundColor: Palette.primary500,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 20,
@@ -213,6 +214,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#ffffff', fontWeight: '700' },
-  error: { color: '#d11a2a', textAlign: 'center' },
+  error: { color: Palette.danger, textAlign: 'center' },
   hint: { textAlign: 'center', opacity: 0.6 },
 });

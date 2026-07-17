@@ -2,11 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
 
 import { getAccountTransactions, getCustomerStatementUrl } from '@/api/accounts';
 import { apiErrorMessage } from '@/api/client';
 import { ThemedText } from '@/components/themed-text';
+import { Button, Card, EmptyState, ListRow, ProgressBar, Screen } from '@/components/ui';
+import { Palette } from '@/constants/theme';
 import type { Transaction } from '@/types/api';
 
 const TYPE_LABELS: Record<Transaction['type'], string> = {
@@ -48,115 +50,71 @@ export default function AccountDetailScreen() {
   }
 
   function renderItem({ item }: { item: Transaction }) {
-    const isCredit = item.type === 'withdrawal';
+    const isDebit = item.type === 'withdrawal';
 
     return (
-      <View style={styles.row}>
-        <View style={{ flex: 1 }}>
-          <ThemedText type="smallBold">{TYPE_LABELS[item.type] ?? item.type}</ThemedText>
-          <ThemedText type="small">{new Date(item.recorded_at).toLocaleString()}</ThemedText>
-        </View>
-        <ThemedText style={{ color: isCredit ? '#d11a2a' : '#1a8a3d', fontWeight: '700' }}>
-          {isCredit ? '-' : '+'}
-          {item.amount_formatted}
-        </ThemedText>
-      </View>
+      <ListRow
+        title={TYPE_LABELS[item.type] ?? item.type}
+        subtitle={new Date(item.recorded_at).toLocaleString()}
+        right={
+          <ThemedText style={{ color: isDebit ? Palette.danger : Palette.success, fontWeight: '700' }}>
+            {isDebit ? '-' : '+'}
+            {item.amount_formatted}
+          </ThemedText>
+        }
+      />
     );
   }
 
   return (
-    <View style={styles.container}>
+    <Screen scroll={false}>
       {targetAmountFormatted ? (
-        <View style={styles.targetCard}>
+        <Card>
           <ThemedText type="smallBold">Target: {targetAmountFormatted}</ThemedText>
-          <ThemedText type="small">
+          <ThemedText type="small" themeColor="textSecondary">
             {targetProgressPercent}% saved
             {maturedAt ? ' · Matured — no early-withdrawal penalty' : maturesAt ? ` · Matures ${new Date(maturesAt).toLocaleDateString()}` : ''}
           </ThemedText>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.min(Number(targetProgressPercent) || 0, 100)}%` }]} />
-          </View>
-        </View>
+          <ProgressBar progress={(Number(targetProgressPercent) || 0) / 100} />
+        </Card>
       ) : null}
 
       <View style={styles.actionRow}>
-        <Pressable style={styles.depositButton} onPress={() => router.push({ pathname: '/(customer)/deposit', params: { accountId } })}>
-          <ThemedText style={styles.depositButtonText}>Deposit via Mobile Money</ThemedText>
-        </Pressable>
-        <Pressable style={styles.withdrawButton} onPress={() => router.push({ pathname: '/(customer)/withdraw', params: { accountId } })}>
-          <ThemedText style={styles.withdrawButtonText}>Request Withdrawal</ThemedText>
-        </Pressable>
-        <Pressable
-          style={styles.statementButton}
+        <Button
+          title="Deposit via Mobile Money"
+          onPress={() => router.push({ pathname: '/(customer)/deposit', params: { accountId } })}
+        />
+        <Button
+          title="Request Withdrawal"
+          variant="secondary"
+          onPress={() => router.push({ pathname: '/(customer)/withdraw', params: { accountId } })}
+        />
+        <Button
+          title={downloadingStatement ? 'Opening…' : 'Download Statement'}
+          variant="ghost"
           disabled={downloadingStatement}
           onPress={handleDownloadStatement}
-        >
-          <ThemedText style={styles.statementButtonText}>
-            {downloadingStatement ? 'Opening…' : 'Download Statement'}
-          </ThemedText>
-        </Pressable>
+        />
       </View>
 
       {transactions.isLoading ? (
         <ActivityIndicator style={{ marginTop: 24 }} />
       ) : transactions.isError ? (
-        <ThemedText style={styles.empty}>Could not load transactions.</ThemedText>
+        <EmptyState title="Could not load transactions" hint="Pull down to retry." />
       ) : (
         <FlatList
           data={transactions.data?.data ?? []}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
           onRefresh={() => transactions.refetch()}
           refreshing={transactions.isRefetching}
-          ListEmptyComponent={<ThemedText style={styles.empty}>No transactions yet.</ThemedText>}
+          ListEmptyComponent={<EmptyState title="No transactions yet" />}
         />
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  separator: { height: 1, backgroundColor: '#e5e5ea' },
-  targetCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e5',
-    padding: 16,
-    gap: 6,
-    backgroundColor: '#ffffff',
-  },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#e5e5ea',
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: '#208AEF' },
   actionRow: { gap: 8 },
-  depositButton: {
-    backgroundColor: '#1a8a3d',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  depositButtonText: { color: '#ffffff', fontWeight: '600' },
-  withdrawButton: {
-    backgroundColor: '#208AEF',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  withdrawButtonText: { color: '#ffffff', fontWeight: '600' },
-  statementButton: {
-    borderWidth: 1,
-    borderColor: '#208AEF',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  statementButtonText: { color: '#208AEF', fontWeight: '600' },
-  empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
 });

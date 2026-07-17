@@ -5,14 +5,15 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-
 import { getLoans } from '@/api/loans';
 import { ThemedText } from '@/components/themed-text';
 import type { Loan } from '@/types/api';
+import { Palette } from '@/constants/theme';
 
 const STATUS_COLORS: Record<Loan['status'], string> = {
   applied: '#a16207',
-  approved: '#208AEF',
-  rejected: '#d11a2a',
-  disbursed: '#1a8a3d',
-  closed: '#6b7280',
-  written_off: '#6b7280',
+  approved: Palette.primary500,
+  rejected: Palette.danger,
+  disbursed: Palette.success,
+  closed: Palette.neutral,
+  written_off: Palette.neutral,
 };
 
 export default function CustomerLoansScreen() {
@@ -69,10 +70,10 @@ export default function CustomerLoansScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  separator: { height: 1, backgroundColor: '#e5e5ea' },
+  separator: { height: 1, backgroundColor: Palette.border },
   empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
   button: {
-    backgroundColor: '#208AEF',
+    backgroundColor: Palette.primary500,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',

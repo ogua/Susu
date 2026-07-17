@@ -1,12 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 
 import { getTodaySummary } from '@/api/summaries';
 import { ThemedText } from '@/components/themed-text';
+import { Button, Card, Input, Screen, StatTile, StatTileRow } from '@/components/ui';
+import { Palette } from '@/constants/theme';
 import { drainOutbox } from '@/sync/engine';
 import { enqueueDailySummary } from '@/sync/ops';
+import { formatMoney } from '@/utils/money';
 
 export default function DayCloseScreen() {
   const summary = useQuery({
@@ -47,80 +50,56 @@ export default function DayCloseScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.card}>
-        <ThemedText type="subtitle">Today so far</ThemedText>
-        {summary.isLoading ? (
-          <ActivityIndicator />
-        ) : summary.data ? (
-          <>
-            <ThemedText>{summary.data.summary.collections_count} collections</ThemedText>
-            <ThemedText>Total collected: {summary.data.summary.collections_total_formatted}</ThemedText>
-            <ThemedText type="small">
-              Expected cash in hand: GHS {(summary.data.cash_in_hand / 100).toFixed(2)}
-            </ThemedText>
-          </>
-        ) : (
-          <ThemedText type="small">Could not load today&apos;s summary (offline?).</ThemedText>
-        )}
-      </View>
+    <Screen>
+      {summary.isLoading ? (
+        <ActivityIndicator />
+      ) : summary.data ? (
+        <StatTileRow>
+          <StatTile
+            label="Collected today"
+            value={summary.data.summary.collections_total_formatted ?? '—'}
+            hint={`${summary.data.summary.collections_count} collection(s)`}
+          />
+          <StatTile
+            label="Expected cash in hand"
+            value={formatMoney(summary.data.cash_in_hand)}
+            accentColor={Palette.primary600}
+          />
+        </StatTileRow>
+      ) : (
+        <Card>
+          <ThemedText type="small" themeColor="textSecondary">
+            Could not load today&apos;s summary (offline?). You can still declare your cash — it
+            syncs automatically.
+          </ThemedText>
+        </Card>
+      )}
 
-      <ThemedText type="small">Cash you are declaring (GHS)</ThemedText>
-      <TextInput
-        style={styles.input}
-        keyboardType="decimal-pad"
-        value={declaredCash}
-        onChangeText={setDeclaredCash}
-        placeholder="0.00"
-      />
-
-      <ThemedText type="small">Notes (optional)</ThemedText>
-      <TextInput
-        style={[styles.input, styles.notes]}
-        value={notes}
-        onChangeText={setNotes}
-        multiline
-      />
-
-      {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-      {savedMessage ? <ThemedText style={styles.success}>{savedMessage}</ThemedText> : null}
-
-      <Pressable style={[styles.button, submitting && styles.buttonDisabled]} onPress={handleSubmit} disabled={submitting}>
-        {submitting ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Submit Day Summary</ThemedText>}
-      </Pressable>
-    </ScrollView>
+      <Card style={styles.form}>
+        <ThemedText type="subtitle">Declare your cash</ThemedText>
+        <Input
+          label="Cash you are declaring (GHS)"
+          keyboardType="decimal-pad"
+          value={declaredCash}
+          onChangeText={setDeclaredCash}
+          placeholder="0.00"
+          error={error}
+        />
+        <Input
+          label="Notes (optional)"
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          style={styles.notes}
+        />
+        {savedMessage ? <ThemedText style={{ color: Palette.success }}>{savedMessage}</ThemedText> : null}
+        <Button title="Submit Day Summary" loading={submitting} onPress={handleSubmit} />
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 10 },
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e5',
-    padding: 16,
-    gap: 4,
-    backgroundColor: '#ffffff',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#c7c7cc',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
+  form: { gap: 12 },
   notes: { minHeight: 80, textAlignVertical: 'top' },
-  button: {
-    backgroundColor: '#208AEF',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  error: { color: '#d11a2a' },
-  success: { color: '#1a8a3d' },
 });

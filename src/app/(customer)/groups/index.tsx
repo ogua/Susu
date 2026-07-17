@@ -5,6 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-
 import { getGroups } from '@/api/groups';
 import { ThemedText } from '@/components/themed-text';
 import type { Group } from '@/types/api';
+import { Palette } from '@/constants/theme';
 
 export default function CustomerGroupsScreen() {
   const groups = useQuery({
@@ -52,6 +53,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
   status: { textTransform: 'capitalize', opacity: 0.7 },
-  separator: { height: 1, backgroundColor: '#e5e5ea' },
+  separator: { height: 1, backgroundColor: Palette.border },
   empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
 });

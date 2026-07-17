@@ -7,6 +7,7 @@ import { apiErrorMessage } from '@/api/client';
 import { applyForLoan, getLoanEligibility, getLoanProducts } from '@/api/loans';
 import { ThemedText } from '@/components/themed-text';
 import type { LoanProduct } from '@/types/api';
+import { Palette } from '@/constants/theme';
 
 export default function ApplyForLoanScreen() {
   const params = useLocalSearchParams<{
@@ -158,7 +159,7 @@ const styles = StyleSheet.create({
   container: { padding: 16, gap: 10 },
   input: {
     borderWidth: 1,
-    borderColor: '#c7c7cc',
+    borderColor: Palette.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -167,19 +168,19 @@ const styles = StyleSheet.create({
   methodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   methodButton: {
     borderWidth: 1,
-    borderColor: '#c7c7cc',
+    borderColor: Palette.border,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  methodButtonActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
+  methodButtonActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
   methodTextActive: { color: '#ffffff', fontWeight: '700' },
   eligibilityCard: { borderRadius: 10, padding: 12, gap: 2 },
   eligible: { backgroundColor: '#e6f4ea' },
   ineligible: { backgroundColor: '#fdecea' },
   eligibilityText: { color: '#1a1a1a' },
   button: {
-    backgroundColor: '#208AEF',
+    backgroundColor: Palette.primary500,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -187,5 +188,5 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  error: { color: '#d11a2a' },
+  error: { color: Palette.danger },
 });

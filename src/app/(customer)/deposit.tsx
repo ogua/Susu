@@ -1,10 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { apiErrorMessage } from '@/api/client';
 import { chargeMobileMoney } from '@/api/payments';
 import { ThemedText } from '@/components/themed-text';
+import { Button, Card, Input, Screen } from '@/components/ui';
+import { Palette, Radii } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import type { MobileMoneyProvider } from '@/types/api';
 
 const PROVIDERS: { value: MobileMoneyProvider; label: string }[] = [
@@ -15,6 +18,7 @@ const PROVIDERS: { value: MobileMoneyProvider; label: string }[] = [
 
 /** Self-service deposit: RecordCollectionAction allows a customer to pay into their own account. */
 export default function DepositScreen() {
+  const theme = useTheme();
   const { accountId } = useLocalSearchParams<{ accountId: string }>();
 
   const [amount, setAmount] = useState('');
@@ -56,92 +60,70 @@ export default function DepositScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ThemedText type="small">Amount (GHS)</ThemedText>
-      <TextInput
-        style={styles.input}
-        keyboardType="decimal-pad"
-        value={amount}
-        onChangeText={setAmount}
-        placeholder="0.00"
-        autoFocus
-      />
+    <Screen>
+      <Card style={styles.form}>
+        <Input
+          label="Amount (GHS)"
+          keyboardType="decimal-pad"
+          value={amount}
+          onChangeText={setAmount}
+          placeholder="0.00"
+          autoFocus
+          style={styles.amountInput}
+          error={error}
+        />
+        <Input
+          label="Mobile money number"
+          keyboardType="phone-pad"
+          value={phone}
+          onChangeText={setPhone}
+          placeholder="024xxxxxxx"
+        />
 
-      <ThemedText type="small">Mobile money number</ThemedText>
-      <TextInput
-        style={styles.phoneInput}
-        keyboardType="phone-pad"
-        value={phone}
-        onChangeText={setPhone}
-        placeholder="024xxxxxxx"
-      />
+        <View style={styles.providerRow}>
+          {PROVIDERS.map((option) => {
+            const active = provider === option.value;
 
-      <View style={styles.methodRow}>
-        {PROVIDERS.map((option) => (
-          <Pressable
-            key={option.value}
-            style={[styles.methodButton, provider === option.value && styles.methodButtonActive]}
-            onPress={() => setProvider(option.value)}
-          >
-            <ThemedText style={provider === option.value ? styles.methodTextActive : undefined}>
-              {option.label}
-            </ThemedText>
-          </Pressable>
-        ))}
-      </View>
+            return (
+              <Pressable
+                key={option.value}
+                style={[
+                  styles.provider,
+                  { borderColor: active ? Palette.primary500 : theme.border },
+                  active && styles.providerActive,
+                ]}
+                onPress={() => setProvider(option.value)}
+              >
+                <ThemedText type="smallBold" style={active ? styles.providerTextActive : undefined}>
+                  {option.label}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
 
-      {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
+        <Button title="Pay Now" loading={submitting} onPress={handleSubmit} />
 
-      <Pressable style={[styles.button, submitting && styles.buttonDisabled]} onPress={handleSubmit} disabled={submitting}>
-        {submitting ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Pay Now</ThemedText>}
-      </Pressable>
-
-      <ThemedText type="small" style={styles.hint}>
-        You&apos;ll get a PIN prompt on your phone to approve the payment.
-      </ThemedText>
-    </View>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+          You&apos;ll get a PIN prompt on your phone to approve the payment.
+        </ThemedText>
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#c7c7cc',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 22,
-    fontWeight: '600',
-  },
-  phoneInput: {
-    borderWidth: 1,
-    borderColor: '#c7c7cc',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  methodRow: { flexDirection: 'row', gap: 8 },
-  methodButton: {
+  form: { gap: 12 },
+  amountInput: { fontSize: 22, fontWeight: '600' },
+  providerRow: { flexDirection: 'row', gap: 8 },
+  provider: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#c7c7cc',
-    borderRadius: 10,
+    borderRadius: Radii.sm,
     paddingVertical: 10,
     alignItems: 'center',
   },
-  methodButtonActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
-  methodTextActive: { color: '#ffffff', fontWeight: '700' },
-  button: {
-    backgroundColor: '#208AEF',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  error: { color: '#d11a2a' },
-  hint: { textAlign: 'center', opacity: 0.6, marginTop: 8 },
+  providerActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
+  providerTextActive: { color: '#ffffff' },
+  hint: { textAlign: 'center' },
 });

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { ThemedText } from './themed-text';
 
-import { Spacing } from '@/constants/theme';
+import { Palette, Spacing } from '@/constants/theme';
 import { useSyncToastStore } from '@/stores/syncToastStore';
 
 const AUTO_DISMISS_MS = 4000;
@@ -58,10 +58,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   success: {
-    backgroundColor: '#1a8a3d',
+    backgroundColor: Palette.success,
   },
   warning: {
-    backgroundColor: '#b45309',
+    backgroundColor: Palette.warning,
   },
   text: {
     color: '#ffffff',

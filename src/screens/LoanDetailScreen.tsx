@@ -8,6 +8,7 @@ import { getLoan, recordLoanRepayment } from '@/api/loans';
 import { ThemedText } from '@/components/themed-text';
 import { useAuthStore } from '@/stores/authStore';
 import type { LoanInstallment } from '@/types/api';
+import { Palette } from '@/constants/theme';
 
 /**
  * Shared by the agent and customer loan-detail routes — only the "Record
@@ -140,29 +141,29 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e0e0e5',
+    borderColor: Palette.border,
     padding: 16,
     gap: 6,
     backgroundColor: '#ffffff',
   },
   installmentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  separator: { height: 1, backgroundColor: '#e5e5ea' },
+  separator: { height: 1, backgroundColor: Palette.border },
   input: {
     borderWidth: 1,
-    borderColor: '#c7c7cc',
+    borderColor: Palette.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
   },
   button: {
-    backgroundColor: '#208AEF',
+    backgroundColor: Palette.primary500,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#ffffff', fontWeight: '700' },
-  error: { color: '#d11a2a' },
+  error: { color: Palette.danger },
   empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
 });

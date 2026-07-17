@@ -1,11 +1,13 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { Badge, EmptyState, ListRow, Screen } from '@/components/ui';
+import { Palette, Radii } from '@/constants/theme';
+import { getDb } from '@/db/database';
 import { drainOutbox } from '@/sync/engine';
 import { retryRejected, type OutboxItem } from '@/sync/outbox';
-import { getDb } from '@/db/database';
 
 async function loadAllOps(): Promise<OutboxItem[]> {
   const db = await getDb();
@@ -40,51 +42,46 @@ export default function SyncQueueScreen() {
   }
 
   function renderItem({ item }: { item: OutboxItem }) {
-    const statusColor =
-      item.status === 'synced' ? '#1a8a3d' : item.status === 'rejected' ? '#d11a2a' : '#b45309';
-
     return (
-      <View style={styles.row}>
-        <View style={{ flex: 1 }}>
-          <ThemedText type="smallBold">{item.op_type}</ThemedText>
-          <ThemedText type="small" style={{ color: statusColor }}>
-            {item.status}
-            {item.last_error ? ` — ${item.last_error}` : ''}
-          </ThemedText>
-        </View>
-        {item.status === 'rejected' ? (
-          <Pressable style={styles.retryButton} onPress={() => handleRetry(item.op_id)}>
-            <ThemedText type="small" style={{ color: '#ffffff' }}>
-              Retry
-            </ThemedText>
-          </Pressable>
-        ) : null}
-      </View>
+      <ListRow
+        title={item.op_type.replaceAll('.', ' · ')}
+        subtitle={item.last_error ?? undefined}
+        right={
+          item.status === 'rejected' ? (
+            <Pressable style={styles.retryButton} onPress={() => handleRetry(item.op_id)}>
+              <ThemedText type="smallBold" style={styles.retryText}>
+                Retry
+              </ThemedText>
+            </Pressable>
+          ) : (
+            <Badge label={item.status} />
+          )
+        }
+      />
     );
   }
 
   return (
-    <FlatList
-      contentContainerStyle={styles.container}
-      data={items}
-      keyExtractor={(item) => item.op_id}
-      renderItem={renderItem}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleSyncNow} />}
-      ListEmptyComponent={<ThemedText style={styles.empty}>Nothing queued.</ThemedText>}
-    />
+    <Screen scroll={false}>
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.op_id}
+        renderItem={renderItem}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleSyncNow} />}
+        ListEmptyComponent={
+          <EmptyState title="Nothing queued" hint="Everything you record offline shows up here until it syncs." />
+        }
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
-  separator: { height: 1, backgroundColor: '#e5e5ea' },
   retryButton: {
-    backgroundColor: '#208AEF',
-    borderRadius: 8,
+    backgroundColor: Palette.primary500,
+    borderRadius: Radii.sm,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
-  empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
+  retryText: { color: '#ffffff' },
 });

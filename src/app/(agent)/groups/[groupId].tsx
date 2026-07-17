@@ -8,6 +8,7 @@ import { getGroup, payoutGroupRound, recordGroupContribution } from '@/api/group
 import { ThemedText } from '@/components/themed-text';
 import { useAuthStore } from '@/stores/authStore';
 import type { GroupMember } from '@/types/api';
+import { Palette } from '@/constants/theme';
 
 export default function AgentGroupDetailScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e0e0e5',
+    borderColor: Palette.border,
     padding: 16,
     gap: 4,
     backgroundColor: '#ffffff',
@@ -157,10 +158,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e5ea',
+    borderBottomColor: Palette.border,
   },
   contributeButton: {
-    backgroundColor: '#208AEF',
+    backgroundColor: Palette.primary500,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -170,7 +171,7 @@ const styles = StyleSheet.create({
   contributeButtonText: { color: '#ffffff', fontWeight: '600' },
   payoutRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
   payoutButton: {
-    backgroundColor: '#1a8a3d',
+    backgroundColor: Palette.success,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,

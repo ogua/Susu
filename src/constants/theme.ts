@@ -23,6 +23,7 @@ export const Palette = {
   warningSoft: '#fef3c7',
   neutral: '#6b7280',
   neutralSoft: '#f3f4f6',
+  border: '#e5e7eb',
 } as const;
 
 /** Semantic colors, light/dark. Kept as `Colors` for backwards compatibility. */
