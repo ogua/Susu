@@ -6,3 +6,4 @@ V003__loans.sql
 V004__target_savings.sql
 V005__groups.sql
 V006__license_tamper_guard.sql
+V007__customer_kyc_extensions.sql

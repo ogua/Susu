@@ -1,21 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Accordion?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.DatePicker?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.RadioButton?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.TitledPane?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<HBox spacing="16" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.CustomersController">
+<ScrollPane fitToWidth="true" fitToHeight="true" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.CustomersController">
+<HBox spacing="16">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <VBox spacing="12" HBox.hgrow="ALWAYS">
@@ -26,7 +33,7 @@
             <Button onAction="#onViewDetail" styleClass="button-secondary" text="View Detail"/>
         </HBox>
 
-        <TableView fx:id="table" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
                 <TableColumn fx:id="codeColumn" prefWidth="100" text="Code"/>
                 <TableColumn fx:id="nameColumn" prefWidth="180" text="Name"/>
@@ -36,40 +43,348 @@
         </TableView>
     </VBox>
 
-    <ScrollPane fitToWidth="true" prefWidth="360" style="-fx-background-color: transparent;">
-        <VBox spacing="12" styleClass="card">
-            <Label styleClass="card-title" text="Register Customer"/>
+    <VBox prefWidth="460" spacing="12" styleClass="card">
+        <Label styleClass="card-title" text="Register Customer"/>
 
-            <Label styleClass="text-muted" text="First name"/>
-            <TextField fx:id="firstNameField"/>
-            <Label styleClass="text-muted" text="Last name"/>
-            <TextField fx:id="lastNameField"/>
-            <Label styleClass="text-muted" text="Phone"/>
-            <TextField fx:id="phoneField"/>
-            <Label styleClass="text-muted" text="Gender"/>
-            <ComboBox fx:id="genderCombo" maxWidth="Infinity"/>
-            <Label styleClass="text-muted" text="Date of birth"/>
-            <DatePicker fx:id="dobPicker" maxWidth="Infinity"/>
+        <Label styleClass="section-title" text="Client type"/>
+        <HBox spacing="16">
+            <fx:define>
+                <ToggleGroup fx:id="clientTypeToggle"/>
+            </fx:define>
+            <RadioButton fx:id="individualRadio" selected="true" text="Individual" toggleGroup="$clientTypeToggle"/>
+            <RadioButton fx:id="businessRadio" text="Business" toggleGroup="$clientTypeToggle"/>
+        </HBox>
 
-            <Label styleClass="section-title" text="KYC"/>
-            <Label styleClass="text-muted" text="ID type"/>
-            <ComboBox fx:id="idTypeCombo" maxWidth="Infinity"/>
-            <Label styleClass="text-muted" text="ID number"/>
-            <TextField fx:id="idNumberField"/>
+        <Accordion fx:id="accordion">
+            <panes>
 
-            <Label styleClass="section-title" text="Next of kin"/>
-            <Label styleClass="text-muted" text="Name"/>
-            <TextField fx:id="kinNameField"/>
-            <Label styleClass="text-muted" text="Phone"/>
-            <TextField fx:id="kinPhoneField"/>
-            <Label styleClass="text-muted" text="Relationship"/>
-            <TextField fx:id="kinRelationshipField"/>
+                <TitledPane text="Identity">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="130" prefWidth="130"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
 
-            <Label styleClass="text-muted" text="Address"/>
-            <TextArea fx:id="addressField" prefRowCount="2" wrapText="true"/>
+                        <Label text="First name" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <TextField fx:id="firstNameField" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
 
-            <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
-            <Button maxWidth="Infinity" onAction="#onRegister" styleClass="button-primary" text="Save Customer"/>
-        </VBox>
-    </ScrollPane>
+                        <Label text="Last name" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <TextField fx:id="lastNameField" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="Other names" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <TextField fx:id="otherNamesField" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label text="Gender" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <ComboBox fx:id="genderCombo" maxWidth="Infinity" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label text="Phone" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <TextField fx:id="phoneField" maxWidth="Infinity" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label text="External ID" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <TextField fx:id="externalIdField" maxWidth="Infinity" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                        <Label text="Date of birth" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                        <DatePicker fx:id="dobPicker" maxWidth="Infinity" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                        <Label text="Place of birth" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                        <TextField fx:id="placeOfBirthField" maxWidth="Infinity" GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+
+                        <Label text="Nationality" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                        <TextField fx:id="nationalityField" maxWidth="Infinity" GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+
+                        <Label text="Email" GridPane.rowIndex="9" GridPane.columnIndex="0"/>
+                        <TextField fx:id="emailField" maxWidth="Infinity" GridPane.rowIndex="9" GridPane.columnIndex="1"/>
+
+                        <Label text="Occupation" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
+                        <TextField fx:id="occupationField" maxWidth="Infinity" GridPane.rowIndex="10" GridPane.columnIndex="1"/>
+
+                        <Label text="Job title" GridPane.rowIndex="11" GridPane.columnIndex="0"/>
+                        <TextField fx:id="jobTitleField" maxWidth="Infinity" GridPane.rowIndex="11" GridPane.columnIndex="1"/>
+
+                        <Label text="TIN" GridPane.rowIndex="12" GridPane.columnIndex="0"/>
+                        <TextField fx:id="tinField" maxWidth="Infinity" GridPane.rowIndex="12" GridPane.columnIndex="1"/>
+
+                        <Label text="Country of residence" GridPane.rowIndex="13" GridPane.columnIndex="0"/>
+                        <TextField fx:id="countryOfResidenceField" maxWidth="Infinity" GridPane.rowIndex="13" GridPane.columnIndex="1"/>
+
+                        <Label text="Residence permit" GridPane.rowIndex="14" GridPane.columnIndex="0"/>
+                        <TextField fx:id="residencePermitField" maxWidth="Infinity" GridPane.rowIndex="14" GridPane.columnIndex="1"/>
+
+                        <Label text="Residency status" GridPane.rowIndex="15" GridPane.columnIndex="0"/>
+                        <ComboBox fx:id="residencyStatusCombo" maxWidth="Infinity" GridPane.rowIndex="15" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane text="Address &amp; location">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="130" prefWidth="130"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label text="Street address" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <TextArea fx:id="addressField" prefRowCount="2" wrapText="true" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label text="City/Town" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <TextField fx:id="cityTownField" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="State/Region" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <TextField fx:id="stateRegionField" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label text="Country" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <TextField fx:id="countryField" maxWidth="Infinity" text="Ghana" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label text="Digital address" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <TextField fx:id="digitalAddressField" maxWidth="Infinity" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label text="Latitude" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <TextField fx:id="latitudeField" maxWidth="Infinity" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                        <Label text="Longitude" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                        <TextField fx:id="longitudeField" maxWidth="Infinity" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane text="Marital &amp; family">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="130" prefWidth="130"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label text="Marital status" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <ComboBox fx:id="maritalStatusCombo" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse name" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <TextField fx:id="spouseNameField" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse date of birth" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <DatePicker fx:id="spouseDobPicker" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse occupation" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <TextField fx:id="spouseOccupationField" maxWidth="Infinity" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label text="Past loan by client/spouse?" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <CheckBox fx:id="hasPastLoanCheck" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label text="Institution of past loan" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <TextField fx:id="pastLoanInstitutionField" maxWidth="Infinity" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse employer name" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                        <TextField fx:id="spouseEmployerNameField" maxWidth="Infinity" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse employer address" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                        <TextField fx:id="spouseEmployerAddressField" maxWidth="Infinity" GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse employer town" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                        <TextField fx:id="spouseEmployerTownField" maxWidth="Infinity" GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse employer county" GridPane.rowIndex="9" GridPane.columnIndex="0"/>
+                        <TextField fx:id="spouseEmployerCountyField" maxWidth="Infinity" GridPane.rowIndex="9" GridPane.columnIndex="1"/>
+
+                        <Label text="Spouse employer region" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
+                        <TextField fx:id="spouseEmployerRegionField" maxWidth="Infinity" GridPane.rowIndex="10" GridPane.columnIndex="1"/>
+
+                        <Label text="Religion" GridPane.rowIndex="11" GridPane.columnIndex="0"/>
+                        <TextField fx:id="religionField" maxWidth="Infinity" GridPane.rowIndex="11" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane fx:id="businessPane" text="Business profile">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="130" prefWidth="130"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label text="Business name" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessNameField" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label text="Business constitution" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <ComboBox fx:id="businessStructureCombo" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="Main business line" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <ComboBox fx:id="businessLineCombo" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label text="Business start date" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <DatePicker fx:id="businessStartDatePicker" maxWidth="Infinity" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label text="Business phone" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessPhoneField" maxWidth="Infinity" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label text="Business TIN" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessTinField" maxWidth="Infinity" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                        <Label text="Business income level" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                        <ComboBox fx:id="businessIncomeLevelCombo" maxWidth="Infinity" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                        <Label text="Business address" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                        <TextArea fx:id="businessAddressField" prefRowCount="2" wrapText="true" maxWidth="Infinity" GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+
+                        <Label text="Business town" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessTownField" maxWidth="Infinity" GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+
+                        <Label text="Business county" GridPane.rowIndex="9" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessCountyField" maxWidth="Infinity" GridPane.rowIndex="9" GridPane.columnIndex="1"/>
+
+                        <Label text="Business region" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessRegionField" maxWidth="Infinity" GridPane.rowIndex="10" GridPane.columnIndex="1"/>
+
+                        <Label text="Business latitude" GridPane.rowIndex="11" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessLatitudeField" maxWidth="Infinity" GridPane.rowIndex="11" GridPane.columnIndex="1"/>
+
+                        <Label text="Business longitude" GridPane.rowIndex="12" GridPane.columnIndex="0"/>
+                        <TextField fx:id="businessLongitudeField" maxWidth="Infinity" GridPane.rowIndex="12" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane text="Identifications">
+                    <VBox spacing="8">
+                        <TableView fx:id="identificationsTable" prefHeight="120" styleClass="table-view">
+                            <columns>
+                                <TableColumn fx:id="idTypeColumn" prefWidth="100" text="ID Type"/>
+                                <TableColumn fx:id="idNumberColumn" prefWidth="120" text="ID Number"/>
+                                <TableColumn fx:id="idIssueDateColumn" prefWidth="90" text="Issued"/>
+                                <TableColumn fx:id="idExpiryDateColumn" prefWidth="90" text="Expires"/>
+                                <TableColumn fx:id="idPrimaryColumn" prefWidth="60" text="Primary"/>
+                            </columns>
+                        </TableView>
+                        <GridPane hgap="8" vgap="8">
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="130" prefWidth="130"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+
+                            <Label text="ID type" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                            <ComboBox fx:id="idTypeEntryCombo" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                            <Label text="ID number" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <TextField fx:id="idNumberEntryField" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                            <Label text="Issue date" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <DatePicker fx:id="idIssueDateEntryPicker" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                            <Label text="Expiry date" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                            <DatePicker fx:id="idExpiryDateEntryPicker" maxWidth="Infinity" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                            <Label text="Description" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                            <TextField fx:id="idDescriptionEntryField" maxWidth="Infinity" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                            <Label text="Primary" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                            <CheckBox fx:id="idPrimaryEntryCheck" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+                        </GridPane>
+                        <HBox spacing="8">
+                            <Button onAction="#onAddIdentification" styleClass="button-secondary" text="Add Identification"/>
+                            <Button onAction="#onRemoveIdentification" styleClass="button-secondary" text="Remove Selected"/>
+                        </HBox>
+                    </VBox>
+                </TitledPane>
+
+                <TitledPane text="Beneficiaries">
+                    <VBox spacing="8">
+                        <TableView fx:id="beneficiariesTable" prefHeight="120" styleClass="table-view">
+                            <columns>
+                                <TableColumn fx:id="beneficiaryNameColumn" prefWidth="110" text="Name"/>
+                                <TableColumn fx:id="beneficiaryRelationshipColumn" prefWidth="100" text="Relationship"/>
+                                <TableColumn fx:id="beneficiaryAmountColumn" prefWidth="90" text="Legacy (GHS)"/>
+                                <TableColumn fx:id="beneficiaryPhoneColumn" prefWidth="100" text="Phone"/>
+                            </columns>
+                        </TableView>
+                        <GridPane hgap="8" vgap="8">
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="130" prefWidth="130"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+
+                            <Label text="Name" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryNameEntryField" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                            <Label text="Relationship" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryRelationshipEntryField" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                            <Label text="Amount of legacy (GHS)" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryAmountEntryField" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                            <Label text="Phone" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryPhoneEntryField" maxWidth="Infinity" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                            <Label text="Address" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryAddressEntryField" maxWidth="Infinity" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                            <Label text="Town" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryTownEntryField" maxWidth="Infinity" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                            <Label text="County" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryCountyEntryField" maxWidth="Infinity" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                            <Label text="State/Region" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                            <TextField fx:id="beneficiaryStateRegionEntryField" maxWidth="Infinity" GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+                        </GridPane>
+                        <HBox spacing="8">
+                            <Button onAction="#onAddBeneficiary" styleClass="button-secondary" text="Add Beneficiary"/>
+                            <Button onAction="#onRemoveBeneficiary" styleClass="button-secondary" text="Remove Selected"/>
+                        </HBox>
+                    </VBox>
+                </TitledPane>
+
+                <TitledPane text="Family members">
+                    <VBox spacing="8">
+                        <TableView fx:id="familyMembersTable" prefHeight="120" styleClass="table-view">
+                            <columns>
+                                <TableColumn fx:id="familyMemberNameColumn" prefWidth="130" text="Name"/>
+                                <TableColumn fx:id="familyMemberRelationshipColumn" prefWidth="120" text="Relationship"/>
+                                <TableColumn fx:id="familyMemberPhoneColumn" prefWidth="110" text="Phone"/>
+                                <TableColumn fx:id="familyMemberOccupationColumn" prefWidth="110" text="Occupation"/>
+                            </columns>
+                        </TableView>
+                        <GridPane hgap="8" vgap="8">
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="130" prefWidth="130"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+
+                            <Label text="Name" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                            <TextField fx:id="familyMemberNameEntryField" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                            <Label text="Relationship" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <TextField fx:id="familyMemberRelationshipEntryField" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                            <Label text="Contact phone" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <TextField fx:id="familyMemberPhoneEntryField" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                            <Label text="Occupation" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                            <TextField fx:id="familyMemberOccupationEntryField" maxWidth="Infinity" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+                        </GridPane>
+                        <HBox spacing="8">
+                            <Button onAction="#onAddFamilyMember" styleClass="button-secondary" text="Add Family Member"/>
+                            <Button onAction="#onRemoveFamilyMember" styleClass="button-secondary" text="Remove Selected"/>
+                        </HBox>
+                    </VBox>
+                </TitledPane>
+
+                <TitledPane text="Next of kin">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="130" prefWidth="130"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label text="Name" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <TextField fx:id="kinNameField" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label text="Phone" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <TextField fx:id="kinPhoneField" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="Relationship" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <TextField fx:id="kinRelationshipField" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+            </panes>
+        </Accordion>
+
+        <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+        <Button maxWidth="Infinity" onAction="#onRegister" styleClass="button-primary" text="Save Customer"/>
+    </VBox>
 </HBox>
+</ScrollPane>
