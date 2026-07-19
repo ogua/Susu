@@ -5,12 +5,13 @@ use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Services\Savings\CommissionCalculator;
 
-function makeAccount(int $position, int $cycleLength = 31, CommissionType $type = CommissionType::FirstContributionPerCycle, int $value = 0): SavingsAccount
+function makeAccount(int $position, int $cycleLength = 31, CommissionType $type = CommissionType::FirstContributionPerCycle, int $value = 0, int $balance = 0): SavingsAccount
 {
     $account = new SavingsAccount([
         'contribution_amount' => 500,
         'contributions_this_cycle' => $position,
         'cycle_number' => 1,
+        'balance' => $balance,
     ]);
     $account->setRelation('product', new SavingsProduct([
         'cycle_length_days' => $cycleLength,
@@ -68,4 +69,41 @@ it('computes flat commission per cycle started', function (): void {
     $result = (new CommissionCalculator)->simulate($account, units: 1, amount: 500);
 
     expect($result->commissionAmount)->toBe(300);
+});
+
+it('charges nothing when commission type is None, regardless of cycle or balance', function (): void {
+    $result = (new CommissionCalculator)->simulate(
+        makeAccount(0, type: CommissionType::None, balance: 10_000),
+        units: 1,
+        amount: 500,
+    );
+
+    expect($result->commissionAmount)->toBe(0)
+        ->and($result->cyclesStarted)->toBe(1);
+});
+
+it('computes percentage-of-balance commission when a cycle starts', function (): void {
+    // 5% (500 bps) of a 10,000 balance.
+    $account = makeAccount(0, type: CommissionType::PercentageOfBalancePerCycle, value: 500, balance: 10_000);
+
+    $result = (new CommissionCalculator)->simulate($account, units: 1, amount: 500);
+
+    expect($result->commissionAmount)->toBe(500);
+});
+
+it('charges no percentage-of-balance commission mid-cycle', function (): void {
+    $account = makeAccount(5, type: CommissionType::PercentageOfBalancePerCycle, value: 500, balance: 10_000);
+
+    $result = (new CommissionCalculator)->simulate($account, units: 2, amount: 1000);
+
+    expect($result->commissionAmount)->toBe(0);
+});
+
+it('computes percentage-of-balance commission independently of the deposit amount', function (): void {
+    $account = makeAccount(0, type: CommissionType::PercentageOfBalancePerCycle, value: 1000, balance: 5_000);
+
+    // 10% of the 5,000 balance is 500, regardless of whether the deposit is 200 or 2,000.
+    $small = (new CommissionCalculator)->simulate($account, units: 1, amount: 500);
+
+    expect($small->commissionAmount)->toBe(500);
 });

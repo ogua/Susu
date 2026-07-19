@@ -25,16 +25,32 @@ class SavingsProductFactory extends Factory
             'type' => 'daily_susu',
             'contribution_amount' => 500, // GHS 5.00 per day
             'cycle_length_days' => 31,
-            'commission_type' => CommissionType::FirstContributionPerCycle,
+            'commission_type' => CommissionType::None,
             'commission_value' => 0,
             'is_active' => true,
         ];
+    }
+
+    public function firstContributionCommission(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'commission_type' => CommissionType::FirstContributionPerCycle,
+            'commission_value' => 0,
+        ]);
     }
 
     public function percentageCommission(int $basisPoints): static
     {
         return $this->state(fn (array $attributes) => [
             'commission_type' => CommissionType::Percentage,
+            'commission_value' => $basisPoints,
+        ]);
+    }
+
+    public function percentageOfBalanceCommission(int $basisPoints): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'commission_type' => CommissionType::PercentageOfBalancePerCycle,
             'commission_value' => $basisPoints,
         ]);
     }

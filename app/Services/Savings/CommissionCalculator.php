@@ -43,8 +43,10 @@ class CommissionCalculator
         }
 
         $commission = match ($product->commission_type) {
+            CommissionType::None => 0,
             CommissionType::FirstContributionPerCycle => $cyclesStarted * $account->contribution_amount,
             CommissionType::Percentage => intdiv($amount * $product->commission_value, 10_000),
+            CommissionType::PercentageOfBalancePerCycle => $cyclesStarted * intdiv($account->balance * $product->commission_value, 10_000),
             CommissionType::FlatPerCycle => $cyclesStarted * $product->commission_value,
         };
 

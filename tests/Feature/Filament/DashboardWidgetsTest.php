@@ -28,7 +28,7 @@ beforeEach(function (): void {
 // regardless of --filter, so redeclaring it would fatal.
 
 it('shows todays collections and active accounts on the overview widget', function (): void {
-    $product = SavingsProduct::factory()->create([
+    $product = SavingsProduct::factory()->firstContributionCommission()->create([
         'company_id' => $this->branch->company_id,
         'contribution_amount' => 500,
     ]);
@@ -82,7 +82,7 @@ it('shows portfolio at risk once a loan installment is overdue', function (): vo
 });
 
 it('ranks agents by collections total on the leaderboard', function (): void {
-    $product = SavingsProduct::factory()->create([
+    $product = SavingsProduct::factory()->firstContributionCommission()->create([
         'company_id' => $this->branch->company_id,
         'contribution_amount' => 500,
     ]);

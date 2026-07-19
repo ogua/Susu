@@ -35,16 +35,21 @@ class SavingsProductForm
                     ->default(31),
                 Select::make('commission_type')
                     ->options(CommissionType::class)
-                    ->default(CommissionType::FirstContributionPerCycle)
+                    ->default(CommissionType::None)
                     ->live()
                     ->required(),
                 TextInput::make('commission_value')
                     ->numeric()
                     ->default(0)
-                    ->visible(fn (Get $get): bool => $get('commission_type') !== CommissionType::FirstContributionPerCycle->value)
-                    ->helperText(fn (Get $get): string => $get('commission_type') === CommissionType::Percentage->value
-                        ? 'Basis points (100 = 1%)'
-                        : 'Flat amount in pesewas per cycle started'),
+                    ->visible(fn (Get $get): bool => ! in_array($get('commission_type'), [
+                        CommissionType::FirstContributionPerCycle->value,
+                        CommissionType::None->value,
+                    ]))
+                    ->helperText(fn (Get $get): string => match ($get('commission_type')) {
+                        CommissionType::Percentage->value => 'Basis points of each deposit (100 = 1%)',
+                        CommissionType::PercentageOfBalancePerCycle->value => "Basis points of the account's current balance, charged once per cycle started (100 = 1%)",
+                        default => 'Flat amount in pesewas per cycle started',
+                    }),
                 TextInput::make('early_withdrawal_penalty_bps')
                     ->label('Early withdrawal penalty')
                     ->numeric()

@@ -14,7 +14,7 @@ beforeEach(function (): void {
     $this->agent = User::factory()->fieldAgent($this->branch)->create();
     $this->manager = User::factory()->branchManager($this->branch)->create();
 
-    $this->product = SavingsProduct::factory()->create(['company_id' => $this->branch->company_id]);
+    $this->product = SavingsProduct::factory()->firstContributionCommission()->create(['company_id' => $this->branch->company_id]);
     $this->customer = Customer::factory()->forBranch($this->branch)->create();
 
     $this->account = SavingsAccount::factory()->create([

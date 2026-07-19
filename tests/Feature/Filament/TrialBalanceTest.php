@@ -22,7 +22,7 @@ beforeEach(function (): void {
 });
 
 it('stays balanced after a mix of collections, loan disbursement, and repayment', function (): void {
-    $product = SavingsProduct::factory()->create([
+    $product = SavingsProduct::factory()->firstContributionCommission()->create([
         'company_id' => $this->branch->company_id,
         'contribution_amount' => 500,
     ]);
