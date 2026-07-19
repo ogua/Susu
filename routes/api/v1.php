@@ -5,8 +5,10 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Customer;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\GroupController;
+use App\Http\Controllers\Api\V1\GroupLoanController;
 use App\Http\Controllers\Api\V1\LedgerController;
 use App\Http\Controllers\Api\V1\LoanController;
+use App\Http\Controllers\Api\V1\LoanGroupController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SyncController;
@@ -82,6 +84,27 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->middleware('role:field_agent|branch_manager|company_admin')
             ->name('repayments.store');
     });
+
+    // Staff-only — a group loan has no single customer, so there's no
+    // customer self-service view here (unlike individual loans/susu groups).
+    Route::prefix('loan-groups')->name('loan-groups.')
+        ->middleware(['throttle:20,1', 'role:field_agent|branch_manager|company_admin'])
+        ->group(function (): void {
+            Route::get('/', [LoanGroupController::class, 'index'])->name('index');
+            Route::get('/{loanGroup}', [LoanGroupController::class, 'show'])->name('show');
+        });
+
+    Route::prefix('group-loans')->name('group-loans.')
+        ->middleware(['throttle:20,1', 'role:field_agent|branch_manager|company_admin'])
+        ->group(function (): void {
+            Route::get('/', [GroupLoanController::class, 'index'])->name('index');
+            Route::get('/{groupLoan}', [GroupLoanController::class, 'show'])->name('show');
+            Route::post('/', [GroupLoanController::class, 'store'])->name('store');
+
+            // Repayments are staff-recorded only (cash collected in the field).
+            Route::post('/{groupLoan}/repayments', [GroupLoanController::class, 'recordRepayment'])
+                ->name('repayments.store');
+        });
 
     // Role-shaped dashboard stats — one endpoint per home screen.
     Route::prefix('dashboard')->name('dashboard.')->middleware('throttle:30,1')->group(function (): void {

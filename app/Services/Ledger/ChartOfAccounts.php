@@ -6,6 +6,7 @@ use App\Enums\LedgerAccountType;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Group;
+use App\Models\GroupLoan;
 use App\Models\LedgerAccount;
 use App\Models\Loan;
 use App\Models\SavingsAccount;
@@ -139,6 +140,27 @@ class ChartOfAccounts
             [
                 'name' => 'Loan Penalty Income',
                 'type' => LedgerAccountType::Income,
+                'is_system' => true,
+            ],
+        );
+    }
+
+    /**
+     * Principal + interest a loan group jointly owes on a disbursed group
+     * loan — an asset to the company, same direction as loanReceivable().
+     * Explicitly NOT the same direction as groupLiability() below, which is a
+     * liability for pooled susu savings — don't conflate the two.
+     */
+    public function groupLoanReceivable(GroupLoan $groupLoan): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $groupLoan->company_id, 'code' => 'GLN-'.$groupLoan->loan_number],
+            [
+                'branch_id' => $groupLoan->branch_id,
+                'name' => 'Group Loan '.$groupLoan->loan_number,
+                'type' => LedgerAccountType::Asset,
+                'accountable_type' => GroupLoan::class,
+                'accountable_id' => $groupLoan->id,
                 'is_system' => true,
             ],
         );

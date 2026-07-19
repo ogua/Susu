@@ -5,6 +5,11 @@ namespace App\Actions\Sync;
 use App\Actions\Agents\RecordLocationPingsAction;
 use App\Actions\Agents\SubmitAgentDailySummaryAction;
 use App\Actions\Customers\CreateCustomerAction;
+use App\Actions\GroupLoans\ApplyForGroupLoanAction;
+use App\Actions\GroupLoans\ApproveGroupLoanAction;
+use App\Actions\GroupLoans\DisburseGroupLoanAction;
+use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
+use App\Actions\GroupLoans\RejectGroupLoanAction;
 use App\Actions\Groups\RecordGroupContributionAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
@@ -15,20 +20,28 @@ use App\Actions\Savings\OpenSavingsAccountAction;
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
 use App\Enums\SyncOpType;
+use App\Http\Requests\Api\V1\ApproveGroupLoanRequest;
 use App\Http\Requests\Api\V1\ApproveLoanRequest;
+use App\Http\Requests\Api\V1\DisburseGroupLoanRequest;
 use App\Http\Requests\Api\V1\DisburseLoanRequest;
+use App\Http\Requests\Api\V1\RecordGroupLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
+use App\Http\Requests\Api\V1\RejectGroupLoanRequest;
 use App\Http\Requests\Api\V1\RejectLoanRequest;
 use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
 use App\Http\Requests\Api\V1\StoreGroupContributionRequest;
+use App\Http\Requests\Api\V1\StoreGroupLoanApplicationRequest;
 use App\Http\Requests\Api\V1\StoreLoanApplicationRequest;
 use App\Http\Requests\Api\V1\StoreLocationPingsRequest;
 use App\Http\Requests\Api\V1\StoreSavingsAccountRequest;
 use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
 use App\Models\Customer;
+use App\Models\GroupLoan;
+use App\Models\GroupLoanBorrower;
 use App\Models\GroupMember;
 use App\Models\Loan;
+use App\Models\LoanGroup;
 use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
@@ -59,6 +72,11 @@ class ProcessSyncBatchAction
         private RejectLoanAction $rejectLoan,
         private DisburseLoanAction $disburseLoan,
         private RecordGroupContributionAction $recordGroupContribution,
+        private ApplyForGroupLoanAction $applyForGroupLoan,
+        private RecordGroupLoanRepaymentAction $recordGroupLoanRepayment,
+        private ApproveGroupLoanAction $approveGroupLoan,
+        private RejectGroupLoanAction $rejectGroupLoan,
+        private DisburseGroupLoanAction $disburseGroupLoan,
     ) {}
 
     /**
@@ -137,6 +155,11 @@ class ProcessSyncBatchAction
             SyncOpType::RejectLoan => $this->applyRejectLoan($actor, $payload),
             SyncOpType::DisburseLoan => $this->applyDisburseLoan($actor, $payload),
             SyncOpType::RecordGroupContribution => $this->applyGroupContribution($actor, $origin, $payload, $op['op_id'], $recordedAt),
+            SyncOpType::ApplyForGroupLoan => $this->applyGroupLoanApplication($actor, $payload, $op['op_id']),
+            SyncOpType::RecordGroupLoanRepayment => $this->applyGroupLoanRepayment($actor, $origin, $payload, $op['op_id'], $recordedAt),
+            SyncOpType::ApproveGroupLoan => $this->applyApproveGroupLoan($actor, $payload),
+            SyncOpType::RejectGroupLoan => $this->applyRejectGroupLoan($actor, $payload),
+            SyncOpType::DisburseGroupLoan => $this->applyDisburseGroupLoan($actor, $payload),
         };
     }
 
@@ -158,6 +181,11 @@ class ProcessSyncBatchAction
             SyncOpType::RejectLoan => RejectLoanRequest::payloadRules(),
             SyncOpType::DisburseLoan => DisburseLoanRequest::payloadRules(),
             SyncOpType::RecordGroupContribution => StoreGroupContributionRequest::payloadRules(),
+            SyncOpType::ApplyForGroupLoan => StoreGroupLoanApplicationRequest::payloadRules(),
+            SyncOpType::RecordGroupLoanRepayment => RecordGroupLoanRepaymentRequest::payloadRules(),
+            SyncOpType::ApproveGroupLoan => ApproveGroupLoanRequest::payloadRules(),
+            SyncOpType::RejectGroupLoan => RejectGroupLoanRequest::payloadRules(),
+            SyncOpType::DisburseGroupLoan => DisburseGroupLoanRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -363,6 +391,89 @@ class ProcessSyncBatchAction
             'contribution_id' => $contribution->id,
             'amount' => $contribution->amount,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyGroupLoanApplication(User $actor, array $payload, string $opId): array
+    {
+        $loanGroup = LoanGroup::where('company_id', $actor->company_id)->findOrFail($payload['loan_group_id']);
+        $product = LoanProduct::where('company_id', $actor->company_id)->findOrFail($payload['loan_product_id']);
+
+        $groupLoan = $this->applyForGroupLoan->execute(
+            submittedBy: $actor,
+            loanGroup: $loanGroup,
+            product: $product,
+            requestedAmount: (int) $payload['amount'],
+            notes: $payload['notes'] ?? null,
+            clientReference: $payload['client_reference'] ?? $opId,
+        );
+
+        return ['group_loan_id' => $groupLoan->id, 'loan_number' => $groupLoan->loan_number, 'status' => $groupLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyGroupLoanRepayment(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $borrower = GroupLoanBorrower::where('group_loan_id', $groupLoan->id)->findOrFail($payload['group_loan_borrower_id']);
+
+        $result = $this->recordGroupLoanRepayment->execute(
+            borrower: $borrower,
+            amount: (int) $payload['amount'],
+            recordedBy: $actor,
+            clientReference: $payload['client_reference'] ?? $opId,
+            recordedAt: isset($payload['recorded_at']) ? Carbon::parse($payload['recorded_at']) : $recordedAt,
+            origin: $origin,
+        );
+
+        return [
+            'entry_id' => $result->entry->id,
+            'outstanding_balance' => $result->groupLoan->outstanding_balance,
+            'group_loan_status' => $result->groupLoan->status->value,
+            'was_duplicate' => $result->duplicate,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyApproveGroupLoan(User $actor, array $payload): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->approveGroupLoan->execute($groupLoan, $actor);
+
+        return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyRejectGroupLoan(User $actor, array $payload): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->rejectGroupLoan->execute($groupLoan, $actor, $payload['reason']);
+
+        return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyDisburseGroupLoan(User $actor, array $payload): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->disburseGroupLoan->execute($groupLoan, $actor);
+
+        return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value, 'outstanding_balance' => $groupLoan->outstanding_balance];
     }
 
     /**

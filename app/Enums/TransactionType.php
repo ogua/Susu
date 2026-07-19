@@ -15,4 +15,6 @@ enum TransactionType: string
     case Penalty = 'penalty';
     case GroupContribution = 'group_contribution';
     case GroupPayout = 'group_payout';
+    case GroupLoanDisbursement = 'group_loan_disbursement';
+    case GroupLoanRepayment = 'group_loan_repayment';
 }

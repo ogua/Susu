@@ -28,6 +28,10 @@ class SendCustomerPaymentNotification implements ShouldQueue
         TransactionType::Repayment,
         TransactionType::GroupContribution,
         TransactionType::GroupPayout,
+        // GroupLoanDisbursement deliberately excluded — a group loan has no
+        // single customer in meta, and fanning a notification out to every
+        // member is an explicit non-goal for this phase.
+        TransactionType::GroupLoanRepayment,
     ];
 
     public function __construct(private SmsService $sms) {}
@@ -109,6 +113,7 @@ class SendCustomerPaymentNotification implements ShouldQueue
             TransactionType::Repayment => "Loan repayment of {$formatted} received. Ref: {$entry->reference}",
             TransactionType::GroupContribution => "Group contribution of {$formatted} received. Ref: {$entry->reference}",
             TransactionType::GroupPayout => "Your susu group payout of {$formatted} has been paid out to you. Ref: {$entry->reference}",
+            TransactionType::GroupLoanRepayment => "Your group loan repayment of {$formatted} was received. Ref: {$entry->reference}",
             default => "A correction of {$formatted} was applied to your susu account.{$balance} Ref: {$entry->reference}",
         };
     }

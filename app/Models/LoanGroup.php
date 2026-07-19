@@ -1,0 +1,61 @@
+<?php
+
+namespace App\Models;
+
+use Database\Factories\LoanGroupFactory;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class LoanGroup extends Model
+{
+    /** @use HasFactory<LoanGroupFactory> */
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'company_id',
+        'branch_id',
+        'created_by',
+        'name',
+        'code',
+        'is_active',
+    ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+        ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function members(): HasMany
+    {
+        return $this->hasMany(LoanGroupMember::class)->orderBy('joined_at');
+    }
+
+    public function groupLoans(): HasMany
+    {
+        return $this->hasMany(GroupLoan::class);
+    }
+}
