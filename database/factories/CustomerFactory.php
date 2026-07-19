@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Enums\BusinessStructure;
+use App\Enums\ClientType;
 use App\Models\Branch;
 use App\Models\Customer;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -20,6 +22,7 @@ class CustomerFactory extends Factory
             'company_id' => fn (array $attributes) => Branch::find($attributes['branch_id'])->company_id,
             'branch_id' => Branch::factory(),
             'customer_code' => strtoupper(fake()->unique()->bothify('CUS-#####')),
+            'client_type' => ClientType::Individual,
             'first_name' => fake()->firstName(),
             'last_name' => fake()->lastName(),
             'phone' => '+2332'.fake()->unique()->numerify('########'),
@@ -40,6 +43,27 @@ class CustomerFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'branch_id' => $branch->id,
             'company_id' => $branch->company_id,
+        ]);
+    }
+
+    public function individual(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'client_type' => ClientType::Individual,
+        ]);
+    }
+
+    /**
+     * first_name/last_name remain populated to represent the business's
+     * principal contact, matching the wizard's Business flow.
+     */
+    public function business(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'client_type' => ClientType::Business,
+            'business_name' => fake()->company(),
+            'business_structure' => BusinessStructure::LimitedLiabilityCompany,
+            'business_start_date' => fake()->dateTimeBetween('-10 years', '-1 year'),
         ]);
     }
 }

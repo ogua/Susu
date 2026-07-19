@@ -2,17 +2,29 @@
 
 namespace App\Actions\Customers;
 
+use App\Actions\Customers\Concerns\SyncsCustomerChildRecords;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\User;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Registers a customer (field or back office). Idempotent on
  * client_reference for offline agent registrations.
+ *
+ * The web wizard's Identification/Beneficiary/Family repeaters are plain
+ * (not Filament ->relationship() bound): a relationship-bound repeater would
+ * persist child rows on its own via saveRelationships(), independently of
+ * this Action — but this Action is also the persistence path for the direct
+ * API and the offline-sync batch processor, neither of which run a Livewire
+ * form. Keeping this Action the single owner of child-record writes (via
+ * SyncsCustomerChildRecords) avoids two divergent persistence paths.
  */
 class CreateCustomerAction
 {
+    use SyncsCustomerChildRecords;
+
     /**
      * @param  array<string, mixed>  $data  validated customer attributes
      */
@@ -25,7 +37,11 @@ class CreateCustomerAction
             }
         }
 
-        return DB::transaction(function () use ($data, $branch, $registeredBy, $clientReference): Customer {
+        $identifications = Arr::pull($data, 'identifications', []);
+        $beneficiaries = Arr::pull($data, 'beneficiaries', []);
+        $familyMembers = Arr::pull($data, 'family_members', []);
+
+        return DB::transaction(function () use ($data, $branch, $registeredBy, $clientReference, $identifications, $beneficiaries, $familyMembers): Customer {
             $customer = new Customer($data + [
                 'company_id' => $branch->company_id,
                 'branch_id' => $branch->id,
@@ -46,6 +62,11 @@ class CreateCustomerAction
             }
 
             $customer->save();
+
+            $this->syncIdentifications($customer, $identifications);
+            $this->syncBeneficiaries($customer, $beneficiaries);
+            $this->syncFamilyMembers($customer, $familyMembers);
+            $this->applyPrimaryIdentification($customer);
 
             return $customer;
         });

@@ -2,6 +2,9 @@
 
 use App\Models\Branch;
 use App\Models\Customer;
+use App\Models\CustomerBeneficiary;
+use App\Models\CustomerFamilyMember;
+use App\Models\CustomerIdentification;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -60,6 +63,60 @@ it('is idempotent on a second run', function (): void {
     $this->artisan('kyc:purge-expired')->assertSuccessful();
 
     expect(Customer::onlyTrashed()->findOrFail($customer->id)->id_number)->toBeNull();
+});
+
+it('deletes identification and family-member rows and nulls tin/business_tin/religion/spouse fields for a customer past the retention window', function (): void {
+    $customer = Customer::factory()->forBranch($this->branch)->create([
+        'id_number' => 'GHA-123456789-0',
+        'tin' => 'TIN-001',
+        'business_tin' => 'BTIN-002',
+        'religion' => 'Christian',
+        'spouse_name' => 'Ama Mensah',
+        'spouse_date_of_birth' => '1990-01-01',
+        'spouse_occupation' => 'Trader',
+        'spouse_employer_name' => 'ABC Ltd',
+        'spouse_employer_address' => '123 Main St',
+        'spouse_employer_town' => 'Accra',
+        'spouse_employer_county' => 'Greater Accra',
+        'spouse_employer_region' => 'Greater Accra',
+        'past_loan_institution' => 'XYZ Bank',
+    ]);
+    $identification = CustomerIdentification::factory()->for($customer)->create();
+    $familyMember = CustomerFamilyMember::factory()->for($customer)->create();
+
+    $customer->delete();
+    $customer->forceFill(['deleted_at' => now()->subDays(91)])->saveQuietly();
+
+    $this->artisan('kyc:purge-expired')->assertSuccessful();
+
+    $fresh = Customer::onlyTrashed()->findOrFail($customer->id);
+    expect($fresh->tin)->toBeNull()
+        ->and($fresh->business_tin)->toBeNull()
+        ->and($fresh->religion)->toBeNull()
+        ->and($fresh->spouse_name)->toBeNull()
+        ->and($fresh->spouse_date_of_birth)->toBeNull()
+        ->and($fresh->spouse_occupation)->toBeNull()
+        ->and($fresh->spouse_employer_name)->toBeNull()
+        ->and($fresh->spouse_employer_address)->toBeNull()
+        ->and($fresh->spouse_employer_town)->toBeNull()
+        ->and($fresh->spouse_employer_county)->toBeNull()
+        ->and($fresh->spouse_employer_region)->toBeNull()
+        ->and($fresh->past_loan_institution)->toBeNull();
+
+    expect(CustomerIdentification::find($identification->id))->toBeNull()
+        ->and(CustomerFamilyMember::find($familyMember->id))->toBeNull();
+});
+
+it('leaves beneficiaries untouched after purge', function (): void {
+    $customer = Customer::factory()->forBranch($this->branch)->create(['id_number' => 'GHA-123456789-0']);
+    $beneficiary = CustomerBeneficiary::factory()->for($customer)->create();
+
+    $customer->delete();
+    $customer->forceFill(['deleted_at' => now()->subDays(91)])->saveQuietly();
+
+    $this->artisan('kyc:purge-expired')->assertSuccessful();
+
+    expect(CustomerBeneficiary::find($beneficiary->id))->not->toBeNull();
 });
 
 it('respects a custom retention window via the --days option', function (): void {

@@ -154,6 +154,53 @@ it('applies a full offline provisioning chain in one batch with matching ids', f
         ->and(SavingsAccount::find($accountRef)->contributions_this_cycle)->toBe(1);
 });
 
+it('registers a customer with nested identifications and beneficiaries through the sync batch, idempotently on replay', function (): void {
+    $customerRef = (string) Str::uuid();
+    $opId = (string) Str::uuid();
+
+    $batch = [
+        'ops' => [
+            [
+                'op_id' => $opId,
+                'op_type' => 'customer.register',
+                'payload' => [
+                    'first_name' => 'Kofi',
+                    'last_name' => 'Owusu',
+                    'phone' => '0244555666',
+                    'client_reference' => $customerRef,
+                    'identifications' => [
+                        [
+                            'id_type' => 'ghana_card',
+                            'id_number' => 'GHA-555666777-1',
+                            'issue_date' => '2026-01-01',
+                            'is_primary' => true,
+                        ],
+                    ],
+                    'beneficiaries' => [
+                        ['name' => 'Abena Owusu', 'relationship' => 'daughter', 'amount_of_legacy' => 1000],
+                    ],
+                ],
+                'recorded_at' => now()->toISOString(),
+            ],
+        ],
+    ];
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', $batch);
+    $response->assertOk()->assertJsonPath('results.0.status', 'applied');
+
+    $customer = Customer::findOrFail($customerRef);
+    expect($customer->identifications)->toHaveCount(1)
+        ->and($customer->id_number)->toBe('GHA-555666777-1')
+        ->and($customer->beneficiaries)->toHaveCount(1);
+
+    // Replaying the identical batch (same op_id) must not duplicate the child rows.
+    $replay = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', $batch);
+    $replay->assertOk()->assertJsonPath('results.0.status', 'duplicate');
+
+    expect($customer->identifications()->count())->toBe(1)
+        ->and($customer->beneficiaries()->count())->toBe(1);
+});
+
 it('lets a branch manager approve and disburse a loan through the sync batch', function (): void {
     // This is the desktop hybrid-mode scenario: company_admin approves/
     // disburses locally, then the outcome is synced up for audit visibility.

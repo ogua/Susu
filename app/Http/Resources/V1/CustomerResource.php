@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\V1;
 
+use App\Enums\ClientType;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -27,6 +28,8 @@ class CustomerResource extends JsonResource
             'status' => $this->status,
             'branch_id' => $this->branch_id,
             'has_login' => $this->user_id !== null,
+            'client_type' => $this->client_type,
+            'business_name' => $this->client_type === ClientType::Business ? $this->business_name : null,
             'savings_accounts' => SavingsAccountResource::collection($this->whenLoaded('savingsAccounts')),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),

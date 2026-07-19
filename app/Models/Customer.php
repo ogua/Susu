@@ -3,6 +3,12 @@
 namespace App\Models;
 
 use App\Enums\AccountStatus;
+use App\Enums\BusinessIncomeLevel;
+use App\Enums\BusinessSector;
+use App\Enums\BusinessStructure;
+use App\Enums\ClientType;
+use App\Enums\MaritalStatus;
+use App\Enums\ResidencyStatus;
 use Database\Factories\CustomerFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -39,6 +45,50 @@ class Customer extends Model
         'status',
         'client_reference',
         'registered_by',
+        'client_type',
+        'external_id',
+        'place_of_birth',
+        'nationality',
+        'email',
+        'city_town',
+        'state_region',
+        'country',
+        'digital_address',
+        'latitude',
+        'longitude',
+        'marital_status',
+        'spouse_name',
+        'spouse_date_of_birth',
+        'spouse_occupation',
+        'has_past_loan',
+        'past_loan_institution',
+        'spouse_employer_name',
+        'spouse_employer_address',
+        'spouse_employer_town',
+        'spouse_employer_county',
+        'spouse_employer_region',
+        'religion',
+        'business_name',
+        'business_phone',
+        'business_tin',
+        'business_line',
+        'business_structure',
+        'business_start_date',
+        'business_income_level',
+        'business_address',
+        'business_town',
+        'business_county',
+        'business_region',
+        'business_latitude',
+        'business_longitude',
+        'tin',
+        'other_names',
+        'occupation',
+        'job_title',
+        'country_of_residence',
+        'residence_permit',
+        'residency_status',
+        'assigned_agent_id',
     ];
 
     /**
@@ -50,6 +100,19 @@ class Customer extends Model
             'date_of_birth' => 'date',
             'id_number' => 'encrypted',
             'status' => AccountStatus::class,
+            'client_type' => ClientType::class,
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
+            'marital_status' => MaritalStatus::class,
+            'spouse_date_of_birth' => 'date',
+            'has_past_loan' => 'boolean',
+            'business_structure' => BusinessStructure::class,
+            'business_line' => BusinessSector::class,
+            'business_start_date' => 'date',
+            'business_income_level' => BusinessIncomeLevel::class,
+            'business_latitude' => 'decimal:7',
+            'business_longitude' => 'decimal:7',
+            'residency_status' => ResidencyStatus::class,
         ];
     }
 
@@ -78,15 +141,36 @@ class Customer extends Model
         return $this->hasMany(SavingsAccount::class);
     }
 
+    public function identifications(): HasMany
+    {
+        return $this->hasMany(CustomerIdentification::class);
+    }
+
+    public function beneficiaries(): HasMany
+    {
+        return $this->hasMany(CustomerBeneficiary::class);
+    }
+
+    public function familyMembers(): HasMany
+    {
+        return $this->hasMany(CustomerFamilyMember::class);
+    }
+
+    public function assignedAgent(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_agent_id');
+    }
+
     public function fullName(): string
     {
         return trim($this->first_name.' '.$this->last_name);
     }
 
     /**
-     * Excludes id_number/id_photo_path/photo_path: logging them here would
-     * defeat kyc:purge-expired's redaction (AD-16) by leaving a copy in the
-     * audit trail.
+     * Excludes id_number/id_photo_path/photo_path and the KYC-retention-purged
+     * fields (tin/business_tin/religion/spouse cluster, see
+     * PurgeExpiredKycData): logging them here would defeat kyc:purge-expired's
+     * redaction (AD-16) by leaving a copy in the audit trail.
      */
     public function getActivitylogOptions(): LogOptions
     {
@@ -103,6 +187,33 @@ class Customer extends Model
                 'next_of_kin_relationship',
                 'address',
                 'status',
+                'client_type',
+                'external_id',
+                'nationality',
+                'email',
+                'city_town',
+                'state_region',
+                'country',
+                'digital_address',
+                'business_name',
+                'business_line',
+                'business_structure',
+                'business_start_date',
+                'business_phone',
+                'business_income_level',
+                'business_address',
+                'business_town',
+                'business_county',
+                'business_region',
+                'marital_status',
+                'has_past_loan',
+                'occupation',
+                'job_title',
+                'other_names',
+                'country_of_residence',
+                'residence_permit',
+                'residency_status',
+                'assigned_agent_id',
             ])
             ->logOnlyDirty()
             ->useLogName('customer')
