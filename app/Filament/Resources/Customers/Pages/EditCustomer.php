@@ -38,6 +38,11 @@ class EditCustomer extends EditRecord
             ->get(['id', 'name', 'relationship', 'contact_phone', 'occupation'])
             ->toArray();
 
+        // CustomerResource::getEloquentQuery() doesn't eager-load branch, so
+        // the disabled branch.name TextInput has nothing to hydrate from
+        // without this — it's display-only (dehydrated(false)).
+        $data['branch']['name'] = $record->branch?->name;
+
         return $data;
     }
 
