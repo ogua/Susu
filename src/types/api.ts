@@ -48,6 +48,8 @@ export interface ApiValidationError {
   errors: Record<string, string[]>;
 }
 
+export type ClientType = 'individual' | 'business';
+
 export interface Customer {
   id: string;
   customer_code: string;
@@ -59,6 +61,8 @@ export interface Customer {
   status: 'active' | 'dormant' | 'closed';
   branch_id: string;
   has_login: boolean;
+  client_type: ClientType;
+  business_name: string | null;
   savings_accounts?: SavingsAccount[];
   created_at: string;
   updated_at: string;

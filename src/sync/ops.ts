@@ -25,6 +25,7 @@ export async function enqueueCustomerRegistration(payload: {
   first_name: string;
   last_name: string;
   phone: string;
+  client_type?: 'individual' | 'business';
   gender?: string;
   date_of_birth?: string;
   id_type?: string;
@@ -33,6 +34,9 @@ export async function enqueueCustomerRegistration(payload: {
   next_of_kin_phone?: string;
   next_of_kin_relationship?: string;
   address?: string;
+  business_name?: string;
+  business_structure?: string;
+  business_start_date?: string;
 }): Promise<string> {
   return enqueue('customer.register', payload);
 }
