@@ -198,6 +198,7 @@ class CustomerServiceTest {
         hybridCustomer.setFirstName("Hybrid");
         hybridCustomer.setLastName("Customer");
         hybridCustomer.setPhone(uniquePhone());
+        hybridCustomer.setAssignedAgentId("agent-99");
         customers.register(hybridCustomer, "agent-1", null);
 
         assertEquals(before + 1, outbox.pendingCount());
@@ -206,6 +207,7 @@ class CustomerServiceTest {
         OutboxService.OutboxItem item = pending.get(pending.size() - 1);
         assertEquals("customer.register", item.opType());
         assertTrue(item.payload().contains("Hybrid"));
+        assertTrue(item.payload().contains("agent-99"));
 
         AppConfig.set("sync.enabled", "false");
     }

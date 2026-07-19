@@ -208,7 +208,8 @@ public class CustomerService {
                 .put("job_title", customer.getJobTitle())
                 .put("country_of_residence", customer.getCountryOfResidence())
                 .put("residence_permit", customer.getResidencePermit())
-                .put("residency_status", customer.getResidencyStatus());
+                .put("residency_status", customer.getResidencyStatus())
+                .put("assigned_agent_id", customer.getAssignedAgentId());
 
         if (!insertedIdentifications.isEmpty()) {
             JSONArray identificationsJson = new JSONArray();
