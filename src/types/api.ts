@@ -226,6 +226,62 @@ export interface LoanEligibility {
   reasons: string[];
 }
 
+export type GroupLoanStatus = LoanStatus;
+
+export interface LoanGroupMember {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  status: 'active' | 'left';
+  joined_at: string | null;
+}
+
+export interface LoanGroup {
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
+  members?: LoanGroupMember[];
+}
+
+export interface GroupLoanBorrower {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  share_principal: number;
+  share_principal_formatted: string;
+  share_outstanding: number;
+  share_outstanding_formatted: string;
+}
+
+export interface GroupLoan {
+  id: string;
+  loan_number: string;
+  loan_group_id: string;
+  loan_group?: { id: string; name: string };
+  loan_product?: { id: string; name: string };
+  principal_amount: number;
+  principal_amount_formatted: string;
+  interest_method: 'flat' | 'reducing_balance';
+  interest_rate_bps: number;
+  term_period_count: number;
+  repayment_frequency: 'weekly' | 'monthly';
+  total_interest: number;
+  total_repayable: number;
+  total_repayable_formatted: string;
+  outstanding_balance: number;
+  outstanding_balance_formatted: string;
+  member_count_at_disbursement: number | null;
+  status: GroupLoanStatus;
+  rejection_reason: string | null;
+  borrowers?: GroupLoanBorrower[];
+  installments?: LoanInstallment[];
+  applied_at: string | null;
+  approved_at: string | null;
+  disbursed_at: string | null;
+  closed_at: string | null;
+}
+
 export type GroupStatus = 'draft' | 'active' | 'completed';
 
 export type GroupRoundStatus = 'pending' | 'collecting' | 'completed';

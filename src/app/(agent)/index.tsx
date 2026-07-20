@@ -25,6 +25,7 @@ const NAV_TILES = [
   { label: 'Day Summary', href: '/(agent)/day-close' },
   { label: 'Loans', href: '/(agent)/loans' },
   { label: 'Susu Groups', href: '/(agent)/groups/index' },
+  { label: 'Group Loans', href: '/(agent)/group-loans/index' },
   { label: 'Sync Queue', href: '/(agent)/sync' },
 ] as const;
 
