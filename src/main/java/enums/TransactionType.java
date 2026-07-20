@@ -11,7 +11,9 @@ public enum TransactionType {
     REPAYMENT("repayment"),
     PENALTY("penalty"),
     GROUP_CONTRIBUTION("group_contribution"),
-    GROUP_PAYOUT("group_payout");
+    GROUP_PAYOUT("group_payout"),
+    GROUP_LOAN_DISBURSEMENT("group_loan_disbursement"),
+    GROUP_LOAN_REPAYMENT("group_loan_repayment");
 
     private final String value;
 

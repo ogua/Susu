@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.GroupLoansController">
+<VBox spacing="16" style="-fx-background-color: -ogua-bg;">
+    <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
+
+    <HBox alignment="CENTER_LEFT" spacing="10">
+        <Label styleClass="page-title" text="Group Loans"/>
+        <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
+    </HBox>
+
+    <VBox spacing="10" styleClass="card">
+        <Label styleClass="section-title" text="Apply for Group Loan"/>
+        <HBox alignment="CENTER_LEFT" spacing="8">
+            <ComboBox fx:id="loanGroupCombo" prefWidth="220" promptText="Loan group"/>
+            <ComboBox fx:id="productCombo" prefWidth="200" promptText="Loan product"/>
+            <TextField fx:id="amountField" promptText="Amount (GHS)" prefWidth="140"/>
+        </HBox>
+        <HBox alignment="CENTER_LEFT" spacing="8">
+            <TextField fx:id="notesField" promptText="Notes (optional)" HBox.hgrow="ALWAYS"/>
+        </HBox>
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Button onAction="#onSubmitApplication" styleClass="button-primary" text="Submit Application"/>
+            <Label fx:id="applyStatusLabel" styleClass="text-danger" wrapText="true"/>
+        </HBox>
+    </VBox>
+
+    <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label styleClass="section-title" text="All Group Loans"/>
+            <Button fx:id="approveButton" onAction="#onApprove" styleClass="button-secondary" text="Approve"/>
+            <Button fx:id="rejectButton" onAction="#onReject" styleClass="button-secondary" text="Reject"/>
+            <Button fx:id="disburseButton" onAction="#onDisburse" styleClass="button-secondary" text="Disburse"/>
+            <Button fx:id="repayButton" onAction="#onRecordRepayment" styleClass="button-secondary" text="Record Repayment"/>
+        </HBox>
+        <TableView fx:id="table" prefHeight="300" styleClass="table-view" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="loanNumberColumn" prefWidth="100" text="Loan #"/>
+                <TableColumn fx:id="loanGroupColumn" prefWidth="180" text="Loan Group"/>
+                <TableColumn fx:id="principalColumn" prefWidth="110" text="Principal"/>
+                <TableColumn fx:id="outstandingColumn" prefWidth="110" text="Outstanding"/>
+                <TableColumn fx:id="statusColumn" prefWidth="100" text="Status"/>
+            </columns>
+        </TableView>
+        <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
+    </VBox>
+
+    <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
+        <Label styleClass="section-title" text="Members &amp; Shares (Selected Group Loan)"/>
+        <TableView fx:id="borrowersTable" prefHeight="180" styleClass="table-view" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="borrowerNameColumn" prefWidth="200" text="Customer"/>
+                <TableColumn fx:id="shareColumn" prefWidth="130" text="Share"/>
+                <TableColumn fx:id="shareOutstandingColumn" prefWidth="150" text="Outstanding Share"/>
+            </columns>
+        </TableView>
+    </VBox>
+</VBox>
+</ScrollPane>

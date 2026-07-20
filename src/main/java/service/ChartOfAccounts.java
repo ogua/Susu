@@ -67,6 +67,17 @@ public class ChartOfAccounts {
                 LedgerAccountType.LIABILITY, "group", groupId, true);
     }
 
+    /**
+     * Principal + interest a loan group jointly owes on a disbursed group
+     * loan — an asset, same direction as loanReceivable(). Explicitly NOT
+     * the same direction as groupLiability() above, which is a liability for
+     * pooled susu savings.
+     */
+    public LedgerAccount groupLoanReceivable(String groupLoanId, String loanNumber) throws SQLException {
+        return firstOrCreate("GLN-" + loanNumber, "Group Loan " + loanNumber,
+                LedgerAccountType.ASSET, "group_loan", groupLoanId, true);
+    }
+
     private LedgerAccount firstOrCreate(String code, String name, LedgerAccountType type,
                                          String accountableType, String accountableId, boolean system)
             throws SQLException {

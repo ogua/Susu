@@ -38,6 +38,8 @@
                 <Button fx:id="navAccounts" maxWidth="Infinity" onAction="#showAccounts" styleClass="nav-button" text="Savings Accounts"/>
                 <Button fx:id="navLoans" maxWidth="Infinity" onAction="#showLoans" styleClass="nav-button" text="Loans"/>
                 <Button fx:id="navGroups" maxWidth="Infinity" onAction="#showGroups" styleClass="nav-button" text="Susu Groups"/>
+                <Button fx:id="navLoanGroups" maxWidth="Infinity" onAction="#showLoanGroups" styleClass="nav-button" text="Loan Groups"/>
+                <Button fx:id="navGroupLoans" maxWidth="Infinity" onAction="#showGroupLoans" styleClass="nav-button" text="Group Loans"/>
                 <Button fx:id="navDayClose" maxWidth="Infinity" onAction="#showDayClose" styleClass="nav-button" text="Day Summary"/>
                 <Button fx:id="navPayments" maxWidth="Infinity" onAction="#showPayments" styleClass="nav-button" text="Mobile Money Payments"/>
                 <Label styleClass="caption" text="REPORTS">
