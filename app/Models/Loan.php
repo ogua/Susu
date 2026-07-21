@@ -48,6 +48,9 @@ class Loan extends Model
         'approved_at',
         'disbursed_at',
         'closed_at',
+        'written_off_at',
+        'write_off_reason',
+        'write_off_amount',
     ];
 
     /**
@@ -72,6 +75,8 @@ class Loan extends Model
             'approved_at' => 'datetime',
             'disbursed_at' => 'datetime',
             'closed_at' => 'datetime',
+            'written_off_at' => 'datetime',
+            'write_off_amount' => 'integer',
         ];
     }
 

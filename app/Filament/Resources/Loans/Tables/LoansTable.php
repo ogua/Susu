@@ -6,6 +6,7 @@ use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
 use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Actions\Loans\RejectLoanAction;
+use App\Actions\Loans\WriteOffLoanAction;
 use App\Models\Loan;
 use App\Services\Loans\EligibilityService;
 use App\Support\Money;
@@ -103,6 +104,20 @@ class LoansTable
                             Filament::auth()->user(),
                         );
                         Notification::make()->title('Repayment recorded')->success()->send();
+                    }),
+                Action::make('writeOff')
+                    ->label('Write off')
+                    ->color('danger')
+                    ->visible(fn (Loan $record): bool => $record->status->value === 'disbursed')
+                    ->authorize('writeOff')
+                    ->requiresConfirmation()
+                    ->modalDescription('This permanently closes the loan and recognizes the remaining balance as a loss. This cannot be undone.')
+                    ->schema([
+                        Textarea::make('reason')->required(),
+                    ])
+                    ->action(function (array $data, Loan $record): void {
+                        app(WriteOffLoanAction::class)->execute($record, Filament::auth()->user(), $data['reason']);
+                        Notification::make()->title('Loan written off')->success()->send();
                     }),
             ])
             ->defaultSort('applied_at', 'desc');

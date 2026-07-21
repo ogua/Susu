@@ -5,6 +5,7 @@ use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
 use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Actions\Loans\RejectLoanAction;
+use App\Actions\Loans\WriteOffLoanAction;
 use App\Enums\LoanStatus;
 use App\Models\Branch;
 use App\Models\Customer;
@@ -208,4 +209,49 @@ it('applies a repayment to penalty before interest and principal, keeping the le
 
     // Debits must still equal credits even with a third (penalty) income line.
     $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('writes off a disbursed loan, zeroing the receivable and recognizing a bad debt expense', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+    $outstandingBeforeWriteOff = $disbursed->outstanding_balance;
+    // The receivable only ever holds principal (interest is recognized as
+    // income solely when collected) — since nothing was repaid, this equals
+    // principal_amount, less than the full outstanding_balance (which
+    // includes unrealized interest).
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+
+    $writtenOff = app(WriteOffLoanAction::class)->execute($disbursed->fresh(), $this->manager, 'Borrower absconded');
+
+    expect($writtenOff->status)->toBe(LoanStatus::WrittenOff)
+        ->and($writtenOff->outstanding_balance)->toBe(0)
+        ->and($writtenOff->write_off_amount)->toBe($outstandingBeforeWriteOff) // full business loss, incl. interest
+        ->and($writtenOff->write_off_reason)->toBe('Borrower absconded')
+        ->and($writtenOff->written_off_at)->not->toBeNull();
+
+    $receivable = $writtenOff->receivableAccount;
+    expect($receivable->refresh()->balance)->toBe(0);
+
+    $badDebtExpense = app(ChartOfAccounts::class)->badDebtExpense($this->branch->company);
+    expect($badDebtExpense->refresh()->balance)->toBe($principalOutstanding);
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('refuses to write off a loan that is not disbursed', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+
+    expect(fn () => app(WriteOffLoanAction::class)->execute($loan, $this->manager, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('refuses to write off a loan with no outstanding balance', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+    app(RecordLoanRepaymentAction::class)->execute($disbursed, $disbursed->outstanding_balance, $this->manager);
+
+    expect(fn () => app(WriteOffLoanAction::class)->execute($disbursed->fresh(), $this->manager, 'no'))
+        ->toThrow(ValidationException::class);
 });

@@ -92,3 +92,34 @@ it('denies field agents from approving a loan', function (): void {
     expect(LoanResource::canViewAny())->toBeTrue() // agents can view/apply
         ->and($this->agent->can('approve', $loan))->toBeFalse();
 });
+
+it('lets a branch manager write off a disbursed loan from the table action', function (): void {
+    $loan = app(ApplyForLoanAction::class)->execute($this->agent, $this->customer, $this->loanProduct, 300_00);
+
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    livewire(ListLoans::class)
+        ->callAction(TestAction::make('approve')->table($loan))
+        ->assertNotified();
+
+    livewire(ListLoans::class)
+        ->callAction(TestAction::make('disburse')->table($loan->fresh()))
+        ->assertNotified();
+
+    livewire(ListLoans::class)
+        ->callAction(TestAction::make('writeOff')->table($loan->fresh()), data: ['reason' => 'Borrower absconded'])
+        ->assertNotified();
+
+    expect($loan->refresh()->status)->toBe(LoanStatus::WrittenOff)
+        ->and($loan->write_off_reason)->toBe('Borrower absconded');
+});
+
+it('denies field agents from writing off a loan', function (): void {
+    $loan = app(ApplyForLoanAction::class)->execute($this->agent, $this->customer, $this->loanProduct, 300_00);
+
+    $this->actingAs($this->agent);
+    expect($this->agent->can('writeOff', $loan))->toBeFalse();
+});

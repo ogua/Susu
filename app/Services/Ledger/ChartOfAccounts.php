@@ -185,6 +185,23 @@ class ChartOfAccounts
         );
     }
 
+    /**
+     * The remaining balance of a loan/group loan a manager has declared
+     * uncollectible — recognized as a loss, not a form of income. Shared
+     * across all loans of a company, same shape as loanInterestIncome() etc.
+     */
+    public function badDebtExpense(Company $company): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $company->id, 'code' => '5100-BADDEBT'],
+            [
+                'name' => 'Bad Debt Expense',
+                'type' => LedgerAccountType::Expense,
+                'is_system' => true,
+            ],
+        );
+    }
+
     /** Withheld from a target-savings withdrawal made before the account's matures_at date. */
     public function earlyWithdrawalPenaltyIncome(Company $company): LedgerAccount
     {

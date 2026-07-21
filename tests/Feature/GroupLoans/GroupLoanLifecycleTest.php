@@ -5,6 +5,7 @@ use App\Actions\GroupLoans\ApproveGroupLoanAction;
 use App\Actions\GroupLoans\DisburseGroupLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\RejectGroupLoanAction;
+use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Actions\LoanGroups\AddLoanGroupMemberAction;
 use App\Enums\GroupLoanStatus;
 use App\Models\Branch;
@@ -184,5 +185,56 @@ it('rejects a repayment larger than the shared outstanding balance', function ()
     $borrower = $disbursed->borrowers()->orderBy('created_at')->first();
 
     expect(fn () => app(RecordGroupLoanRepaymentAction::class)->execute($borrower, $disbursed->outstanding_balance + 1, $this->manager))
+        ->toThrow(ValidationException::class);
+});
+
+it('writes off a disbursed group loan, zeroing the shared receivable, without touching any borrower share', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+    $outstandingBeforeWriteOff = $disbursed->outstanding_balance;
+    // The receivable only ever holds principal (interest is recognized as
+    // income solely when collected) — since nothing was repaid, this equals
+    // principal_amount, less than the full outstanding_balance.
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+    $borrowerSharesBefore = $disbursed->borrowers()->pluck('share_outstanding', 'id');
+
+    $writtenOff = app(WriteOffGroupLoanAction::class)->execute($disbursed->fresh(), $this->manager, 'Group disbanded');
+
+    expect($writtenOff->status)->toBe(GroupLoanStatus::WrittenOff)
+        ->and($writtenOff->outstanding_balance)->toBe(0)
+        ->and($writtenOff->write_off_amount)->toBe($outstandingBeforeWriteOff) // full business loss, incl. interest
+        ->and($writtenOff->write_off_reason)->toBe('Group disbanded')
+        ->and($writtenOff->written_off_at)->not->toBeNull();
+
+    $receivable = $writtenOff->receivableAccount;
+    expect($receivable->refresh()->balance)->toBe(0);
+
+    $badDebtExpense = app(ChartOfAccounts::class)->badDebtExpense($this->branch->company);
+    expect($badDebtExpense->refresh()->balance)->toBe($principalOutstanding);
+
+    // Accountability history is untouched — only the group's shared balance moved.
+    foreach ($writtenOff->borrowers()->get() as $borrower) {
+        expect($borrower->share_outstanding)->toBe($borrowerSharesBefore[$borrower->id]);
+    }
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('refuses to write off a group loan that is not disbursed', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+
+    expect(fn () => app(WriteOffGroupLoanAction::class)->execute($groupLoan, $this->manager, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('refuses to write off a group loan with no outstanding balance', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+    $borrower = $disbursed->borrowers()->orderBy('created_at')->first();
+    app(RecordGroupLoanRepaymentAction::class)->execute($borrower, $disbursed->outstanding_balance, $this->manager);
+
+    expect(fn () => app(WriteOffGroupLoanAction::class)->execute($disbursed->fresh(), $this->manager, 'no'))
         ->toThrow(ValidationException::class);
 });

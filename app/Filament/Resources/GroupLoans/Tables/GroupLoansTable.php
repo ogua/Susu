@@ -6,6 +6,7 @@ use App\Actions\GroupLoans\ApproveGroupLoanAction;
 use App\Actions\GroupLoans\DisburseGroupLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\RejectGroupLoanAction;
+use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Models\GroupLoan;
 use App\Models\GroupLoanBorrower;
 use App\Support\Money;
@@ -95,6 +96,20 @@ class GroupLoansTable
                             Filament::auth()->user(),
                         );
                         Notification::make()->title('Repayment recorded')->success()->send();
+                    }),
+                Action::make('writeOff')
+                    ->label('Write off')
+                    ->color('danger')
+                    ->visible(fn (GroupLoan $record): bool => $record->status->value === 'disbursed')
+                    ->authorize('writeOff')
+                    ->requiresConfirmation()
+                    ->modalDescription('This permanently closes the group loan and recognizes the remaining balance as a loss. This cannot be undone.')
+                    ->schema([
+                        Textarea::make('reason')->required(),
+                    ])
+                    ->action(function (array $data, GroupLoan $record): void {
+                        app(WriteOffGroupLoanAction::class)->execute($record, Filament::auth()->user(), $data['reason']);
+                        Notification::make()->title('Group loan written off')->success()->send();
                     }),
             ])
             ->defaultSort('applied_at', 'desc');

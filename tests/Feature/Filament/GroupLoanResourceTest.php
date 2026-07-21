@@ -105,3 +105,34 @@ it('denies field agents from approving a group loan', function (): void {
     $this->actingAs($this->agent);
     expect($this->agent->can('approve', $groupLoan))->toBeFalse();
 });
+
+it('lets a branch manager write off a disbursed group loan from the table action', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('approve')->table($groupLoan))
+        ->assertNotified();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('disburse')->table($groupLoan->fresh()))
+        ->assertNotified();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('writeOff')->table($groupLoan->fresh()), data: ['reason' => 'Group disbanded'])
+        ->assertNotified();
+
+    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::WrittenOff)
+        ->and($groupLoan->write_off_reason)->toBe('Group disbanded');
+});
+
+it('denies field agents from writing off a group loan', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+
+    $this->actingAs($this->agent);
+    expect($this->agent->can('writeOff', $groupLoan))->toBeFalse();
+});

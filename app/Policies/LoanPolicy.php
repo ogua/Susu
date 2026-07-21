@@ -42,4 +42,9 @@ class LoanPolicy
         return $user->company_id === $loan->company_id
             && $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
     }
+
+    public function writeOff(User $user, Loan $loan): bool
+    {
+        return $user->company_id === $loan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
+    }
 }

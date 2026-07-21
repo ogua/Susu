@@ -42,4 +42,9 @@ class GroupLoanPolicy
         return $user->company_id === $groupLoan->company_id
             && $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
     }
+
+    public function writeOff(User $user, GroupLoan $groupLoan): bool
+    {
+        return $user->company_id === $groupLoan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
+    }
 }
