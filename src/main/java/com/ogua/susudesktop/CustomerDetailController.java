@@ -13,32 +13,107 @@ import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TitledPane;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import models.Customer;
+import models.CustomerBeneficiary;
+import models.CustomerFamilyMember;
+import models.CustomerIdentification;
 import models.LedgerAccount;
 import models.LedgerEntryRow;
 import models.SavingsAccount;
+import service.CustomerService;
 import service.ReportService;
 import service.SavingsAccountService;
 import support.Money;
 
 /**
- * Customer 360 view — profile, savings accounts, and per-account transaction
- * history (the desktop mirror of the web admin's customer page with its
- * accounts/entries relation managers). Opened as a modal from the Customers
- * screen.
+ * Customer 360 view — profile, full eBanQR-depth KYC details, savings
+ * accounts, and per-account transaction history (the desktop mirror of the
+ * web admin's customer edit page). Opened as a modal from the Customers
+ * screen. Read-only — KYC data can only be edited via the registration
+ * screen or the web admin.
  */
 public class CustomerDetailController {
 
     @FXML private Label nameLabel;
     @FXML private Label codeLabel;
+    @FXML private Label clientTypeValueLabel;
     @FXML private Label phoneLabel;
     @FXML private Label statusValueLabel;
     @FXML private Label kinLabel;
     @FXML private Label addressLabel;
+
+    @FXML private Label otherNamesValueLabel;
+    @FXML private Label genderValueLabel;
+    @FXML private Label dobValueLabel;
+    @FXML private Label placeOfBirthValueLabel;
+    @FXML private Label nationalityValueLabel;
+    @FXML private Label emailValueLabel;
+    @FXML private Label externalIdValueLabel;
+    @FXML private Label occupationValueLabel;
+    @FXML private Label jobTitleValueLabel;
+    @FXML private Label tinValueLabel;
+    @FXML private Label countryOfResidenceValueLabel;
+    @FXML private Label residencePermitValueLabel;
+    @FXML private Label residencyStatusValueLabel;
+
+    @FXML private Label cityTownValueLabel;
+    @FXML private Label stateRegionValueLabel;
+    @FXML private Label countryValueLabel;
+    @FXML private Label digitalAddressValueLabel;
+    @FXML private Label latitudeValueLabel;
+    @FXML private Label longitudeValueLabel;
+
+    @FXML private Label maritalStatusValueLabel;
+    @FXML private Label spouseNameValueLabel;
+    @FXML private Label spouseDobValueLabel;
+    @FXML private Label spouseOccupationValueLabel;
+    @FXML private Label hasPastLoanValueLabel;
+    @FXML private Label pastLoanInstitutionValueLabel;
+    @FXML private Label spouseEmployerNameValueLabel;
+    @FXML private Label spouseEmployerAddressValueLabel;
+    @FXML private Label spouseEmployerTownValueLabel;
+    @FXML private Label spouseEmployerCountyValueLabel;
+    @FXML private Label spouseEmployerRegionValueLabel;
+    @FXML private Label religionValueLabel;
+
+    @FXML private TitledPane businessPane;
+    @FXML private Label businessNameValueLabel;
+    @FXML private Label businessStructureValueLabel;
+    @FXML private Label businessLineValueLabel;
+    @FXML private Label businessStartDateValueLabel;
+    @FXML private Label businessPhoneValueLabel;
+    @FXML private Label businessTinValueLabel;
+    @FXML private Label businessIncomeLevelValueLabel;
+    @FXML private Label businessAddressValueLabel;
+    @FXML private Label businessTownValueLabel;
+    @FXML private Label businessCountyValueLabel;
+    @FXML private Label businessRegionValueLabel;
+    @FXML private Label businessLatitudeValueLabel;
+    @FXML private Label businessLongitudeValueLabel;
+
+    @FXML private TableView<CustomerIdentification> identificationsTable;
+    @FXML private TableColumn<CustomerIdentification, String> idTypeColumn;
+    @FXML private TableColumn<CustomerIdentification, String> idNumberColumn;
+    @FXML private TableColumn<CustomerIdentification, String> idIssueDateColumn;
+    @FXML private TableColumn<CustomerIdentification, String> idExpiryDateColumn;
+    @FXML private TableColumn<CustomerIdentification, String> idPrimaryColumn;
+
+    @FXML private TableView<CustomerBeneficiary> beneficiariesTable;
+    @FXML private TableColumn<CustomerBeneficiary, String> beneficiaryNameColumn;
+    @FXML private TableColumn<CustomerBeneficiary, String> beneficiaryRelationshipColumn;
+    @FXML private TableColumn<CustomerBeneficiary, String> beneficiaryAmountColumn;
+    @FXML private TableColumn<CustomerBeneficiary, String> beneficiaryPhoneColumn;
+
+    @FXML private TableView<CustomerFamilyMember> familyMembersTable;
+    @FXML private TableColumn<CustomerFamilyMember, String> familyMemberNameColumn;
+    @FXML private TableColumn<CustomerFamilyMember, String> familyMemberRelationshipColumn;
+    @FXML private TableColumn<CustomerFamilyMember, String> familyMemberPhoneColumn;
+    @FXML private TableColumn<CustomerFamilyMember, String> familyMemberOccupationColumn;
 
     @FXML private TableView<SavingsAccount> accountsTable;
     @FXML private TableColumn<SavingsAccount, String> accountNumberColumn;
@@ -57,6 +132,7 @@ public class CustomerDetailController {
     @FXML private Label statusLabel;
 
     private final SavingsAccountService accountService = new SavingsAccountService();
+    private final CustomerService customerService = new CustomerService();
     private final ReportService reportService = new ReportService();
 
     public static void show(Window owner, Customer customer) {
@@ -71,7 +147,7 @@ public class CustomerDetailController {
             stage.setTitle("Customer — " + customer.fullName());
             stage.initModality(Modality.WINDOW_MODAL);
             stage.initOwner(owner);
-            Scene scene = new Scene(view, 860, 620);
+            Scene scene = new Scene(view, 920, 720);
             scene.getStylesheets().addAll(owner.getScene().getStylesheets());
             stage.setScene(scene);
             stage.show();
@@ -104,18 +180,93 @@ public class CustomerDetailController {
 
         accountsTable.getSelectionModel().selectedItemProperty()
                 .addListener((obs, old, selected) -> loadTransactions(selected));
+
+        idTypeColumn.setCellValueFactory(new PropertyValueFactory<>("idType"));
+        idNumberColumn.setCellValueFactory(new PropertyValueFactory<>("idNumber"));
+        idIssueDateColumn.setCellValueFactory(new PropertyValueFactory<>("issueDate"));
+        idExpiryDateColumn.setCellValueFactory(new PropertyValueFactory<>("expiryDate"));
+        idPrimaryColumn.setCellValueFactory(data -> new SimpleStringProperty(
+                Boolean.TRUE.equals(data.getValue().getIsPrimary()) ? "Yes" : ""));
+
+        beneficiaryNameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
+        beneficiaryRelationshipColumn.setCellValueFactory(new PropertyValueFactory<>("relationship"));
+        beneficiaryAmountColumn.setCellValueFactory(data -> new SimpleStringProperty(
+                Money.format(data.getValue().getAmountOfLegacy())));
+        beneficiaryPhoneColumn.setCellValueFactory(new PropertyValueFactory<>("phone"));
+
+        familyMemberNameColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
+        familyMemberRelationshipColumn.setCellValueFactory(new PropertyValueFactory<>("relationship"));
+        familyMemberPhoneColumn.setCellValueFactory(new PropertyValueFactory<>("contactPhone"));
+        familyMemberOccupationColumn.setCellValueFactory(new PropertyValueFactory<>("occupation"));
     }
 
     private void load(Customer customer) {
         nameLabel.setText(customer.fullName());
         codeLabel.setText(customer.getCustomerCode());
-        phoneLabel.setText(customer.getPhone());
+        clientTypeValueLabel.setText(customer.getClientType() != null
+                ? "(" + customer.getClientType() + ")" : "");
         statusValueLabel.setText(customer.getStatus().value());
+        phoneLabel.setText(customer.getPhone());
         kinLabel.setText(customer.getNextOfKinName() != null
                 ? customer.getNextOfKinName()
                 + (customer.getNextOfKinPhone() != null ? " (" + customer.getNextOfKinPhone() + ")" : "")
                 : "—");
         addressLabel.setText(customer.getAddress() != null ? customer.getAddress() : "—");
+
+        otherNamesValueLabel.setText(text(customer.getOtherNames()));
+        genderValueLabel.setText(text(customer.getGender()));
+        dobValueLabel.setText(text(customer.getDateOfBirth()));
+        placeOfBirthValueLabel.setText(text(customer.getPlaceOfBirth()));
+        nationalityValueLabel.setText(text(customer.getNationality()));
+        emailValueLabel.setText(text(customer.getEmail()));
+        externalIdValueLabel.setText(text(customer.getExternalId()));
+        occupationValueLabel.setText(text(customer.getOccupation()));
+        jobTitleValueLabel.setText(text(customer.getJobTitle()));
+        tinValueLabel.setText(text(customer.getTin()));
+        countryOfResidenceValueLabel.setText(text(customer.getCountryOfResidence()));
+        residencePermitValueLabel.setText(text(customer.getResidencePermit()));
+        residencyStatusValueLabel.setText(text(customer.getResidencyStatus()));
+
+        cityTownValueLabel.setText(text(customer.getCityTown()));
+        stateRegionValueLabel.setText(text(customer.getStateRegion()));
+        countryValueLabel.setText(text(customer.getCountry()));
+        digitalAddressValueLabel.setText(text(customer.getDigitalAddress()));
+        latitudeValueLabel.setText(text(customer.getLatitude()));
+        longitudeValueLabel.setText(text(customer.getLongitude()));
+
+        maritalStatusValueLabel.setText(text(customer.getMaritalStatus()));
+        spouseNameValueLabel.setText(text(customer.getSpouseName()));
+        spouseDobValueLabel.setText(text(customer.getSpouseDateOfBirth()));
+        spouseOccupationValueLabel.setText(text(customer.getSpouseOccupation()));
+        hasPastLoanValueLabel.setText(text(customer.getHasPastLoan()));
+        pastLoanInstitutionValueLabel.setText(text(customer.getPastLoanInstitution()));
+        spouseEmployerNameValueLabel.setText(text(customer.getSpouseEmployerName()));
+        spouseEmployerAddressValueLabel.setText(text(customer.getSpouseEmployerAddress()));
+        spouseEmployerTownValueLabel.setText(text(customer.getSpouseEmployerTown()));
+        spouseEmployerCountyValueLabel.setText(text(customer.getSpouseEmployerCounty()));
+        spouseEmployerRegionValueLabel.setText(text(customer.getSpouseEmployerRegion()));
+        religionValueLabel.setText(text(customer.getReligion()));
+
+        boolean isBusiness = "business".equals(customer.getClientType());
+        businessPane.setVisible(isBusiness);
+        businessPane.setManaged(isBusiness);
+        if (isBusiness) {
+            businessNameValueLabel.setText(text(customer.getBusinessName()));
+            businessStructureValueLabel.setText(text(customer.getBusinessStructure()));
+            businessLineValueLabel.setText(text(customer.getBusinessLine()));
+            businessStartDateValueLabel.setText(text(customer.getBusinessStartDate()));
+            businessPhoneValueLabel.setText(text(customer.getBusinessPhone()));
+            businessTinValueLabel.setText(text(customer.getBusinessTin()));
+            businessIncomeLevelValueLabel.setText(text(customer.getBusinessIncomeLevel()));
+            businessAddressValueLabel.setText(text(customer.getBusinessAddress()));
+            businessTownValueLabel.setText(text(customer.getBusinessTown()));
+            businessCountyValueLabel.setText(text(customer.getBusinessCounty()));
+            businessRegionValueLabel.setText(text(customer.getBusinessRegion()));
+            businessLatitudeValueLabel.setText(text(customer.getBusinessLatitude()));
+            businessLongitudeValueLabel.setText(text(customer.getBusinessLongitude()));
+        }
+
+        loadKycChildRecords(customer);
 
         Task<List<SavingsAccount>> task = new Task<>() {
             @Override
@@ -132,6 +283,33 @@ public class CustomerDetailController {
         task.setOnFailed(event -> statusLabel.setText(
                 "Could not load accounts: " + task.getException().getMessage()));
         new Thread(task, "customer-detail-accounts").start();
+    }
+
+    private void loadKycChildRecords(Customer customer) {
+        Task<CustomerKycChildRecords> task = new Task<>() {
+            @Override
+            protected CustomerKycChildRecords call() throws Exception {
+                return new CustomerKycChildRecords(
+                        customerService.findIdentifications(customer.getId()),
+                        customerService.findBeneficiaries(customer.getId()),
+                        customerService.findFamilyMembers(customer.getId()));
+            }
+        };
+        task.setOnSucceeded(event -> {
+            CustomerKycChildRecords records = task.getValue();
+            identificationsTable.setItems(FXCollections.observableArrayList(records.identifications()));
+            beneficiariesTable.setItems(FXCollections.observableArrayList(records.beneficiaries()));
+            familyMembersTable.setItems(FXCollections.observableArrayList(records.familyMembers()));
+        });
+        task.setOnFailed(event -> statusLabel.setText(
+                "Could not load KYC details: " + task.getException().getMessage()));
+        new Thread(task, "customer-detail-kyc").start();
+    }
+
+    private record CustomerKycChildRecords(
+            List<CustomerIdentification> identifications,
+            List<CustomerBeneficiary> beneficiaries,
+            List<CustomerFamilyMember> familyMembers) {
     }
 
     private void loadTransactions(SavingsAccount account) {
@@ -162,5 +340,17 @@ public class CustomerDetailController {
         task.setOnFailed(event -> statusLabel.setText(
                 "Could not load transactions: " + task.getException().getMessage()));
         new Thread(task, "customer-detail-transactions").start();
+    }
+
+    private String text(String value) {
+        return value == null || value.isBlank() ? "—" : value;
+    }
+
+    private String text(Double value) {
+        return value == null ? "—" : String.valueOf(value);
+    }
+
+    private String text(Boolean value) {
+        return value == null ? "—" : (value ? "Yes" : "No");
     }
 }

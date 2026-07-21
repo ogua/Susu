@@ -1,22 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Accordion?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.SplitPane?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TitledPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.CustomerDetailController">
+<ScrollPane fitToWidth="true" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.CustomerDetailController">
+<VBox spacing="16" style="-fx-background-color: -ogua-bg;">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <VBox spacing="6" styleClass="card">
         <HBox alignment="CENTER_LEFT" spacing="10">
             <Label fx:id="nameLabel" styleClass="page-title"/>
             <Label fx:id="codeLabel" styleClass="text-muted"/>
+            <Label fx:id="clientTypeValueLabel" styleClass="text-muted"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="statusValueLabel" styleClass="section-title"/>
         </HBox>
@@ -36,10 +43,221 @@
         </HBox>
     </VBox>
 
-    <SplitPane dividerPositions="0.38" orientation="VERTICAL" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;">
+    <VBox spacing="8" styleClass="card">
+        <Label styleClass="section-title" text="KYC Details"/>
+        <Accordion fx:id="kycAccordion">
+            <panes>
+
+                <TitledPane text="Identity &amp; Contact">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="150" prefWidth="150"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label styleClass="text-muted" text="Other names" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <Label fx:id="otherNamesValueLabel" wrapText="true" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Gender" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <Label fx:id="genderValueLabel" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Date of birth" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <Label fx:id="dobValueLabel" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Place of birth" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <Label fx:id="placeOfBirthValueLabel" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Nationality" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <Label fx:id="nationalityValueLabel" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Email" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <Label fx:id="emailValueLabel" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="External ID" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                        <Label fx:id="externalIdValueLabel" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Occupation" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                        <Label fx:id="occupationValueLabel" GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Job title" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                        <Label fx:id="jobTitleValueLabel" GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="TIN" GridPane.rowIndex="9" GridPane.columnIndex="0"/>
+                        <Label fx:id="tinValueLabel" GridPane.rowIndex="9" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Country of residence" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
+                        <Label fx:id="countryOfResidenceValueLabel" GridPane.rowIndex="10" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Residence permit" GridPane.rowIndex="11" GridPane.columnIndex="0"/>
+                        <Label fx:id="residencePermitValueLabel" GridPane.rowIndex="11" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Residency status" GridPane.rowIndex="12" GridPane.columnIndex="0"/>
+                        <Label fx:id="residencyStatusValueLabel" GridPane.rowIndex="12" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane text="Address &amp; Location">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="150" prefWidth="150"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label styleClass="text-muted" text="City/Town" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <Label fx:id="cityTownValueLabel" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="State/Region" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <Label fx:id="stateRegionValueLabel" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Country" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <Label fx:id="countryValueLabel" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Digital address" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <Label fx:id="digitalAddressValueLabel" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Latitude" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <Label fx:id="latitudeValueLabel" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Longitude" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <Label fx:id="longitudeValueLabel" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane text="Marital &amp; Family">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="180" prefWidth="180"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label styleClass="text-muted" text="Marital status" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <Label fx:id="maritalStatusValueLabel" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse name" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseNameValueLabel" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse date of birth" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseDobValueLabel" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse occupation" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseOccupationValueLabel" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Past loan by client/spouse?" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <Label fx:id="hasPastLoanValueLabel" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Institution of past loan" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <Label fx:id="pastLoanInstitutionValueLabel" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse employer name" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseEmployerNameValueLabel" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse employer address" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseEmployerAddressValueLabel" wrapText="true" GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse employer town" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseEmployerTownValueLabel" GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse employer county" GridPane.rowIndex="9" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseEmployerCountyValueLabel" GridPane.rowIndex="9" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Spouse employer region" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
+                        <Label fx:id="spouseEmployerRegionValueLabel" GridPane.rowIndex="10" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Religion" GridPane.rowIndex="11" GridPane.columnIndex="0"/>
+                        <Label fx:id="religionValueLabel" GridPane.rowIndex="11" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane fx:id="businessPane" text="Business Profile">
+                    <GridPane hgap="8" vgap="8">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="150" prefWidth="150"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label styleClass="text-muted" text="Business name" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessNameValueLabel" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business constitution" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessStructureValueLabel" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Main business line" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessLineValueLabel" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business start date" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessStartDateValueLabel" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business phone" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessPhoneValueLabel" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business TIN" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessTinValueLabel" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business income level" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessIncomeLevelValueLabel" GridPane.rowIndex="6" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business address" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessAddressValueLabel" wrapText="true" GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business town" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessTownValueLabel" GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business county" GridPane.rowIndex="9" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessCountyValueLabel" GridPane.rowIndex="9" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business region" GridPane.rowIndex="10" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessRegionValueLabel" GridPane.rowIndex="10" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business latitude" GridPane.rowIndex="11" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessLatitudeValueLabel" GridPane.rowIndex="11" GridPane.columnIndex="1"/>
+
+                        <Label styleClass="text-muted" text="Business longitude" GridPane.rowIndex="12" GridPane.columnIndex="0"/>
+                        <Label fx:id="businessLongitudeValueLabel" GridPane.rowIndex="12" GridPane.columnIndex="1"/>
+                    </GridPane>
+                </TitledPane>
+
+                <TitledPane text="Identifications">
+                    <TableView fx:id="identificationsTable" prefHeight="140" styleClass="table-view">
+                        <columns>
+                            <TableColumn fx:id="idTypeColumn" prefWidth="110" text="ID Type"/>
+                            <TableColumn fx:id="idNumberColumn" prefWidth="130" text="ID Number"/>
+                            <TableColumn fx:id="idIssueDateColumn" prefWidth="90" text="Issued"/>
+                            <TableColumn fx:id="idExpiryDateColumn" prefWidth="90" text="Expires"/>
+                            <TableColumn fx:id="idPrimaryColumn" prefWidth="70" text="Primary"/>
+                        </columns>
+                    </TableView>
+                </TitledPane>
+
+                <TitledPane text="Beneficiaries">
+                    <TableView fx:id="beneficiariesTable" prefHeight="140" styleClass="table-view">
+                        <columns>
+                            <TableColumn fx:id="beneficiaryNameColumn" prefWidth="150" text="Name"/>
+                            <TableColumn fx:id="beneficiaryRelationshipColumn" prefWidth="110" text="Relationship"/>
+                            <TableColumn fx:id="beneficiaryAmountColumn" prefWidth="110" text="Legacy (GHS)"/>
+                            <TableColumn fx:id="beneficiaryPhoneColumn" prefWidth="110" text="Phone"/>
+                        </columns>
+                    </TableView>
+                </TitledPane>
+
+                <TitledPane text="Family Members">
+                    <TableView fx:id="familyMembersTable" prefHeight="140" styleClass="table-view">
+                        <columns>
+                            <TableColumn fx:id="familyMemberNameColumn" prefWidth="150" text="Name"/>
+                            <TableColumn fx:id="familyMemberRelationshipColumn" prefWidth="130" text="Relationship"/>
+                            <TableColumn fx:id="familyMemberPhoneColumn" prefWidth="120" text="Phone"/>
+                            <TableColumn fx:id="familyMemberOccupationColumn" prefWidth="120" text="Occupation"/>
+                        </columns>
+                    </TableView>
+                </TitledPane>
+
+            </panes>
+        </Accordion>
+    </VBox>
+
+    <SplitPane dividerPositions="0.4" orientation="VERTICAL" prefHeight="480" style="-fx-background-color: transparent;">
         <VBox spacing="8" styleClass="card">
             <Label styleClass="section-title" text="Savings Accounts"/>
-            <TableView fx:id="accountsTable" VBox.vgrow="ALWAYS">
+            <TableView fx:id="accountsTable" styleClass="table-view" VBox.vgrow="ALWAYS">
                 <columns>
                     <TableColumn fx:id="accountNumberColumn" prefWidth="180" text="Account #"/>
                     <TableColumn fx:id="accountStatusColumn" prefWidth="100" text="Status"/>
@@ -51,7 +269,7 @@
 
         <VBox spacing="8" styleClass="card">
             <Label fx:id="transactionsTitleLabel" styleClass="section-title" text="Transactions"/>
-            <TableView fx:id="transactionsTable" VBox.vgrow="ALWAYS">
+            <TableView fx:id="transactionsTable" styleClass="table-view" VBox.vgrow="ALWAYS">
                 <columns>
                     <TableColumn fx:id="txnDateColumn" prefWidth="150" text="Date"/>
                     <TableColumn fx:id="txnTypeColumn" prefWidth="110" text="Type"/>
@@ -65,3 +283,4 @@
         </VBox>
     </SplitPane>
 </VBox>
+</ScrollPane>
