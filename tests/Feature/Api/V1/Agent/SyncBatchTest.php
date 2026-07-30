@@ -397,6 +397,71 @@ it('rejects loan restructure/top-up ops from a field agent', function (): void {
     expect($disbursed->refresh()->status)->toBe(LoanStatus::Disbursed);
 });
 
+it('lets a branch manager write off a loan through the sync batch', function (): void {
+    $manager = User::factory()->branchManager($this->branch)->create();
+
+    $product = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'min_amount' => 100_00,
+        'max_amount' => 1_000_00,
+    ]);
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $product,
+        requestedAmount: 300_00,
+    );
+    app(ApproveLoanAction::class)->execute($loan, $manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $manager);
+
+    $response = $this->actingAs($manager, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'loan.write_off',
+            'payload' => ['loan_id' => $disbursed->id, 'reason' => 'Borrower absconded'],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('results.0.status', 'applied')
+        ->assertJsonPath('results.0.result.status', 'written_off');
+
+    expect($disbursed->refresh()->status)->toBe(LoanStatus::WrittenOff);
+});
+
+it('rejects a loan write-off op from a field agent', function (): void {
+    $manager = User::factory()->branchManager($this->branch)->create();
+
+    $product = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'min_amount' => 100_00,
+        'max_amount' => 1_000_00,
+    ]);
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $product,
+        requestedAmount: 300_00,
+    );
+    app(ApproveLoanAction::class)->execute($loan, $manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $manager);
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'loan.write_off',
+            'payload' => ['loan_id' => $disbursed->id, 'reason' => 'no'],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
+    expect($disbursed->refresh()->status)->toBe(LoanStatus::Disbursed);
+});
+
 it('lets a field agent record a group contribution through the sync batch', function (): void {
     $group = Group::factory()->create([
         'company_id' => $this->branch->company_id,

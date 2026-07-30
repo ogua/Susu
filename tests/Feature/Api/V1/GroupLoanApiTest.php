@@ -204,3 +204,42 @@ it('rejects group loan restructure/top-up ops from a field agent', function (): 
     $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
     expect($disbursed->fresh()->status->value)->toBe('disbursed');
 });
+
+it('lets a branch manager write off a group loan through the sync batch', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->product, 1000_00);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+
+    $response = $this->actingAs($this->manager, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'group_loan.write_off',
+            'payload' => ['group_loan_id' => $disbursed->id, 'reason' => 'Group disbanded'],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('results.0.status', 'applied')
+        ->assertJsonPath('results.0.result.status', 'written_off');
+
+    expect($disbursed->fresh()->status->value)->toBe('written_off');
+});
+
+it('rejects a group loan write-off op from a field agent', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->product, 1000_00);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'group_loan.write_off',
+            'payload' => ['group_loan_id' => $disbursed->id, 'reason' => 'no'],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
+    expect($disbursed->fresh()->status->value)->toBe('disbursed');
+});

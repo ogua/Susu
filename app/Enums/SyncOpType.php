@@ -24,6 +24,8 @@ enum SyncOpType: string
     case TopUpLoan = 'loan.top_up';
     case RestructureGroupLoan = 'group_loan.restructure';
     case TopUpGroupLoan = 'group_loan.top_up';
+    case WriteOffLoan = 'loan.write_off';
+    case WriteOffGroupLoan = 'group_loan.write_off';
 
     /**
      * Op types each role may push through /sync/batch.

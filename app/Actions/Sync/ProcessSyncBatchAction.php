@@ -12,6 +12,7 @@ use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\RejectGroupLoanAction;
 use App\Actions\GroupLoans\RestructureGroupLoanAction;
 use App\Actions\GroupLoans\TopUpGroupLoanAction;
+use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Actions\Groups\RecordGroupContributionAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
@@ -20,6 +21,7 @@ use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Actions\Loans\RejectLoanAction;
 use App\Actions\Loans\RestructureLoanAction;
 use App\Actions\Loans\TopUpLoanAction;
+use App\Actions\Loans\WriteOffLoanAction;
 use App\Actions\Savings\OpenSavingsAccountAction;
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
@@ -44,6 +46,8 @@ use App\Http\Requests\Api\V1\StoreSavingsAccountRequest;
 use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
 use App\Http\Requests\Api\V1\TopUpGroupLoanRequest;
 use App\Http\Requests\Api\V1\TopUpLoanRequest;
+use App\Http\Requests\Api\V1\WriteOffGroupLoanRequest;
+use App\Http\Requests\Api\V1\WriteOffLoanRequest;
 use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\GroupLoanBorrower;
@@ -89,6 +93,8 @@ class ProcessSyncBatchAction
         private TopUpLoanAction $topUpLoan,
         private RestructureGroupLoanAction $restructureGroupLoan,
         private TopUpGroupLoanAction $topUpGroupLoan,
+        private WriteOffLoanAction $writeOffLoan,
+        private WriteOffGroupLoanAction $writeOffGroupLoan,
     ) {}
 
     /**
@@ -176,6 +182,8 @@ class ProcessSyncBatchAction
             SyncOpType::TopUpLoan => $this->applyTopUpLoan($actor, $payload, $op['op_id']),
             SyncOpType::RestructureGroupLoan => $this->applyRestructureGroupLoan($actor, $payload, $op['op_id']),
             SyncOpType::TopUpGroupLoan => $this->applyTopUpGroupLoan($actor, $payload, $op['op_id']),
+            SyncOpType::WriteOffLoan => $this->applyWriteOffLoan($actor, $payload),
+            SyncOpType::WriteOffGroupLoan => $this->applyWriteOffGroupLoan($actor, $payload),
         };
     }
 
@@ -206,6 +214,8 @@ class ProcessSyncBatchAction
             SyncOpType::TopUpLoan => TopUpLoanRequest::payloadRules(),
             SyncOpType::RestructureGroupLoan => RestructureGroupLoanRequest::payloadRules(),
             SyncOpType::TopUpGroupLoan => TopUpGroupLoanRequest::payloadRules(),
+            SyncOpType::WriteOffLoan => WriteOffLoanRequest::payloadRules(),
+            SyncOpType::WriteOffGroupLoan => WriteOffGroupLoanRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -572,6 +582,30 @@ class ProcessSyncBatchAction
         );
 
         return ['group_loan_id' => $newGroupLoan->id, 'loan_number' => $newGroupLoan->loan_number, 'status' => $newGroupLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyWriteOffLoan(User $actor, array $payload): array
+    {
+        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->writeOffLoan->execute($loan, $actor, $payload['reason']);
+
+        return ['loan_id' => $loan->id, 'status' => $loan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyWriteOffGroupLoan(User $actor, array $payload): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->writeOffGroupLoan->execute($groupLoan, $actor, $payload['reason']);
+
+        return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value];
     }
 
     /**
