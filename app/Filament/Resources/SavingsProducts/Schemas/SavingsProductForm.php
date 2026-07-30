@@ -24,9 +24,13 @@ class SavingsProductForm
                     ->live()
                     ->required(),
                 TextInput::make('contribution_amount')
-                    ->label('Daily contribution (GHS)')
+                    ->label(fn (Get $get): string => match ($get('type')) {
+                        SavingsProductType::FixedDeposit->value => 'Principal amount (GHS)',
+                        default => 'Daily contribution (GHS)',
+                    })
                     ->numeric()
-                    ->required()
+                    ->required(fn (Get $get): bool => $get('type') !== SavingsProductType::Shares->value)
+                    ->visible(fn (Get $get): bool => $get('type') !== SavingsProductType::Shares->value)
                     ->formatStateUsing(fn (?int $state): ?float => $state === null ? null : $state / 100)
                     ->dehydrateStateUsing(fn (?float $state): int => (int) round(($state ?? 0) * 100)),
                 TextInput::make('cycle_length_days')
@@ -56,6 +60,19 @@ class SavingsProductForm
                     ->default(0)
                     ->visible(fn (Get $get): bool => $get('type') === SavingsProductType::Target->value)
                     ->helperText('Basis points of the withdrawn amount (100 = 1%), charged before the target matures.'),
+                TextInput::make('interest_rate_bps')
+                    ->label('Annual interest rate')
+                    ->numeric()
+                    ->default(0)
+                    ->visible(fn (Get $get): bool => $get('type') === SavingsProductType::FixedDeposit->value)
+                    ->helperText('Basis points per annum (100 = 1%), prorated by term and paid into the balance at maturity.'),
+                TextInput::make('par_value')
+                    ->label('Par value per share (GHS)')
+                    ->numeric()
+                    ->required(fn (Get $get): bool => $get('type') === SavingsProductType::Shares->value)
+                    ->visible(fn (Get $get): bool => $get('type') === SavingsProductType::Shares->value)
+                    ->formatStateUsing(fn (?int $state): ?float => $state === null ? null : $state / 100)
+                    ->dehydrateStateUsing(fn (?float $state): ?int => $state === null ? null : (int) round($state * 100)),
                 Toggle::make('is_active')->default(true),
             ]);
     }

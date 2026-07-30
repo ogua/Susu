@@ -55,8 +55,8 @@ class SavingsAccountForm
                     ->disabledOn('edit'),
                 DatePicker::make('matures_at')
                     ->label('Maturity date')
-                    ->required(fn (Get $get): bool => self::isTargetProduct($get))
-                    ->visible(fn (Get $get): bool => self::isTargetProduct($get))
+                    ->required(fn (Get $get): bool => self::isTargetOrFixedDepositProduct($get))
+                    ->visible(fn (Get $get): bool => self::isTargetOrFixedDepositProduct($get))
                     ->minDate(now()->addDay())
                     ->disabledOn('edit'),
                 Select::make('status')
@@ -72,5 +72,13 @@ class SavingsAccountForm
 
         return $productId !== null
             && SavingsProduct::find($productId)?->type === SavingsProductType::Target;
+    }
+
+    private static function isTargetOrFixedDepositProduct(Get $get): bool
+    {
+        $productId = $get('savings_product_id');
+        $type = $productId !== null ? SavingsProduct::find($productId)?->type : null;
+
+        return in_array($type, [SavingsProductType::Target, SavingsProductType::FixedDeposit], true);
     }
 }

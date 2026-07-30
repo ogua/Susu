@@ -71,4 +71,22 @@ class SavingsProductFactory extends Factory
             'early_withdrawal_penalty_bps' => $penaltyBps,
         ]);
     }
+
+    public function fixedDeposit(int $rateBps = 1200): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'name' => 'Fixed Deposit '.fake()->unique()->numberBetween(1, 999),
+            'type' => SavingsProductType::FixedDeposit,
+            'interest_rate_bps' => $rateBps,
+        ]);
+    }
+
+    public function shares(int $parValue = 10_00): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'name' => 'Share Capital '.fake()->unique()->numberBetween(1, 999),
+            'type' => SavingsProductType::Shares,
+            'par_value' => $parValue,
+        ]);
+    }
 }

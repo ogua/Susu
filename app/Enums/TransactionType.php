@@ -23,4 +23,6 @@ enum TransactionType: string
     case LoanTopUp = 'loan_top_up';
     case GroupLoanRestructure = 'group_loan_restructure';
     case GroupLoanTopUp = 'group_loan_top_up';
+    case SavingsInterest = 'savings_interest';
+    case SharesPurchase = 'shares_purchase';
 }

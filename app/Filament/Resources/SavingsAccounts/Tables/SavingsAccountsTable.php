@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\SavingsAccounts\Tables;
 
+use App\Actions\Savings\BuySharesAction;
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
+use App\Enums\SavingsProductType;
 use App\Models\SavingsAccount;
 use App\Support\Money;
 use Filament\Actions\Action;
@@ -38,6 +40,10 @@ class SavingsAccountsTable
                         : null)
                     ->placeholder('—'),
                 TextColumn::make('matures_at')->label('Matures')->date()->placeholder('—'),
+                TextColumn::make('share_count')
+                    ->label('Shares')
+                    ->state(fn (SavingsAccount $record): ?int => $record->product->type === SavingsProductType::Shares ? $record->share_count : null)
+                    ->placeholder('—'),
                 TextColumn::make('status')->badge(),
             ])
             ->filters([
@@ -50,6 +56,7 @@ class SavingsAccountsTable
             ->recordActions([
                 Action::make('recordCollection')
                     ->label('Record Collection')
+                    ->visible(fn (SavingsAccount $record): bool => $record->product->type !== SavingsProductType::Shares)
                     ->schema([
                         TextInput::make('amount')
                             ->label('Amount (GHS)')
@@ -65,6 +72,25 @@ class SavingsAccountsTable
                         );
 
                         Notification::make()->title('Collection recorded')->success()->send();
+                    }),
+                Action::make('buyShares')
+                    ->label('Buy Shares')
+                    ->visible(fn (SavingsAccount $record): bool => $record->product->type === SavingsProductType::Shares)
+                    ->schema([
+                        TextInput::make('shares')
+                            ->numeric()
+                            ->required()
+                            ->minValue(1),
+                    ])
+                    ->action(function (array $data, SavingsAccount $record): void {
+                        app(BuySharesAction::class)->execute(
+                            agent: Filament::auth()->user(),
+                            account: $record,
+                            shares: (int) $data['shares'],
+                            origin: ClientOrigin::Web,
+                        );
+
+                        Notification::make()->title('Shares purchased')->success()->send();
                     }),
                 Action::make('statement')
                     ->label('Statement')

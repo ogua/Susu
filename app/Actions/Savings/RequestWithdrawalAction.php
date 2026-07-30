@@ -17,6 +17,9 @@ class RequestWithdrawalAction
         if ($account->status !== AccountStatus::Active) {
             throw ValidationException::withMessages(['account' => 'Withdrawals are only possible on active accounts.']);
         }
+        if ($account->product->type === SavingsProductType::FixedDeposit && $account->matured_at === null) {
+            throw ValidationException::withMessages(['account' => 'Fixed deposits cannot be withdrawn before their maturity date.']);
+        }
 
         $held = (int) $account->withdrawalRequests()
             ->whereIn('status', [WithdrawalStatus::Pending, WithdrawalStatus::Approved])

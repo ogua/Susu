@@ -214,4 +214,20 @@ class ChartOfAccounts
             ],
         );
     }
+
+    /**
+     * Recognized when a fixed-deposit account's interest is credited into
+     * its balance at maturity — a cost to the company, not income.
+     */
+    public function savingsInterestExpense(Company $company): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $company->id, 'code' => '5200-SAVINT'],
+            [
+                'name' => 'Savings Interest Expense',
+                'type' => LedgerAccountType::Expense,
+                'is_system' => true,
+            ],
+        );
+    }
 }

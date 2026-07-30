@@ -29,6 +29,8 @@ class SavingsProduct extends Model
         'commission_type',
         'commission_value',
         'early_withdrawal_penalty_bps',
+        'interest_rate_bps',
+        'par_value',
         'is_active',
     ];
 
@@ -44,6 +46,8 @@ class SavingsProduct extends Model
             'commission_type' => CommissionType::class,
             'commission_value' => 'integer',
             'early_withdrawal_penalty_bps' => 'integer',
+            'interest_rate_bps' => 'integer',
+            'par_value' => 'integer',
             'is_active' => 'boolean',
         ];
     }

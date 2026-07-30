@@ -46,6 +46,11 @@ class OpenSavingsAccountAction
                 'target_amount' => 'Target savings accounts require a target amount and maturity date.',
             ]);
         }
+        if ($product->type === SavingsProductType::FixedDeposit && $maturesAt === null) {
+            throw ValidationException::withMessages([
+                'matures_at' => 'Fixed deposit accounts require a maturity date.',
+            ]);
+        }
 
         return DB::transaction(function () use ($customer, $product, $agent, $contributionAmount, $clientReference, $targetAmount, $maturesAt): SavingsAccount {
             $account = new SavingsAccount([
@@ -61,7 +66,9 @@ class OpenSavingsAccountAction
                 'contributions_this_cycle' => 0,
                 'balance' => 0,
                 'target_amount' => $product->type === SavingsProductType::Target ? $targetAmount : null,
-                'matures_at' => $product->type === SavingsProductType::Target ? $maturesAt : null,
+                'matures_at' => in_array($product->type, [SavingsProductType::Target, SavingsProductType::FixedDeposit], true) ? $maturesAt : null,
+                'interest_rate_bps' => $product->type === SavingsProductType::FixedDeposit ? $product->interest_rate_bps : null,
+                'share_count' => 0,
                 'status' => 'active',
                 'opened_at' => now(),
                 'client_reference' => $clientReference,
