@@ -53,6 +53,7 @@ public class GroupLoansController {
     @FXML private Button repayButton;
     @FXML private Button restructureButton;
     @FXML private Button topUpButton;
+    @FXML private Button writeOffButton;
 
     @FXML private TableView<GroupLoanBorrower> borrowersTable;
     @FXML private TableColumn<GroupLoanBorrower, String> borrowerNameColumn;
@@ -119,6 +120,8 @@ public class GroupLoansController {
         restructureButton.setManaged(canDecide);
         topUpButton.setVisible(canDecide);
         topUpButton.setManaged(canDecide);
+        writeOffButton.setVisible(canDecide);
+        writeOffButton.setManaged(canDecide);
 
         loadLoanGroups();
         loadProducts();
@@ -143,6 +146,7 @@ public class GroupLoansController {
         repayButton.setDisable(selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
         restructureButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
         topUpButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
+        writeOffButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
     }
 
     private void loadLoanGroups() {
@@ -424,6 +428,29 @@ public class GroupLoansController {
         runGroupLoanAction("Topping up…",
                 () -> groupLoanService.topUp(selected.getId(), toppedUpBy, input.get().amount(), input.get().reason()),
                 "Could not top up group loan");
+    }
+
+    @FXML
+    private void onWriteOff() {
+        GroupLoan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Write Off Group Loan");
+        dialog.setHeaderText(selected.getLoanNumber() + " — this permanently closes the group loan and recognizes"
+                + " the remaining balance as a loss. This cannot be undone.");
+        dialog.setContentText("Reason:");
+        Optional<String> input = dialog.showAndWait();
+        if (input.isEmpty() || input.get().isBlank()) {
+            return;
+        }
+
+        String writtenOffBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runGroupLoanAction("Writing off…",
+                () -> groupLoanService.writeOff(selected.getId(), writtenOffBy, input.get().trim()),
+                "Could not write off group loan");
     }
 
     /** TextInputDialog only supports one field — restructuring needs both a new product and a reason. */

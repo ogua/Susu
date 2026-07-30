@@ -61,6 +61,14 @@ public class ChartOfAccounts {
         return firstOrCreate("4400-LNPEN", "Loan Penalty Income", LedgerAccountType.INCOME, null, null, true);
     }
 
+    /**
+     * The remaining balance of a loan/group loan a manager has declared
+     * uncollectible — recognized as a loss, not a form of income.
+     */
+    public LedgerAccount badDebtExpense() throws SQLException {
+        return firstOrCreate("5100-BADDEBT", "Bad Debt Expense", LedgerAccountType.EXPENSE, null, null, true);
+    }
+
     /** Pooled but not-yet-paid-out contributions for one susu group's current round. */
     public LedgerAccount groupLiability(String groupId, String groupCode) throws SQLException {
         return firstOrCreate("GRP-" + groupCode, "Group " + groupCode,

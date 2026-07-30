@@ -48,6 +48,10 @@ public class GroupLoan {
     private String refinanceReason;
     private Long refinanceAmount;
 
+    private Instant writtenOffAt;
+    private String writeOffReason;
+    private Long writeOffAmount;
+
     /** Populated by list/detail queries via a join; not always present. */
     private LoanGroup loanGroup;
     private LoanProduct product;
@@ -152,6 +156,15 @@ public class GroupLoan {
 
     public Long getRefinanceAmount() { return refinanceAmount; }
     public void setRefinanceAmount(Long refinanceAmount) { this.refinanceAmount = refinanceAmount; }
+
+    public Instant getWrittenOffAt() { return writtenOffAt; }
+    public void setWrittenOffAt(Instant writtenOffAt) { this.writtenOffAt = writtenOffAt; }
+
+    public String getWriteOffReason() { return writeOffReason; }
+    public void setWriteOffReason(String writeOffReason) { this.writeOffReason = writeOffReason; }
+
+    public Long getWriteOffAmount() { return writeOffAmount; }
+    public void setWriteOffAmount(Long writeOffAmount) { this.writeOffAmount = writeOffAmount; }
 
     public LoanGroup getLoanGroup() { return loanGroup; }
     public void setLoanGroup(LoanGroup loanGroup) { this.loanGroup = loanGroup; }

@@ -391,6 +391,60 @@ public class LoanService {
         return findById(newLoanId);
     }
 
+    /**
+     * Declares a disbursed loan's remaining balance uncollectible — a
+     * single atomic transition, mirroring the backend's WriteOffLoanAction.
+     * The ledger entry only moves the loan's remaining PRINCIPAL (Dr bad
+     * debt expense / Cr loan receivable) since the receivable account only
+     * ever holds principal — interest/penalty are recognized as income
+     * solely when actually collected, per {@link #recordRepayment}.
+     * write_off_amount still snapshots the full outstanding_balance for
+     * reporting even though only the principal ever touched the ledger.
+     * Hybrid mode pushes the outcome through the outbox afterward — no
+     * client_reference needed here, unlike restructure/topUp, since this op
+     * only closes an existing loan rather than minting a new one.
+     */
+    public Loan writeOff(String loanId, String writtenOffBy, String reason) throws SQLException {
+        Loan loan = requireStatus(loanId, LoanStatus.DISBURSED, "written off");
+        if (loan.getOutstandingBalance() <= 0) {
+            throw new IllegalStateException("This loan has no outstanding balance to write off.");
+        }
+
+        long writeOffAmount = loan.getOutstandingBalance();
+        long principalOutstanding = accountBalance(loan.getReceivableAccountId());
+
+        if (principalOutstanding > 0) {
+            List<LedgerLine> lines = new ArrayList<>();
+            lines.add(LedgerLine.debit(chart.badDebtExpense().getId(), principalOutstanding));
+            lines.add(LedgerLine.credit(loan.getReceivableAccountId(), principalOutstanding));
+
+            ledger.post(EntryRequest.of(TransactionType.LOAN_WRITE_OFF, lines)
+                    .paymentMethod(PaymentMethod.CASH)
+                    .recordedBy(writtenOffBy)
+                    .recordedAt(Instant.now())
+                    .description("Loan write-off " + loan.getLoanNumber()));
+        }
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE loans SET status = ?, outstanding_balance = 0, written_off_at = ?, write_off_reason = ?,"
+                     + " write_off_amount = ?, approved_by = ?, updated_at = ? WHERE id = ?")) {
+            String now = Instant.now().toString();
+            ps.setString(1, LoanStatus.WRITTEN_OFF.value());
+            ps.setString(2, now);
+            ps.setString(3, reason);
+            ps.setLong(4, writeOffAmount);
+            ps.setString(5, writtenOffBy);
+            ps.setString(6, now);
+            ps.setString(7, loanId);
+            ps.executeUpdate();
+        }
+
+        outbox.enqueueIfHybrid("loan.write_off", new JSONObject().put("loan_id", loanId).put("reason", reason));
+
+        return findById(loanId);
+    }
+
     private void insertRefinancedLoan(Connection conn, String newLoanId, String customerId, String loanProductId,
                                        String savingsAccountId, String agentId, String approvedBy,
                                        String receivableAccountId, String loanNumber, long principalAmount,
@@ -841,6 +895,11 @@ public class LoanService {
         loan.setRefinanceReason(rs.getString("refinance_reason"));
         long refinanceAmount = rs.getLong("refinance_amount");
         loan.setRefinanceAmount(rs.wasNull() ? null : refinanceAmount);
+        String writtenOffAt = rs.getString("written_off_at");
+        loan.setWrittenOffAt(writtenOffAt != null ? Instant.parse(writtenOffAt) : null);
+        loan.setWriteOffReason(rs.getString("write_off_reason"));
+        long writeOffAmount = rs.getLong("write_off_amount");
+        loan.setWriteOffAmount(rs.wasNull() ? null : writeOffAmount);
         return loan;
     }
 

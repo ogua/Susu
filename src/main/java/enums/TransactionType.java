@@ -17,7 +17,9 @@ public enum TransactionType {
     LOAN_RESTRUCTURE("loan_restructure"),
     LOAN_TOP_UP("loan_top_up"),
     GROUP_LOAN_RESTRUCTURE("group_loan_restructure"),
-    GROUP_LOAN_TOP_UP("group_loan_top_up");
+    GROUP_LOAN_TOP_UP("group_loan_top_up"),
+    LOAN_WRITE_OFF("loan_write_off"),
+    GROUP_LOAN_WRITE_OFF("group_loan_write_off");
 
     private final String value;
 

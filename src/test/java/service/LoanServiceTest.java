@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -320,6 +321,70 @@ class LoanServiceTest {
         loans.flagArrears();
 
         assertThrows(IllegalStateException.class, () -> loans.topUp(disbursed.getId(), MANAGER_ID, 100_00, "no"));
+    }
+
+    @Test
+    void writesOffADisbursedLoanZeroingTheReceivableAndRecognizingABadDebtExpense() throws Exception {
+        Customer customer = newCustomer("Efua", "Danso");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 300_00, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
+        long outstandingBeforeWriteOff = disbursed.getOutstandingBalance();
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+
+        Loan writtenOff = loans.writeOff(disbursed.getId(), MANAGER_ID, "Borrower absconded");
+
+        assertEquals(LoanStatus.WRITTEN_OFF, writtenOff.getStatus());
+        assertEquals(0, writtenOff.getOutstandingBalance());
+        assertEquals(outstandingBeforeWriteOff, writtenOff.getWriteOffAmount());
+        assertEquals("Borrower absconded", writtenOff.getWriteOffReason());
+        assertNotNull(writtenOff.getWrittenOffAt());
+        assertEquals(0, findLedgerAccountById(writtenOff.getReceivableAccountId()).getBalance());
+
+        var badDebtExpense = findLedgerAccountByCode("5100-BADDEBT");
+        assertEquals(principalOutstanding, badDebtExpense.getBalance());
+    }
+
+    @Test
+    void refusesToWriteOffALoanThatIsNotDisbursed() throws Exception {
+        Customer customer = newCustomer("Kwame", "Adjei");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 200_00, null, null, null, null, null);
+
+        assertThrows(IllegalStateException.class, () -> loans.writeOff(applied.getId(), MANAGER_ID, "no"));
+    }
+
+    @Test
+    void refusesToWriteOffALoanWithNoOutstandingBalance() throws Exception {
+        Customer customer = newCustomer("Adjoa", "Nyarko");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 200_00, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
+        loans.recordRepayment(disbursed.getId(), disbursed.getOutstandingBalance(), MANAGER_ID, null, null);
+
+        assertThrows(IllegalStateException.class, () -> loans.writeOff(disbursed.getId(), MANAGER_ID, "no"));
+    }
+
+    private models.LedgerAccount findLedgerAccountByCode(String code) throws Exception {
+        try (var conn = DatabaseConnection.getConnection();
+             var ps = conn.prepareStatement("SELECT * FROM ledger_accounts WHERE code = ?")) {
+            ps.setString(1, code);
+            try (var rs = ps.executeQuery()) {
+                rs.next();
+                models.LedgerAccount account = new models.LedgerAccount();
+                account.setId(rs.getString("id"));
+                account.setCode(rs.getString("code"));
+                account.setName(rs.getString("name"));
+                account.setType(enums.LedgerAccountType.fromValue(rs.getString("type")));
+                account.setBalance(rs.getLong("balance"));
+                return account;
+            }
+        }
     }
 
     private models.LedgerAccount findLedgerAccountById(String id) throws Exception {

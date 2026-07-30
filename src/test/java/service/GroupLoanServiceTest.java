@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -368,6 +369,77 @@ class GroupLoanServiceTest {
         markMembersLeft(members.get(1).getId(), members.get(2).getId());
 
         assertThrows(IllegalStateException.class, () -> groupLoans.topUp(disbursed.getId(), MANAGER_ID, 100_00, "no"));
+    }
+
+    @Test
+    void writesOffADisbursedGroupLoanZeroingTheSharedReceivableWithoutTouchingAnyBorrowerShare() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-207");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 900_00, null, null);
+        groupLoans.approve(applied.getId(), MANAGER_ID);
+        GroupLoan disbursed = groupLoans.disburse(applied.getId(), MANAGER_ID);
+        long outstandingBeforeWriteOff = disbursed.getOutstandingBalance();
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+        List<GroupLoanBorrower> borrowersBefore = disbursed.getBorrowers();
+
+        GroupLoan writtenOff = groupLoans.writeOff(disbursed.getId(), MANAGER_ID, "Group disbanded");
+
+        assertEquals(GroupLoanStatus.WRITTEN_OFF, writtenOff.getStatus());
+        assertEquals(0, writtenOff.getOutstandingBalance());
+        assertEquals(outstandingBeforeWriteOff, writtenOff.getWriteOffAmount());
+        assertEquals("Group disbanded", writtenOff.getWriteOffReason());
+        assertNotNull(writtenOff.getWrittenOffAt());
+        assertEquals(0, findLedgerAccountById(writtenOff.getReceivableAccountId()).getBalance());
+
+        var badDebtExpense = findLedgerAccountByCode("5100-BADDEBT");
+        assertEquals(principalOutstanding, badDebtExpense.getBalance());
+
+        List<GroupLoanBorrower> borrowersAfter = groupLoans.findBorrowers(disbursed.getId());
+        for (int i = 0; i < borrowersBefore.size(); i++) {
+            assertEquals(borrowersBefore.get(i).getShareOutstanding(), borrowersAfter.get(i).getShareOutstanding());
+        }
+    }
+
+    @Test
+    void refusesToWriteOffAGroupLoanThatIsNotDisbursed() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-208");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 500_00, null, null);
+
+        assertThrows(IllegalStateException.class, () -> groupLoans.writeOff(applied.getId(), MANAGER_ID, "no"));
+    }
+
+    @Test
+    void refusesToWriteOffAGroupLoanWithNoOutstandingBalance() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-209");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 900_00, null, null);
+        groupLoans.approve(applied.getId(), MANAGER_ID);
+        GroupLoan disbursed = groupLoans.disburse(applied.getId(), MANAGER_ID);
+        GroupLoanBorrower borrower = disbursed.getBorrowers().get(0);
+        groupLoans.recordRepayment(borrower.getId(), disbursed.getOutstandingBalance(), MANAGER_ID, null, null);
+
+        assertThrows(IllegalStateException.class, () -> groupLoans.writeOff(disbursed.getId(), MANAGER_ID, "no"));
+    }
+
+    private models.LedgerAccount findLedgerAccountByCode(String code) throws Exception {
+        try (var conn = DatabaseConnection.getConnection();
+             var ps = conn.prepareStatement("SELECT * FROM ledger_accounts WHERE code = ?")) {
+            ps.setString(1, code);
+            try (var rs = ps.executeQuery()) {
+                rs.next();
+                models.LedgerAccount account = new models.LedgerAccount();
+                account.setId(rs.getString("id"));
+                account.setCode(rs.getString("code"));
+                account.setName(rs.getString("name"));
+                account.setType(enums.LedgerAccountType.fromValue(rs.getString("type")));
+                account.setBalance(rs.getLong("balance"));
+                return account;
+            }
+        }
     }
 
     /**

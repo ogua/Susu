@@ -428,6 +428,59 @@ public class GroupLoanService {
         return findById(newGroupLoanId);
     }
 
+    /**
+     * Declares a disbursed group loan's remaining shared balance
+     * uncollectible — mirrors {@link LoanService#writeOff} exactly,
+     * including crediting the receivable by its actual current balance
+     * (principal only) rather than the full outstanding_balance. Unlike a
+     * repayment, this does NOT touch any individual GroupLoanBorrower's
+     * share_outstanding: those remain as accountability history of what
+     * each member still owed at the moment the group's joint debt was
+     * written off.
+     */
+    public GroupLoan writeOff(String groupLoanId, String writtenOffBy, String reason) throws SQLException {
+        GroupLoan groupLoan = requireStatus(groupLoanId, GroupLoanStatus.DISBURSED, "written off");
+        if (groupLoan.getOutstandingBalance() <= 0) {
+            throw new IllegalStateException("This group loan has no outstanding balance to write off.");
+        }
+
+        long writeOffAmount = groupLoan.getOutstandingBalance();
+        long principalOutstanding = accountBalance(groupLoan.getReceivableAccountId());
+
+        if (principalOutstanding > 0) {
+            List<LedgerLine> lines = new ArrayList<>();
+            lines.add(LedgerLine.debit(chart.badDebtExpense().getId(), principalOutstanding));
+            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), principalOutstanding));
+
+            ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_WRITE_OFF, lines)
+                    .paymentMethod(PaymentMethod.CASH)
+                    .recordedBy(writtenOffBy)
+                    .recordedAt(Instant.now())
+                    .description("Group loan write-off " + groupLoan.getLoanNumber()));
+        }
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE group_loans SET status = ?, outstanding_balance = 0, written_off_at = ?,"
+                     + " write_off_reason = ?, write_off_amount = ?, approved_by = ?, updated_at = ? WHERE id = ?")) {
+            String now = Instant.now().toString();
+            ps.setString(1, GroupLoanStatus.WRITTEN_OFF.value());
+            ps.setString(2, now);
+            ps.setString(3, reason);
+            ps.setLong(4, writeOffAmount);
+            ps.setString(5, writtenOffBy);
+            ps.setString(6, now);
+            ps.setString(7, groupLoanId);
+            ps.executeUpdate();
+        }
+
+        outbox.enqueueIfHybrid("group_loan.write_off", new JSONObject()
+                .put("group_loan_id", groupLoanId)
+                .put("reason", reason));
+
+        return findById(groupLoanId);
+    }
+
     private List<LoanGroupMember> activeMembers(String loanGroupId) throws SQLException {
         return loanGroupService.findMembers(loanGroupId).stream()
                 .filter(m -> "active".equals(m.getStatus()))
@@ -927,6 +980,11 @@ public class GroupLoanService {
         groupLoan.setRefinanceReason(rs.getString("refinance_reason"));
         long refinanceAmount = rs.getLong("refinance_amount");
         groupLoan.setRefinanceAmount(rs.wasNull() ? null : refinanceAmount);
+        String writtenOffAt = rs.getString("written_off_at");
+        groupLoan.setWrittenOffAt(writtenOffAt != null ? Instant.parse(writtenOffAt) : null);
+        groupLoan.setWriteOffReason(rs.getString("write_off_reason"));
+        long writeOffAmount = rs.getLong("write_off_amount");
+        groupLoan.setWriteOffAmount(rs.wasNull() ? null : writeOffAmount);
         return groupLoan;
     }
 

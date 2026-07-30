@@ -59,6 +59,7 @@ public class LoansController {
     @FXML private Button repayButton;
     @FXML private Button restructureButton;
     @FXML private Button topUpButton;
+    @FXML private Button writeOffButton;
 
     private final CustomerService customerService = new CustomerService();
     private final SavingsAccountService accountService = new SavingsAccountService();
@@ -114,6 +115,8 @@ public class LoansController {
         restructureButton.setManaged(canDecide);
         topUpButton.setVisible(canDecide);
         topUpButton.setManaged(canDecide);
+        writeOffButton.setVisible(canDecide);
+        writeOffButton.setManaged(canDecide);
 
         loadProducts();
         refresh();
@@ -137,6 +140,7 @@ public class LoansController {
         repayButton.setDisable(selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
         restructureButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
         topUpButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
+        writeOffButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
     }
 
     private void loadProducts() {
@@ -408,6 +412,29 @@ public class LoansController {
         runLoanAction("Topping up…",
                 () -> loanService.topUp(selected.getId(), toppedUpBy, input.get().amount(), input.get().reason()),
                 "Could not top up loan");
+    }
+
+    @FXML
+    private void onWriteOff() {
+        Loan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Write Off Loan");
+        dialog.setHeaderText(selected.getLoanNumber() + " — this permanently closes the loan and recognizes the"
+                + " remaining balance as a loss. This cannot be undone.");
+        dialog.setContentText("Reason:");
+        Optional<String> input = dialog.showAndWait();
+        if (input.isEmpty() || input.get().isBlank()) {
+            return;
+        }
+
+        String writtenOffBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runLoanAction("Writing off…",
+                () -> loanService.writeOff(selected.getId(), writtenOffBy, input.get().trim()),
+                "Could not write off loan");
     }
 
     /** TextInputDialog only supports one field — restructuring needs both a new product and a reason. */
