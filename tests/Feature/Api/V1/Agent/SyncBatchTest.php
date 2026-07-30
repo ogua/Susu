@@ -3,11 +3,14 @@
 use App\Actions\Groups\ActivateGroupAction;
 use App\Actions\Groups\AddGroupMemberAction;
 use App\Actions\Loans\ApplyForLoanAction;
+use App\Actions\Loans\ApproveLoanAction;
+use App\Actions\Loans\DisburseLoanAction;
 use App\Enums\LoanStatus;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\Group;
 use App\Models\JournalEntry;
+use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
@@ -270,6 +273,128 @@ it('rejects loan approve/disburse ops from a field agent', function (): void {
 
     $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
     expect($loan->refresh()->status)->toBe(LoanStatus::Applied);
+});
+
+it('lets a branch manager restructure a loan through the sync batch, with the desktop-generated new-loan id preserved', function (): void {
+    // The desktop client mints the new loan's id itself and sends it as
+    // client_reference, mirroring the customer/account provisioning-chain
+    // test above — otherwise the server would generate a different id and
+    // any later synced op referencing "the new loan" would 404.
+    $manager = User::factory()->branchManager($this->branch)->create();
+
+    $product = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'min_amount' => 100_00,
+        'max_amount' => 1_000_00,
+    ]);
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $product,
+        requestedAmount: 300_00,
+    );
+    app(ApproveLoanAction::class)->execute($loan, $manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $manager);
+
+    $newLoanRef = (string) Str::uuid();
+
+    $response = $this->actingAs($manager, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'loan.restructure',
+            'payload' => [
+                'loan_id' => $disbursed->id,
+                'loan_product_id' => $product->id,
+                'reason' => 'Struggling with the old schedule',
+                'client_reference' => $newLoanRef,
+            ],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('results.0.status', 'applied')
+        ->assertJsonPath('results.0.result.loan_id', $newLoanRef)
+        ->assertJsonPath('results.0.result.status', 'disbursed');
+
+    expect($disbursed->refresh()->status)->toBe(LoanStatus::Refinanced);
+
+    $newLoan = Loan::findOrFail($newLoanRef);
+    expect($newLoan->previous_loan_id)->toBe($disbursed->id)
+        ->and($newLoan->status)->toBe(LoanStatus::Disbursed);
+});
+
+it('lets a branch manager top up a loan through the sync batch', function (): void {
+    $manager = User::factory()->branchManager($this->branch)->create();
+
+    $product = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'min_amount' => 100_00,
+        'max_amount' => 1_000_00,
+    ]);
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $product,
+        requestedAmount: 300_00,
+    );
+    app(ApproveLoanAction::class)->execute($loan, $manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $manager);
+
+    $newLoanRef = (string) Str::uuid();
+
+    $response = $this->actingAs($manager, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'loan.top_up',
+            'payload' => [
+                'loan_id' => $disbursed->id,
+                'amount' => 200_00,
+                'reason' => 'Customer requested more capital',
+                'client_reference' => $newLoanRef,
+            ],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()->assertJsonPath('results.0.status', 'applied');
+
+    $newLoan = Loan::findOrFail($newLoanRef);
+    expect($newLoan->principal_amount)->toBe($newLoan->rolled_over_amount + 200_00)
+        ->and($disbursed->refresh()->status)->toBe(LoanStatus::Refinanced);
+});
+
+it('rejects loan restructure/top-up ops from a field agent', function (): void {
+    $manager = User::factory()->branchManager($this->branch)->create();
+
+    $product = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'min_amount' => 100_00,
+        'max_amount' => 1_000_00,
+    ]);
+
+    $loan = app(ApplyForLoanAction::class)->execute(
+        submittedBy: $this->agent,
+        customer: $this->customer,
+        product: $product,
+        requestedAmount: 300_00,
+    );
+    app(ApproveLoanAction::class)->execute($loan, $manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $manager);
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'loan.restructure',
+            'payload' => ['loan_id' => $disbursed->id, 'loan_product_id' => $product->id, 'reason' => 'no'],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
+    expect($disbursed->refresh()->status)->toBe(LoanStatus::Disbursed);
 });
 
 it('lets a field agent record a group contribution through the sync batch', function (): void {

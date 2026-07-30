@@ -39,8 +39,24 @@ class RestructureLoanAction
         private ScheduleGenerator $schedule,
     ) {}
 
-    public function execute(Loan $loan, User $restructuredBy, LoanProduct $newProduct, string $reason): Loan
-    {
+    public function execute(
+        Loan $loan,
+        User $restructuredBy,
+        LoanProduct $newProduct,
+        string $reason,
+        ?string $newLoanClientReference = null,
+    ): Loan {
+        // Offline clients (desktop) generate the new loan's id themselves;
+        // checking this first — before the status guard below — makes a
+        // retried sync op idempotent even though $loan is no longer
+        // Disbursed by the time the retry lands (mirrors ApplyForLoanAction).
+        if ($newLoanClientReference !== null) {
+            $existing = Loan::where('client_reference', $newLoanClientReference)->first();
+            if ($existing !== null) {
+                return $existing;
+            }
+        }
+
         if ($loan->status !== LoanStatus::Disbursed) {
             throw ValidationException::withMessages(['status' => 'Only disbursed loans can be restructured.']);
         }
@@ -56,7 +72,7 @@ class RestructureLoanAction
             throw ValidationException::withMessages(['status' => 'Nothing to restructure — outstanding principal is already zero.']);
         }
 
-        return DB::transaction(function () use ($loan, $restructuredBy, $newProduct, $reason, $principalOutstanding): Loan {
+        return DB::transaction(function () use ($loan, $restructuredBy, $newProduct, $reason, $principalOutstanding, $newLoanClientReference): Loan {
             $restructuredAt = now();
             $refinanceAmount = $loan->outstanding_balance;
 
@@ -84,8 +100,12 @@ class RestructureLoanAction
                 'guarantor_phone' => $loan->guarantor_phone,
                 'previous_loan_id' => $loan->id,
                 'rolled_over_amount' => $principalOutstanding,
+                'client_reference' => $newLoanClientReference,
                 'applied_at' => $restructuredAt,
             ]);
+            if ($newLoanClientReference !== null) {
+                $newLoan->forceFill(['id' => $newLoanClientReference]);
+            }
             $newLoan->save();
 
             $schedule = $this->schedule->generate(

@@ -35,8 +35,20 @@ class RestructureGroupLoanAction
         private ScheduleGenerator $schedule,
     ) {}
 
-    public function execute(GroupLoan $groupLoan, User $restructuredBy, LoanProduct $newProduct, string $reason): GroupLoan
-    {
+    public function execute(
+        GroupLoan $groupLoan,
+        User $restructuredBy,
+        LoanProduct $newProduct,
+        string $reason,
+        ?string $newGroupLoanClientReference = null,
+    ): GroupLoan {
+        if ($newGroupLoanClientReference !== null) {
+            $existing = GroupLoan::where('client_reference', $newGroupLoanClientReference)->first();
+            if ($existing !== null) {
+                return $existing;
+            }
+        }
+
         if ($groupLoan->status !== GroupLoanStatus::Disbursed) {
             throw ValidationException::withMessages(['status' => 'Only disbursed group loans can be restructured.']);
         }
@@ -57,7 +69,7 @@ class RestructureGroupLoanAction
             throw ValidationException::withMessages(['loan_group' => 'A group loan needs at least 2 active members to restructure.']);
         }
 
-        return DB::transaction(function () use ($groupLoan, $restructuredBy, $newProduct, $reason, $principalOutstanding, $members): GroupLoan {
+        return DB::transaction(function () use ($groupLoan, $restructuredBy, $newProduct, $reason, $principalOutstanding, $members, $newGroupLoanClientReference): GroupLoan {
             $restructuredAt = now();
             $refinanceAmount = $groupLoan->outstanding_balance;
 
@@ -82,8 +94,12 @@ class RestructureGroupLoanAction
                 'status' => GroupLoanStatus::Applied,
                 'previous_group_loan_id' => $groupLoan->id,
                 'rolled_over_amount' => $principalOutstanding,
+                'client_reference' => $newGroupLoanClientReference,
                 'applied_at' => $restructuredAt,
             ]);
+            if ($newGroupLoanClientReference !== null) {
+                $newGroupLoan->forceFill(['id' => $newGroupLoanClientReference]);
+            }
             $newGroupLoan->save();
 
             $schedule = $this->schedule->generate(

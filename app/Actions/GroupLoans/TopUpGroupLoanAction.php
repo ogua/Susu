@@ -36,8 +36,20 @@ class TopUpGroupLoanAction
         private ScheduleGenerator $schedule,
     ) {}
 
-    public function execute(GroupLoan $groupLoan, User $toppedUpBy, int $topUpAmount, string $reason): GroupLoan
-    {
+    public function execute(
+        GroupLoan $groupLoan,
+        User $toppedUpBy,
+        int $topUpAmount,
+        string $reason,
+        ?string $newGroupLoanClientReference = null,
+    ): GroupLoan {
+        if ($newGroupLoanClientReference !== null) {
+            $existing = GroupLoan::where('client_reference', $newGroupLoanClientReference)->first();
+            if ($existing !== null) {
+                return $existing;
+            }
+        }
+
         if ($groupLoan->status !== GroupLoanStatus::Disbursed) {
             throw ValidationException::withMessages(['status' => 'Only disbursed group loans can be topped up.']);
         }
@@ -55,7 +67,7 @@ class TopUpGroupLoanAction
 
         $principalOutstanding = $groupLoan->receivableAccount->refresh()->balance;
 
-        return DB::transaction(function () use ($groupLoan, $toppedUpBy, $topUpAmount, $reason, $principalOutstanding, $members): GroupLoan {
+        return DB::transaction(function () use ($groupLoan, $toppedUpBy, $topUpAmount, $reason, $principalOutstanding, $members, $newGroupLoanClientReference): GroupLoan {
             $toppedUpAt = now();
             $refinanceAmount = $groupLoan->outstanding_balance;
             $newPrincipal = $principalOutstanding + $topUpAmount;
@@ -81,8 +93,12 @@ class TopUpGroupLoanAction
                 'status' => GroupLoanStatus::Applied,
                 'previous_group_loan_id' => $groupLoan->id,
                 'rolled_over_amount' => $principalOutstanding,
+                'client_reference' => $newGroupLoanClientReference,
                 'applied_at' => $toppedUpAt,
             ]);
+            if ($newGroupLoanClientReference !== null) {
+                $newGroupLoan->forceFill(['id' => $newGroupLoanClientReference]);
+            }
             $newGroupLoan->save();
 
             $schedule = $this->schedule->generate(

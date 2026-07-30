@@ -20,6 +20,10 @@ enum SyncOpType: string
     case ApproveGroupLoan = 'group_loan.approve';
     case RejectGroupLoan = 'group_loan.reject';
     case DisburseGroupLoan = 'group_loan.disburse';
+    case RestructureLoan = 'loan.restructure';
+    case TopUpLoan = 'loan.top_up';
+    case RestructureGroupLoan = 'group_loan.restructure';
+    case TopUpGroupLoan = 'group_loan.top_up';
 
     /**
      * Op types each role may push through /sync/batch.

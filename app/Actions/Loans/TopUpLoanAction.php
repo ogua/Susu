@@ -34,8 +34,20 @@ class TopUpLoanAction
         private ScheduleGenerator $schedule,
     ) {}
 
-    public function execute(Loan $loan, User $toppedUpBy, int $topUpAmount, string $reason): Loan
-    {
+    public function execute(
+        Loan $loan,
+        User $toppedUpBy,
+        int $topUpAmount,
+        string $reason,
+        ?string $newLoanClientReference = null,
+    ): Loan {
+        if ($newLoanClientReference !== null) {
+            $existing = Loan::where('client_reference', $newLoanClientReference)->first();
+            if ($existing !== null) {
+                return $existing;
+            }
+        }
+
         if ($loan->status !== LoanStatus::Disbursed) {
             throw ValidationException::withMessages(['status' => 'Only disbursed loans can be topped up.']);
         }
@@ -48,7 +60,7 @@ class TopUpLoanAction
 
         $principalOutstanding = $loan->receivableAccount->refresh()->balance;
 
-        return DB::transaction(function () use ($loan, $toppedUpBy, $topUpAmount, $reason, $principalOutstanding): Loan {
+        return DB::transaction(function () use ($loan, $toppedUpBy, $topUpAmount, $reason, $principalOutstanding, $newLoanClientReference): Loan {
             $toppedUpAt = now();
             $refinanceAmount = $loan->outstanding_balance;
             $newPrincipal = $principalOutstanding + $topUpAmount;
@@ -77,8 +89,12 @@ class TopUpLoanAction
                 'guarantor_phone' => $loan->guarantor_phone,
                 'previous_loan_id' => $loan->id,
                 'rolled_over_amount' => $principalOutstanding,
+                'client_reference' => $newLoanClientReference,
                 'applied_at' => $toppedUpAt,
             ]);
+            if ($newLoanClientReference !== null) {
+                $newLoan->forceFill(['id' => $newLoanClientReference]);
+            }
             $newLoan->save();
 
             $schedule = $this->schedule->generate(

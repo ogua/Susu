@@ -129,3 +129,78 @@ it('applies an offline group loan application and repayment through sync/batch',
     $repayResponse->assertOk()->assertJsonPath('results.0.status', 'applied');
     expect($disbursed->fresh()->outstanding_balance)->toBe($disbursed->outstanding_balance - 50_00);
 });
+
+it('lets a branch manager restructure a group loan through the sync batch, with the desktop-generated new-loan id preserved', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->product, 1000_00);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+
+    $newLoanRef = (string) Str::uuid();
+
+    $response = $this->actingAs($this->manager, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'group_loan.restructure',
+            'payload' => [
+                'group_loan_id' => $disbursed->id,
+                'loan_product_id' => $this->product->id,
+                'reason' => 'Group struggling with the old schedule',
+                'client_reference' => $newLoanRef,
+            ],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('results.0.status', 'applied')
+        ->assertJsonPath('results.0.result.group_loan_id', $newLoanRef);
+
+    $newGroupLoan = GroupLoan::findOrFail($newLoanRef);
+    expect($newGroupLoan->previous_group_loan_id)->toBe($disbursed->id)
+        ->and($disbursed->fresh()->status->value)->toBe('refinanced');
+});
+
+it('lets a branch manager top up a group loan through the sync batch', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->product, 1000_00);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+
+    $newLoanRef = (string) Str::uuid();
+
+    $response = $this->actingAs($this->manager, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'group_loan.top_up',
+            'payload' => [
+                'group_loan_id' => $disbursed->id,
+                'amount' => 300_00,
+                'reason' => 'Group requested more capital',
+                'client_reference' => $newLoanRef,
+            ],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()->assertJsonPath('results.0.status', 'applied');
+
+    $newGroupLoan = GroupLoan::findOrFail($newLoanRef);
+    expect($newGroupLoan->principal_amount)->toBe($newGroupLoan->rolled_over_amount + 300_00);
+});
+
+it('rejects group loan restructure/top-up ops from a field agent', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->product, 1000_00);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'group_loan.restructure',
+            'payload' => ['group_loan_id' => $disbursed->id, 'loan_product_id' => $this->product->id, 'reason' => 'no'],
+            'recorded_at' => now()->toISOString(),
+        ]],
+    ]);
+
+    $response->assertOk()->assertJsonPath('results.0.status', 'rejected');
+    expect($disbursed->fresh()->status->value)->toBe('disbursed');
+});

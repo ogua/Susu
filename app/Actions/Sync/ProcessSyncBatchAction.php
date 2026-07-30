@@ -10,12 +10,16 @@ use App\Actions\GroupLoans\ApproveGroupLoanAction;
 use App\Actions\GroupLoans\DisburseGroupLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\RejectGroupLoanAction;
+use App\Actions\GroupLoans\RestructureGroupLoanAction;
+use App\Actions\GroupLoans\TopUpGroupLoanAction;
 use App\Actions\Groups\RecordGroupContributionAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
 use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Actions\Loans\RejectLoanAction;
+use App\Actions\Loans\RestructureLoanAction;
+use App\Actions\Loans\TopUpLoanAction;
 use App\Actions\Savings\OpenSavingsAccountAction;
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
@@ -28,6 +32,8 @@ use App\Http\Requests\Api\V1\RecordGroupLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\RejectGroupLoanRequest;
 use App\Http\Requests\Api\V1\RejectLoanRequest;
+use App\Http\Requests\Api\V1\RestructureGroupLoanRequest;
+use App\Http\Requests\Api\V1\RestructureLoanRequest;
 use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
 use App\Http\Requests\Api\V1\StoreGroupContributionRequest;
@@ -36,6 +42,8 @@ use App\Http\Requests\Api\V1\StoreLoanApplicationRequest;
 use App\Http\Requests\Api\V1\StoreLocationPingsRequest;
 use App\Http\Requests\Api\V1\StoreSavingsAccountRequest;
 use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
+use App\Http\Requests\Api\V1\TopUpGroupLoanRequest;
+use App\Http\Requests\Api\V1\TopUpLoanRequest;
 use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\GroupLoanBorrower;
@@ -77,6 +85,10 @@ class ProcessSyncBatchAction
         private ApproveGroupLoanAction $approveGroupLoan,
         private RejectGroupLoanAction $rejectGroupLoan,
         private DisburseGroupLoanAction $disburseGroupLoan,
+        private RestructureLoanAction $restructureLoan,
+        private TopUpLoanAction $topUpLoan,
+        private RestructureGroupLoanAction $restructureGroupLoan,
+        private TopUpGroupLoanAction $topUpGroupLoan,
     ) {}
 
     /**
@@ -160,6 +172,10 @@ class ProcessSyncBatchAction
             SyncOpType::ApproveGroupLoan => $this->applyApproveGroupLoan($actor, $payload),
             SyncOpType::RejectGroupLoan => $this->applyRejectGroupLoan($actor, $payload),
             SyncOpType::DisburseGroupLoan => $this->applyDisburseGroupLoan($actor, $payload),
+            SyncOpType::RestructureLoan => $this->applyRestructureLoan($actor, $payload, $op['op_id']),
+            SyncOpType::TopUpLoan => $this->applyTopUpLoan($actor, $payload, $op['op_id']),
+            SyncOpType::RestructureGroupLoan => $this->applyRestructureGroupLoan($actor, $payload, $op['op_id']),
+            SyncOpType::TopUpGroupLoan => $this->applyTopUpGroupLoan($actor, $payload, $op['op_id']),
         };
     }
 
@@ -186,6 +202,10 @@ class ProcessSyncBatchAction
             SyncOpType::ApproveGroupLoan => ApproveGroupLoanRequest::payloadRules(),
             SyncOpType::RejectGroupLoan => RejectGroupLoanRequest::payloadRules(),
             SyncOpType::DisburseGroupLoan => DisburseGroupLoanRequest::payloadRules(),
+            SyncOpType::RestructureLoan => RestructureLoanRequest::payloadRules(),
+            SyncOpType::TopUpLoan => TopUpLoanRequest::payloadRules(),
+            SyncOpType::RestructureGroupLoan => RestructureGroupLoanRequest::payloadRules(),
+            SyncOpType::TopUpGroupLoan => TopUpGroupLoanRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -474,6 +494,84 @@ class ProcessSyncBatchAction
         $groupLoan = $this->disburseGroupLoan->execute($groupLoan, $actor);
 
         return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value, 'outstanding_balance' => $groupLoan->outstanding_balance];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyRestructureLoan(User $actor, array $payload, string $opId): array
+    {
+        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $newProduct = LoanProduct::where('company_id', $actor->company_id)->findOrFail($payload['loan_product_id']);
+
+        $newLoan = $this->restructureLoan->execute(
+            $loan,
+            $actor,
+            $newProduct,
+            $payload['reason'],
+            $payload['client_reference'] ?? $opId,
+        );
+
+        return ['loan_id' => $newLoan->id, 'loan_number' => $newLoan->loan_number, 'status' => $newLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyTopUpLoan(User $actor, array $payload, string $opId): array
+    {
+        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+
+        $newLoan = $this->topUpLoan->execute(
+            $loan,
+            $actor,
+            (int) $payload['amount'],
+            $payload['reason'],
+            $payload['client_reference'] ?? $opId,
+        );
+
+        return ['loan_id' => $newLoan->id, 'loan_number' => $newLoan->loan_number, 'status' => $newLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyRestructureGroupLoan(User $actor, array $payload, string $opId): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $newProduct = LoanProduct::where('company_id', $actor->company_id)->findOrFail($payload['loan_product_id']);
+
+        $newGroupLoan = $this->restructureGroupLoan->execute(
+            $groupLoan,
+            $actor,
+            $newProduct,
+            $payload['reason'],
+            $payload['client_reference'] ?? $opId,
+        );
+
+        return ['group_loan_id' => $newGroupLoan->id, 'loan_number' => $newGroupLoan->loan_number, 'status' => $newGroupLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyTopUpGroupLoan(User $actor, array $payload, string $opId): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+
+        $newGroupLoan = $this->topUpGroupLoan->execute(
+            $groupLoan,
+            $actor,
+            (int) $payload['amount'],
+            $payload['reason'],
+            $payload['client_reference'] ?? $opId,
+        );
+
+        return ['group_loan_id' => $newGroupLoan->id, 'loan_number' => $newGroupLoan->loan_number, 'status' => $newGroupLoan->status->value];
     }
 
     /**
