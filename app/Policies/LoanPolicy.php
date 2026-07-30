@@ -47,4 +47,14 @@ class LoanPolicy
     {
         return $user->company_id === $loan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
     }
+
+    public function restructure(User $user, Loan $loan): bool
+    {
+        return $user->company_id === $loan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
+    }
+
+    public function topUp(User $user, Loan $loan): bool
+    {
+        return $user->company_id === $loan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
+    }
 }

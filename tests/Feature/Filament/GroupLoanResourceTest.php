@@ -136,3 +136,76 @@ it('denies field agents from writing off a group loan', function (): void {
     $this->actingAs($this->agent);
     expect($this->agent->can('writeOff', $groupLoan))->toBeFalse();
 });
+
+it('lets a branch manager restructure a disbursed group loan from the table action', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('approve')->table($groupLoan))
+        ->assertNotified();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('disburse')->table($groupLoan->fresh()))
+        ->assertNotified();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('restructure')->table($groupLoan->fresh()), data: [
+            'loan_product_id' => $this->loanProduct->id,
+            'reason' => 'Group struggling with the old schedule',
+        ])
+        ->assertNotified();
+
+    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::Refinanced);
+
+    $newGroupLoan = GroupLoan::where('previous_group_loan_id', $groupLoan->id)->firstOrFail();
+    expect($newGroupLoan->status)->toBe(GroupLoanStatus::Disbursed);
+});
+
+it('denies field agents from restructuring a group loan', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+
+    $this->actingAs($this->agent);
+    expect($this->agent->can('restructure', $groupLoan))->toBeFalse();
+});
+
+it('lets a branch manager top up a disbursed group loan from the table action', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('approve')->table($groupLoan))
+        ->assertNotified();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('disburse')->table($groupLoan->fresh()))
+        ->assertNotified();
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('topUp')->table($groupLoan->fresh()), data: [
+            'amount' => '200.00',
+            'reason' => 'Group requested more capital',
+        ])
+        ->assertNotified();
+
+    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::Refinanced);
+
+    $newGroupLoan = GroupLoan::where('previous_group_loan_id', $groupLoan->id)->firstOrFail();
+    expect($newGroupLoan->status)->toBe(GroupLoanStatus::Disbursed)
+        ->and($newGroupLoan->rolled_over_amount + 200_00)->toBe($newGroupLoan->principal_amount);
+});
+
+it('denies field agents from topping up a group loan', function (): void {
+    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+
+    $this->actingAs($this->agent);
+    expect($this->agent->can('topUp', $groupLoan))->toBeFalse();
+});

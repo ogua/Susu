@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class GroupLoan extends Model
 {
@@ -49,6 +50,12 @@ class GroupLoan extends Model
         'written_off_at',
         'write_off_reason',
         'write_off_amount',
+        'previous_group_loan_id',
+        'rolled_over_amount',
+        'refinanced_at',
+        'refinance_type',
+        'refinance_reason',
+        'refinance_amount',
     ];
 
     /**
@@ -76,6 +83,9 @@ class GroupLoan extends Model
             'closed_at' => 'datetime',
             'written_off_at' => 'datetime',
             'write_off_amount' => 'integer',
+            'rolled_over_amount' => 'integer',
+            'refinanced_at' => 'datetime',
+            'refinance_amount' => 'integer',
         ];
     }
 
@@ -127,5 +137,15 @@ class GroupLoan extends Model
     public function repayments(): HasMany
     {
         return $this->hasMany(GroupLoanRepayment::class);
+    }
+
+    public function previousGroupLoan(): BelongsTo
+    {
+        return $this->belongsTo(GroupLoan::class, 'previous_group_loan_id');
+    }
+
+    public function nextGroupLoan(): HasOne
+    {
+        return $this->hasOne(GroupLoan::class, 'previous_group_loan_id');
     }
 }

@@ -6,9 +6,12 @@ use App\Actions\GroupLoans\ApproveGroupLoanAction;
 use App\Actions\GroupLoans\DisburseGroupLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\RejectGroupLoanAction;
+use App\Actions\GroupLoans\RestructureGroupLoanAction;
+use App\Actions\GroupLoans\TopUpGroupLoanAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Models\GroupLoan;
 use App\Models\GroupLoanBorrower;
+use App\Models\LoanProduct;
 use App\Support\Money;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -33,6 +36,10 @@ class GroupLoansTable
                 TextColumn::make('outstanding_balance')->formatStateUsing(fn (int $state): string => Money::format($state)),
                 TextColumn::make('status')->badge(),
                 TextColumn::make('applied_at')->dateTime()->sortable(),
+                TextColumn::make('previousGroupLoan.loan_number')
+                    ->label('Restructured/topped up from')
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('status')->options([
@@ -42,6 +49,7 @@ class GroupLoansTable
                     'disbursed' => 'Disbursed',
                     'closed' => 'Closed',
                     'written_off' => 'Written off',
+                    'refinanced' => 'Refinanced',
                 ]),
             ])
             ->recordActions([
@@ -96,6 +104,49 @@ class GroupLoansTable
                             Filament::auth()->user(),
                         );
                         Notification::make()->title('Repayment recorded')->success()->send();
+                    }),
+                Action::make('restructure')
+                    ->color('warning')
+                    ->visible(fn (GroupLoan $record): bool => $record->status->value === 'disbursed')
+                    ->authorize('restructure')
+                    ->requiresConfirmation()
+                    ->modalDescription('This closes the current group loan and opens a new one carrying over its outstanding principal onto new terms, re-split across the group\'s active members.')
+                    ->schema(fn (GroupLoan $record): array => [
+                        Select::make('loan_product_id')
+                            ->label('New loan product')
+                            ->options(LoanProduct::where('company_id', $record->company_id)->where('is_active', true)->pluck('name', 'id'))
+                            ->default($record->loan_product_id)
+                            ->required(),
+                        Textarea::make('reason')->required(),
+                    ])
+                    ->action(function (array $data, GroupLoan $record): void {
+                        $newGroupLoan = app(RestructureGroupLoanAction::class)->execute(
+                            $record,
+                            Filament::auth()->user(),
+                            LoanProduct::findOrFail($data['loan_product_id']),
+                            $data['reason'],
+                        );
+                        Notification::make()->title("Group loan restructured into {$newGroupLoan->loan_number}")->success()->send();
+                    }),
+                Action::make('topUp')
+                    ->label('Top up')
+                    ->color('info')
+                    ->visible(fn (GroupLoan $record): bool => $record->status->value === 'disbursed')
+                    ->authorize('topUp')
+                    ->requiresConfirmation()
+                    ->modalDescription('This closes the current group loan and opens a new one for the rolled-over balance plus the top-up cash disbursed today, re-split across the group\'s active members.')
+                    ->schema([
+                        TextInput::make('amount')->label('Top-up amount (GHS)')->numeric()->required(),
+                        Textarea::make('reason')->required(),
+                    ])
+                    ->action(function (array $data, GroupLoan $record): void {
+                        $newGroupLoan = app(TopUpGroupLoanAction::class)->execute(
+                            $record,
+                            Filament::auth()->user(),
+                            (int) round((float) $data['amount'] * 100),
+                            $data['reason'],
+                        );
+                        Notification::make()->title("Group loan topped up into {$newGroupLoan->loan_number}")->success()->send();
                     }),
                 Action::make('writeOff')
                     ->label('Write off')

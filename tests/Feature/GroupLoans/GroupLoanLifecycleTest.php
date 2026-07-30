@@ -5,6 +5,8 @@ use App\Actions\GroupLoans\ApproveGroupLoanAction;
 use App\Actions\GroupLoans\DisburseGroupLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\RejectGroupLoanAction;
+use App\Actions\GroupLoans\RestructureGroupLoanAction;
+use App\Actions\GroupLoans\TopUpGroupLoanAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Actions\LoanGroups\AddLoanGroupMemberAction;
 use App\Enums\GroupLoanStatus;
@@ -236,5 +238,112 @@ it('refuses to write off a group loan with no outstanding balance', function ():
     app(RecordGroupLoanRepaymentAction::class)->execute($borrower, $disbursed->outstanding_balance, $this->manager);
 
     expect(fn () => app(WriteOffGroupLoanAction::class)->execute($disbursed->fresh(), $this->manager, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('restructures a disbursed group loan onto a new product, re-splitting the rolled-over principal across active members', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+
+    $newProduct = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'interest_method' => 'flat',
+        'interest_rate_bps' => 500,
+        'term_period_count' => 6,
+        'repayment_frequency' => 'monthly',
+        'origination_fee_amount' => 0,
+        'min_amount' => 1,
+        'max_amount' => 1_000_000_00,
+    ]);
+
+    $newGroupLoan = app(RestructureGroupLoanAction::class)->execute($disbursed->fresh(), $this->manager, $newProduct, 'Group struggling with the old schedule');
+
+    expect($newGroupLoan->status)->toBe(GroupLoanStatus::Disbursed)
+        ->and($newGroupLoan->previous_group_loan_id)->toBe($disbursed->id)
+        ->and($newGroupLoan->rolled_over_amount)->toBe($principalOutstanding)
+        ->and($newGroupLoan->principal_amount)->toBe($principalOutstanding)
+        ->and($newGroupLoan->member_count_at_disbursement)->toBe(3)
+        ->and($newGroupLoan->installments)->toHaveCount(6);
+
+    $newBorrowers = $newGroupLoan->borrowers()->get();
+    expect($newBorrowers)->toHaveCount(3)
+        ->and($newBorrowers->sum('share_principal'))->toBe($newGroupLoan->principal_amount);
+
+    $oldGroupLoan = $disbursed->fresh();
+    expect($oldGroupLoan->status)->toBe(GroupLoanStatus::Refinanced)
+        ->and($oldGroupLoan->outstanding_balance)->toBe(0)
+        ->and($oldGroupLoan->refinance_type)->toBe('restructure')
+        ->and($oldGroupLoan->receivableAccount->refresh()->balance)->toBe(0)
+        // Old borrower rows stay as accountability history, untouched.
+        ->and($oldGroupLoan->borrowers()->count())->toBe(3);
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('refuses to restructure a group loan that is not disbursed', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+
+    expect(fn () => app(RestructureGroupLoanAction::class)->execute($groupLoan, $this->manager, $this->product, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('refuses to restructure a group loan whose membership dropped below 2', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+
+    $this->members->skip(1)->each(fn ($member) => $member->update(['status' => 'left']));
+
+    expect(fn () => app(RestructureGroupLoanAction::class)->execute($disbursed->fresh(), $this->manager, $this->product, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('tops up a disbursed group loan with fresh cash, re-splitting the new principal across active members', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+
+    $branchCashBefore = app(ChartOfAccounts::class)->branchCash($this->branch)->refresh()->balance;
+
+    $newGroupLoan = app(TopUpGroupLoanAction::class)->execute($disbursed->fresh(), $this->manager, 300_00, 'Group requested more capital');
+
+    expect($newGroupLoan->status)->toBe(GroupLoanStatus::Disbursed)
+        ->and($newGroupLoan->previous_group_loan_id)->toBe($disbursed->id)
+        ->and($newGroupLoan->rolled_over_amount)->toBe($principalOutstanding)
+        ->and($newGroupLoan->principal_amount)->toBe($principalOutstanding + 300_00);
+
+    $newBorrowers = $newGroupLoan->borrowers()->get();
+    expect($newBorrowers)->toHaveCount(3)
+        ->and($newBorrowers->sum('share_principal'))->toBe($newGroupLoan->principal_amount);
+
+    $oldGroupLoan = $disbursed->fresh();
+    expect($oldGroupLoan->status)->toBe(GroupLoanStatus::Refinanced)
+        ->and($oldGroupLoan->refinance_type)->toBe('top_up')
+        ->and($oldGroupLoan->receivableAccount->refresh()->balance)->toBe(0);
+
+    $branchCash = app(ChartOfAccounts::class)->branchCash($this->branch);
+    expect($branchCash->refresh()->balance)->toBe($branchCashBefore - 300_00);
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('refuses to top up a group loan that is not disbursed', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+
+    expect(fn () => app(TopUpGroupLoanAction::class)->execute($groupLoan, $this->manager, 100_00, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('refuses to top up a group loan whose membership dropped below 2', function (): void {
+    $groupLoan = applyGroupLoan($this->agent, $this->loanGroup->fresh(), $this->product);
+    app(ApproveGroupLoanAction::class)->execute($groupLoan, $this->manager);
+    $disbursed = app(DisburseGroupLoanAction::class)->execute($groupLoan->fresh(), $this->manager);
+
+    $this->members->skip(1)->each(fn ($member) => $member->update(['status' => 'left']));
+
+    expect(fn () => app(TopUpGroupLoanAction::class)->execute($disbursed->fresh(), $this->manager, 100_00, 'no'))
         ->toThrow(ValidationException::class);
 });

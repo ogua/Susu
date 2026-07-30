@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Loan extends Model
 {
@@ -51,6 +52,12 @@ class Loan extends Model
         'written_off_at',
         'write_off_reason',
         'write_off_amount',
+        'previous_loan_id',
+        'rolled_over_amount',
+        'refinanced_at',
+        'refinance_type',
+        'refinance_reason',
+        'refinance_amount',
     ];
 
     /**
@@ -77,6 +84,9 @@ class Loan extends Model
             'closed_at' => 'datetime',
             'written_off_at' => 'datetime',
             'write_off_amount' => 'integer',
+            'rolled_over_amount' => 'integer',
+            'refinanced_at' => 'datetime',
+            'refinance_amount' => 'integer',
         ];
     }
 
@@ -123,5 +133,15 @@ class Loan extends Model
     public function installments(): HasMany
     {
         return $this->hasMany(LoanInstallment::class)->orderBy('sequence');
+    }
+
+    public function previousLoan(): BelongsTo
+    {
+        return $this->belongsTo(Loan::class, 'previous_loan_id');
+    }
+
+    public function nextLoan(): HasOne
+    {
+        return $this->hasOne(Loan::class, 'previous_loan_id');
     }
 }

@@ -5,6 +5,8 @@ use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
 use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Actions\Loans\RejectLoanAction;
+use App\Actions\Loans\RestructureLoanAction;
+use App\Actions\Loans\TopUpLoanAction;
 use App\Actions\Loans\WriteOffLoanAction;
 use App\Enums\LoanStatus;
 use App\Models\Branch;
@@ -253,5 +255,127 @@ it('refuses to write off a loan with no outstanding balance', function (): void 
     app(RecordLoanRepaymentAction::class)->execute($disbursed, $disbursed->outstanding_balance, $this->manager);
 
     expect(fn () => app(WriteOffLoanAction::class)->execute($disbursed->fresh(), $this->manager, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('restructures a disbursed loan onto a new product, closing the old loan and opening a fresh linked one', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+
+    $newProduct = LoanProduct::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'interest_method' => 'flat',
+        'interest_rate_bps' => 500,
+        'term_period_count' => 6,
+        'repayment_frequency' => 'monthly',
+        'origination_fee_amount' => 0,
+        'min_amount' => 1,
+        'max_amount' => 1_000_000_00,
+    ]);
+
+    $newLoan = app(RestructureLoanAction::class)->execute($disbursed->fresh(), $this->manager, $newProduct, 'Struggling to keep up with the old schedule');
+
+    expect($newLoan->status)->toBe(LoanStatus::Disbursed)
+        ->and($newLoan->previous_loan_id)->toBe($disbursed->id)
+        ->and($newLoan->rolled_over_amount)->toBe($principalOutstanding)
+        ->and($newLoan->principal_amount)->toBe($principalOutstanding)
+        ->and($newLoan->loan_product_id)->toBe($newProduct->id)
+        ->and($newLoan->interest_rate_bps)->toBe(500)
+        ->and($newLoan->term_period_count)->toBe(6)
+        ->and($newLoan->installments)->toHaveCount(6)
+        ->and($newLoan->outstanding_balance)->toBe($newLoan->total_repayable);
+
+    $oldLoan = $disbursed->fresh();
+    expect($oldLoan->status)->toBe(LoanStatus::Refinanced)
+        ->and($oldLoan->outstanding_balance)->toBe(0)
+        ->and($oldLoan->refinance_type)->toBe('restructure')
+        ->and($oldLoan->refinance_reason)->toBe('Struggling to keep up with the old schedule')
+        ->and($oldLoan->refinance_amount)->toBe($disbursed->outstanding_balance)
+        ->and($oldLoan->refinanced_at)->not->toBeNull()
+        ->and($oldLoan->receivableAccount->refresh()->balance)->toBe(0);
+
+    $newReceivable = $newLoan->receivableAccount;
+    expect($newReceivable->refresh()->balance)->toBe($newLoan->principal_amount);
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('refuses to restructure a loan that is not disbursed', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+
+    expect(fn () => app(RestructureLoanAction::class)->execute($loan, $this->manager, $this->product, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('refuses to restructure a loan with no outstanding principal', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+    app(RecordLoanRepaymentAction::class)->execute($disbursed, $disbursed->outstanding_balance, $this->manager);
+
+    expect(fn () => app(RestructureLoanAction::class)->execute($disbursed->fresh(), $this->manager, $this->product, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('tops up a disbursed loan with fresh cash, rolling the old principal into the new one', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+
+    $branchCashBefore = app(ChartOfAccounts::class)->branchCash($this->branch)->refresh()->balance;
+
+    $newLoan = app(TopUpLoanAction::class)->execute($disbursed->fresh(), $this->manager, 200_00, 'Customer requested more capital');
+
+    expect($newLoan->status)->toBe(LoanStatus::Disbursed)
+        ->and($newLoan->previous_loan_id)->toBe($disbursed->id)
+        ->and($newLoan->rolled_over_amount)->toBe($principalOutstanding)
+        ->and($newLoan->principal_amount)->toBe($principalOutstanding + 200_00)
+        ->and($newLoan->loan_product_id)->toBe($disbursed->loan_product_id)
+        ->and($newLoan->interest_rate_bps)->toBe($disbursed->interest_rate_bps);
+
+    $oldLoan = $disbursed->fresh();
+    expect($oldLoan->status)->toBe(LoanStatus::Refinanced)
+        ->and($oldLoan->outstanding_balance)->toBe(0)
+        ->and($oldLoan->refinance_type)->toBe('top_up')
+        ->and($oldLoan->receivableAccount->refresh()->balance)->toBe(0);
+
+    $newReceivable = $newLoan->receivableAccount;
+    expect($newReceivable->refresh()->balance)->toBe($newLoan->principal_amount);
+
+    $branchCash = app(ChartOfAccounts::class)->branchCash($this->branch);
+    expect($branchCash->refresh()->balance)->toBe($branchCashBefore - 200_00);
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('refuses to top up a loan that is not disbursed', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+
+    expect(fn () => app(TopUpLoanAction::class)->execute($loan, $this->manager, 100_00, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('refuses a top-up amount that is not positive', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+
+    expect(fn () => app(TopUpLoanAction::class)->execute($disbursed->fresh(), $this->manager, 0, 'no'))
+        ->toThrow(ValidationException::class);
+});
+
+it('refuses to top up a loan with an overdue installment', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+
+    $firstInstallment = $disbursed->installments->first();
+    $firstInstallment->update(['due_date' => now()->subDays(10)]);
+    $this->artisan('loans:flag-arrears');
+
+    expect(fn () => app(TopUpLoanAction::class)->execute($disbursed->fresh(), $this->manager, 100_00, 'no'))
         ->toThrow(ValidationException::class);
 });
