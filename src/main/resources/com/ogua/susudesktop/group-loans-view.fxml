@@ -44,6 +44,8 @@
             <Button fx:id="rejectButton" onAction="#onReject" styleClass="button-secondary" text="Reject"/>
             <Button fx:id="disburseButton" onAction="#onDisburse" styleClass="button-secondary" text="Disburse"/>
             <Button fx:id="repayButton" onAction="#onRecordRepayment" styleClass="button-secondary" text="Record Repayment"/>
+            <Button fx:id="restructureButton" onAction="#onRestructure" styleClass="button-secondary" text="Restructure"/>
+            <Button fx:id="topUpButton" onAction="#onTopUp" styleClass="button-secondary" text="Top Up"/>
         </HBox>
         <TableView fx:id="table" prefHeight="300" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>

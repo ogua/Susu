@@ -4,14 +4,16 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.LoansController">
+<ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.LoansController">
+<VBox spacing="16" style="-fx-background-color: -ogua-bg;">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <HBox alignment="CENTER_LEFT" spacing="10">
@@ -49,8 +51,10 @@
             <Button fx:id="rejectButton" onAction="#onReject" styleClass="button-secondary" text="Reject"/>
             <Button fx:id="disburseButton" onAction="#onDisburse" styleClass="button-secondary" text="Disburse"/>
             <Button fx:id="repayButton" onAction="#onRecordRepayment" styleClass="button-secondary" text="Record Repayment"/>
+            <Button fx:id="restructureButton" onAction="#onRestructure" styleClass="button-secondary" text="Restructure"/>
+            <Button fx:id="topUpButton" onAction="#onTopUp" styleClass="button-secondary" text="Top Up"/>
         </HBox>
-        <TableView fx:id="table" prefHeight="360" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" prefHeight="360" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
                 <TableColumn fx:id="loanNumberColumn" prefWidth="110" text="Loan #"/>
                 <TableColumn fx:id="customerColumn" prefWidth="180" text="Customer"/>
@@ -62,3 +66,4 @@
         <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
     </VBox>
 </VBox>
+</ScrollPane>

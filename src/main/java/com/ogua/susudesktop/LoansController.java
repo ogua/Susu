@@ -7,14 +7,20 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.layout.GridPane;
 import models.Customer;
 import models.Loan;
 import models.LoanProduct;
@@ -51,6 +57,8 @@ public class LoansController {
     @FXML private Button rejectButton;
     @FXML private Button disburseButton;
     @FXML private Button repayButton;
+    @FXML private Button restructureButton;
+    @FXML private Button topUpButton;
 
     private final CustomerService customerService = new CustomerService();
     private final SavingsAccountService accountService = new SavingsAccountService();
@@ -102,6 +110,10 @@ public class LoansController {
         rejectButton.setManaged(canDecide);
         disburseButton.setVisible(canDecide);
         disburseButton.setManaged(canDecide);
+        restructureButton.setVisible(canDecide);
+        restructureButton.setManaged(canDecide);
+        topUpButton.setVisible(canDecide);
+        topUpButton.setManaged(canDecide);
 
         loadProducts();
         refresh();
@@ -123,6 +135,8 @@ public class LoansController {
         rejectButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.APPLIED);
         disburseButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.APPROVED);
         repayButton.setDisable(selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
+        restructureButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
+        topUpButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
     }
 
     private void loadProducts() {
@@ -358,6 +372,135 @@ public class LoansController {
         task.setOnFailed(event -> statusLabel.setText(
                 "Could not record repayment: " + task.getException().getMessage()));
         new Thread(task, "loan-repayment").start();
+    }
+
+    @FXML
+    private void onRestructure() {
+        Loan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        Optional<RestructureInput> input = showRestructureDialog(selected);
+        if (input.isEmpty()) {
+            return;
+        }
+
+        String restructuredBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runLoanAction("Restructuring…",
+                () -> loanService.restructure(selected.getId(), restructuredBy, input.get().product().getId(), input.get().reason()),
+                "Could not restructure loan");
+    }
+
+    @FXML
+    private void onTopUp() {
+        Loan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        Optional<TopUpInput> input = showTopUpDialog(selected);
+        if (input.isEmpty()) {
+            return;
+        }
+
+        String toppedUpBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runLoanAction("Topping up…",
+                () -> loanService.topUp(selected.getId(), toppedUpBy, input.get().amount(), input.get().reason()),
+                "Could not top up loan");
+    }
+
+    /** TextInputDialog only supports one field — restructuring needs both a new product and a reason. */
+    private Optional<RestructureInput> showRestructureDialog(Loan loan) {
+        Dialog<RestructureInput> dialog = new Dialog<>();
+        dialog.setTitle("Restructure Loan");
+        dialog.setHeaderText(loan.getLoanNumber() + " — this closes the loan and opens a new one on new terms.");
+
+        ButtonType restructureButtonType = new ButtonType("Restructure", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(restructureButtonType, ButtonType.CANCEL);
+
+        ComboBox<LoanProduct> newProductCombo = new ComboBox<>(FXCollections.observableArrayList(productCombo.getItems()));
+        newProductCombo.setConverter(productCombo.getConverter());
+        newProductCombo.getItems().stream()
+                .filter(p -> p.getId().equals(loan.getLoanProductId()))
+                .findFirst()
+                .ifPresentOrElse(newProductCombo.getSelectionModel()::select,
+                        () -> newProductCombo.getSelectionModel().selectFirst());
+        TextArea reasonArea = new TextArea();
+        reasonArea.setPrefRowCount(3);
+        reasonArea.setPromptText("Reason");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(10));
+        grid.add(new Label("New product:"), 0, 0);
+        grid.add(newProductCombo, 1, 0);
+        grid.add(new Label("Reason:"), 0, 1);
+        grid.add(reasonArea, 1, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType != restructureButtonType) {
+                return null;
+            }
+            LoanProduct product = newProductCombo.getValue();
+            String reason = reasonArea.getText().trim();
+            return (product != null && !reason.isBlank()) ? new RestructureInput(product, reason) : null;
+        });
+
+        return dialog.showAndWait();
+    }
+
+    /** TextInputDialog only supports one field — a top-up needs both an amount and a reason. */
+    private Optional<TopUpInput> showTopUpDialog(Loan loan) {
+        Dialog<TopUpInput> dialog = new Dialog<>();
+        dialog.setTitle("Top Up Loan");
+        dialog.setHeaderText(loan.getLoanNumber() + " — this closes the loan and opens a new one for the rolled-over"
+                + " balance plus the top-up cash disbursed today.");
+
+        ButtonType topUpButtonType = new ButtonType("Top Up", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(topUpButtonType, ButtonType.CANCEL);
+
+        TextField amountField = new TextField();
+        amountField.setPromptText("Amount (GHS)");
+        TextArea reasonArea = new TextArea();
+        reasonArea.setPrefRowCount(3);
+        reasonArea.setPromptText("Reason");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(10));
+        grid.add(new Label("Top-up amount (GHS):"), 0, 0);
+        grid.add(amountField, 1, 0);
+        grid.add(new Label("Reason:"), 0, 1);
+        grid.add(reasonArea, 1, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType != topUpButtonType) {
+                return null;
+            }
+            String reason = reasonArea.getText().trim();
+            if (reason.isBlank()) {
+                return null;
+            }
+            try {
+                long amount = Money.toMinorUnits(amountField.getText().trim());
+                return amount > 0 ? new TopUpInput(amount, reason) : null;
+            } catch (Exception e) {
+                return null;
+            }
+        });
+
+        return dialog.showAndWait();
+    }
+
+    private record RestructureInput(LoanProduct product, String reason) {
+    }
+
+    private record TopUpInput(long amount, String reason) {
     }
 
     private void runLoanAction(String progressMessage, LoanAction action, String failureMessage) {

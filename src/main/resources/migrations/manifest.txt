@@ -8,3 +8,4 @@ V005__groups.sql
 V006__license_tamper_guard.sql
 V007__customer_kyc_extensions.sql
 V008__group_loans.sql
+V009__loan_refinancing.sql

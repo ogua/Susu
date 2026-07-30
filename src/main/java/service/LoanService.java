@@ -232,6 +232,249 @@ public class LoanService {
         return findById(loanId);
     }
 
+    /**
+     * Closes a disbursed loan whose schedule isn't working and opens a new
+     * linked loan carrying over the old loan's outstanding PRINCIPAL (the
+     * receivable account's cached balance — interest/penalty are never
+     * rolled over, same discipline the backend's RestructureLoanAction
+     * follows) onto a fresh schedule under the chosen product's terms. No
+     * fresh cash changes hands — see {@link #topUp} for that. Kept
+     * local-only (no outbox call) for now: the backend's SyncOpType enum
+     * doesn't have a loan.restructure case yet, and pushing an unrecognized
+     * op_type would abort the whole sync batch, same reasoning as
+     * GroupService's payout method.
+     */
+    public Loan restructure(String loanId, String restructuredBy, String newProductId, String reason) throws SQLException {
+        Loan loan = requireStatus(loanId, LoanStatus.DISBURSED, "restructured");
+
+        LoanProduct newProduct = productService.findById(newProductId);
+        if (newProduct == null || !newProduct.isActive()) {
+            throw new IllegalArgumentException("This loan product is no longer offered.");
+        }
+
+        long principalOutstanding = accountBalance(loan.getReceivableAccountId());
+        if (principalOutstanding <= 0) {
+            throw new IllegalStateException("Nothing to restructure — outstanding principal is already zero.");
+        }
+
+        Instant restructuredAt = Instant.now();
+        LocalDate restructuredDate = LocalDate.ofInstant(restructuredAt, ZoneId.systemDefault());
+        long refinanceAmount = loan.getOutstandingBalance();
+
+        List<ScheduledInstallment> schedule = scheduleGenerator.generate(
+                principalOutstanding, newProduct.getInterestRateBps(), newProduct.getTermPeriodCount(),
+                newProduct.getInterestMethod(), newProduct.getRepaymentFrequency(), restructuredDate);
+        long totalInterest = schedule.stream().mapToLong(ScheduledInstallment::interestDue).sum();
+        long totalRepayable = principalOutstanding + totalInterest;
+
+        String newLoanId = UUID.randomUUID().toString();
+        String newLoanNumber;
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            newLoanNumber = nextLoanNumber(conn);
+        }
+
+        String receivableAccountId = chart.loanReceivable(newLoanId, newLoanNumber).getId();
+
+        List<LedgerLine> lines = new ArrayList<>();
+        lines.add(LedgerLine.debit(receivableAccountId, principalOutstanding));
+        lines.add(LedgerLine.credit(loan.getReceivableAccountId(), principalOutstanding));
+
+        ledger.post(EntryRequest.of(TransactionType.LOAN_RESTRUCTURE, lines)
+                .paymentMethod(PaymentMethod.CASH)
+                .recordedBy(restructuredBy)
+                .recordedAt(restructuredAt)
+                .description("Loan restructure " + loan.getLoanNumber() + " -> " + newLoanNumber));
+
+        String now = restructuredAt.toString();
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            insertRefinancedLoan(conn, newLoanId, loan.getCustomerId(), newProduct.getId(),
+                    loan.getSavingsAccountId(), loan.getAgentId(), restructuredBy, receivableAccountId,
+                    newLoanNumber, principalOutstanding, newProduct.getInterestMethod().value(),
+                    newProduct.getInterestRateBps(), newProduct.getTermPeriodCount(),
+                    newProduct.getRepaymentFrequency().value(), newProduct.getOriginationFeeAmount(),
+                    newProduct.getPenaltyRateBps(), newProduct.getGracePeriodDays(), totalInterest, totalRepayable,
+                    loan.getGuarantorName(), loan.getGuarantorPhone(), loan.getId(), principalOutstanding, now);
+
+            insertRefinancedInstallments(conn, newLoanId, schedule);
+
+            closeRefinancedLoan(conn, loan.getId(), "restructure", reason, refinanceAmount, now);
+        }
+
+        return findById(newLoanId);
+    }
+
+    /**
+     * Closes a disbursed loan in good standing and opens a new linked loan
+     * whose principal is the old loan's outstanding PRINCIPAL plus a
+     * manager-entered top-up amount of fresh cash, reusing the OLD loan's
+     * own terms (a top-up is "more of the same deal," not a renegotiation —
+     * unlike {@link #restructure}, there's no product picker). Kept
+     * local-only (no outbox call) for now, same reasoning as restructure.
+     */
+    public Loan topUp(String loanId, String toppedUpBy, long topUpAmount, String reason) throws SQLException {
+        Loan loan = requireStatus(loanId, LoanStatus.DISBURSED, "topped up");
+        if (topUpAmount <= 0) {
+            throw new IllegalArgumentException("The top-up amount must be greater than zero.");
+        }
+        boolean hasOverdue = findInstallments(loanId).stream()
+                .anyMatch(i -> i.getStatus() == InstallmentStatus.OVERDUE);
+        if (hasOverdue) {
+            throw new IllegalStateException("This loan has an overdue installment and is not eligible for a top-up.");
+        }
+
+        long principalOutstanding = accountBalance(loan.getReceivableAccountId());
+        long newPrincipal = principalOutstanding + topUpAmount;
+
+        Instant toppedUpAt = Instant.now();
+        LocalDate toppedUpDate = LocalDate.ofInstant(toppedUpAt, ZoneId.systemDefault());
+        long refinanceAmount = loan.getOutstandingBalance();
+
+        List<ScheduledInstallment> schedule = scheduleGenerator.generate(
+                newPrincipal, loan.getInterestRateBps(), loan.getTermPeriodCount(),
+                loan.getInterestMethod(), loan.getRepaymentFrequency(), toppedUpDate);
+        long totalInterest = schedule.stream().mapToLong(ScheduledInstallment::interestDue).sum();
+        long totalRepayable = newPrincipal + totalInterest;
+        long netCash = topUpAmount - loan.getOriginationFeeAmount();
+
+        String newLoanId = UUID.randomUUID().toString();
+        String newLoanNumber;
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            newLoanNumber = nextLoanNumber(conn);
+        }
+
+        String receivableAccountId = chart.loanReceivable(newLoanId, newLoanNumber).getId();
+
+        List<LedgerLine> lines = new ArrayList<>();
+        lines.add(LedgerLine.debit(receivableAccountId, newPrincipal));
+        if (principalOutstanding > 0) {
+            lines.add(LedgerLine.credit(loan.getReceivableAccountId(), principalOutstanding));
+        }
+        lines.add(LedgerLine.credit(chart.branchCash().getId(), netCash));
+        if (loan.getOriginationFeeAmount() > 0) {
+            lines.add(LedgerLine.credit(chart.loanFeeIncome().getId(), loan.getOriginationFeeAmount()));
+        }
+
+        ledger.post(EntryRequest.of(TransactionType.LOAN_TOP_UP, lines)
+                .paymentMethod(PaymentMethod.CASH)
+                .recordedBy(toppedUpBy)
+                .recordedAt(toppedUpAt)
+                .description("Loan top-up " + loan.getLoanNumber() + " -> " + newLoanNumber));
+
+        String now = toppedUpAt.toString();
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            insertRefinancedLoan(conn, newLoanId, loan.getCustomerId(), loan.getLoanProductId(),
+                    loan.getSavingsAccountId(), loan.getAgentId(), toppedUpBy, receivableAccountId,
+                    newLoanNumber, newPrincipal, loan.getInterestMethod().value(), loan.getInterestRateBps(),
+                    loan.getTermPeriodCount(), loan.getRepaymentFrequency().value(), loan.getOriginationFeeAmount(),
+                    loan.getPenaltyRateBps(), loan.getGracePeriodDays(), totalInterest, totalRepayable,
+                    loan.getGuarantorName(), loan.getGuarantorPhone(), loan.getId(), principalOutstanding, now);
+
+            insertRefinancedInstallments(conn, newLoanId, schedule);
+
+            closeRefinancedLoan(conn, loan.getId(), "top_up", reason, refinanceAmount, now);
+        }
+
+        return findById(newLoanId);
+    }
+
+    private void insertRefinancedLoan(Connection conn, String newLoanId, String customerId, String loanProductId,
+                                       String savingsAccountId, String agentId, String approvedBy,
+                                       String receivableAccountId, String loanNumber, long principalAmount,
+                                       String interestMethod, int interestRateBps, int termPeriodCount,
+                                       String repaymentFrequency, long originationFeeAmount, int penaltyRateBps,
+                                       int gracePeriodDays, long totalInterest, long totalRepayable,
+                                       String guarantorName, String guarantorPhone, String previousLoanId,
+                                       long rolledOverAmount, String now) throws SQLException {
+        String sql = "INSERT INTO loans (id, customer_id, loan_product_id, savings_account_id, agent_id,"
+                + " approved_by, receivable_account_id, loan_number, principal_amount, interest_method,"
+                + " interest_rate_bps, term_period_count, repayment_frequency, origination_fee_amount,"
+                + " penalty_rate_bps, grace_period_days, total_interest, total_repayable, outstanding_balance,"
+                + " status, guarantor_name, guarantor_phone, previous_loan_id, rolled_over_amount, applied_at,"
+                + " approved_at, disbursed_at, created_at, updated_at)"
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, newLoanId);
+            ps.setString(2, customerId);
+            ps.setString(3, loanProductId);
+            ps.setString(4, savingsAccountId);
+            ps.setString(5, agentId);
+            ps.setString(6, approvedBy);
+            ps.setString(7, receivableAccountId);
+            ps.setString(8, loanNumber);
+            ps.setLong(9, principalAmount);
+            ps.setString(10, interestMethod);
+            ps.setInt(11, interestRateBps);
+            ps.setInt(12, termPeriodCount);
+            ps.setString(13, repaymentFrequency);
+            ps.setLong(14, originationFeeAmount);
+            ps.setInt(15, penaltyRateBps);
+            ps.setInt(16, gracePeriodDays);
+            ps.setLong(17, totalInterest);
+            ps.setLong(18, totalRepayable);
+            ps.setLong(19, totalRepayable);
+            ps.setString(20, LoanStatus.DISBURSED.value());
+            ps.setString(21, guarantorName);
+            ps.setString(22, guarantorPhone);
+            ps.setString(23, previousLoanId);
+            ps.setLong(24, rolledOverAmount);
+            ps.setString(25, now);
+            ps.setString(26, now);
+            ps.setString(27, now);
+            ps.setString(28, now);
+            ps.setString(29, now);
+            ps.executeUpdate();
+        }
+    }
+
+    private void insertRefinancedInstallments(Connection conn, String newLoanId, List<ScheduledInstallment> schedule)
+            throws SQLException {
+        for (ScheduledInstallment installment : schedule) {
+            String sql = "INSERT INTO loan_installments (id, loan_id, sequence, due_date, principal_due,"
+                    + " interest_due, penalty_due, principal_paid, interest_paid, penalty_paid, status,"
+                    + " created_at, updated_at) VALUES (?,?,?,?,?,?,0,0,0,0,?,?,?)";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                String instNow = Instant.now().toString();
+                ps.setString(1, UUID.randomUUID().toString());
+                ps.setString(2, newLoanId);
+                ps.setInt(3, installment.sequence());
+                ps.setString(4, installment.dueDate().format(DateTimeFormatter.ISO_LOCAL_DATE));
+                ps.setLong(5, installment.principalDue());
+                ps.setLong(6, installment.interestDue());
+                ps.setString(7, InstallmentStatus.PENDING.value());
+                ps.setString(8, instNow);
+                ps.setString(9, instNow);
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    private void closeRefinancedLoan(Connection conn, String oldLoanId, String refinanceType, String reason,
+                                      long refinanceAmount, String now) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "UPDATE loans SET status = ?, outstanding_balance = 0, refinanced_at = ?, refinance_type = ?,"
+                + " refinance_reason = ?, refinance_amount = ?, updated_at = ? WHERE id = ?")) {
+            ps.setString(1, LoanStatus.REFINANCED.value());
+            ps.setString(2, now);
+            ps.setString(3, refinanceType);
+            ps.setString(4, reason);
+            ps.setLong(5, refinanceAmount);
+            ps.setString(6, now);
+            ps.setString(7, oldLoanId);
+            ps.executeUpdate();
+        }
+    }
+
+    private long accountBalance(String accountId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT balance FROM ledger_accounts WHERE id = ?")) {
+            ps.setString(1, accountId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getLong("balance");
+            }
+        }
+    }
+
     public LoanRepaymentResult recordRepayment(String loanId, long amount, String recordedBy,
                                                 String clientReference, Instant recordedAt) throws SQLException {
         String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
@@ -576,6 +819,14 @@ public class LoanService {
         loan.setDisbursedAt(disbursedAt != null ? Instant.parse(disbursedAt) : null);
         String closedAt = rs.getString("closed_at");
         loan.setClosedAt(closedAt != null ? Instant.parse(closedAt) : null);
+        loan.setPreviousLoanId(rs.getString("previous_loan_id"));
+        loan.setRolledOverAmount(rs.getLong("rolled_over_amount"));
+        String refinancedAt = rs.getString("refinanced_at");
+        loan.setRefinancedAt(refinancedAt != null ? Instant.parse(refinancedAt) : null);
+        loan.setRefinanceType(rs.getString("refinance_type"));
+        loan.setRefinanceReason(rs.getString("refinance_reason"));
+        long refinanceAmount = rs.getLong("refinance_amount");
+        loan.setRefinanceAmount(rs.wasNull() ? null : refinanceAmount);
         return loan;
     }
 

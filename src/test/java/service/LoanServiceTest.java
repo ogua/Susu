@@ -4,6 +4,8 @@ import db.AppConfig;
 import db.DatabaseConnection;
 import db.provider.SQLiteProvider;
 import enums.InstallmentStatus;
+import enums.InterestMethod;
+import enums.LoanFrequency;
 import enums.LoanStatus;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -181,6 +183,143 @@ class LoanServiceTest {
 
         assertFalse(result.eligible());
         assertTrue(result.reasons().size() >= 2); // both age and collection-history reasons
+    }
+
+    @Test
+    void restructuresADisbursedLoanOntoANewProductClosingTheOldLoanAndOpeningAFreshLinkedOne() throws Exception {
+        Customer customer = newCustomer("Akosua", "Frimpong");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 300_00, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+
+        LoanProduct newProduct = new LoanProduct();
+        newProduct.setName("Restructure Product");
+        newProduct.setCode("LN-RESTR-" + UUID.randomUUID().toString().substring(0, 6));
+        newProduct.setInterestMethod(InterestMethod.FLAT);
+        newProduct.setInterestRateBps(500);
+        newProduct.setTermPeriodCount(6);
+        newProduct.setRepaymentFrequency(LoanFrequency.MONTHLY);
+        newProduct.setMinAmount(1);
+        newProduct.setMaxAmount(1_000_000_00);
+        newProduct = loanProducts.create(newProduct);
+
+        Loan newLoan = loans.restructure(disbursed.getId(), MANAGER_ID, newProduct.getId(), "Struggling with the old schedule");
+
+        assertEquals(LoanStatus.DISBURSED, newLoan.getStatus());
+        assertEquals(disbursed.getId(), newLoan.getPreviousLoanId());
+        assertEquals(principalOutstanding, newLoan.getRolledOverAmount());
+        assertEquals(principalOutstanding, newLoan.getPrincipalAmount());
+        assertEquals(newProduct.getId(), newLoan.getLoanProductId());
+        assertEquals(6, newLoan.getInstallments().size());
+        assertEquals(newLoan.getTotalRepayable(), newLoan.getOutstandingBalance());
+
+        Loan oldLoan = loans.findById(disbursed.getId());
+        assertEquals(LoanStatus.REFINANCED, oldLoan.getStatus());
+        assertEquals(0, oldLoan.getOutstandingBalance());
+        assertEquals("restructure", oldLoan.getRefinanceType());
+        assertEquals("Struggling with the old schedule", oldLoan.getRefinanceReason());
+        assertEquals(disbursed.getOutstandingBalance(), oldLoan.getRefinanceAmount());
+        assertEquals(0, findLedgerAccountById(oldLoan.getReceivableAccountId()).getBalance());
+
+        var newReceivable = findLedgerAccountById(newLoan.getReceivableAccountId());
+        assertEquals(newLoan.getPrincipalAmount(), newReceivable.getBalance());
+    }
+
+    @Test
+    void refusesToRestructureALoanThatIsNotDisbursed() throws Exception {
+        Customer customer = newCustomer("Kwabena", "Asare");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 200_00, null, null, null, null, null);
+
+        assertThrows(IllegalStateException.class, () -> loans.restructure(applied.getId(), MANAGER_ID, product.getId(), "no"));
+    }
+
+    @Test
+    void refusesToRestructureALoanWithNoOutstandingPrincipal() throws Exception {
+        Customer customer = newCustomer("Adwoa", "Darko");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 200_00, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
+        loans.recordRepayment(disbursed.getId(), disbursed.getOutstandingBalance(), MANAGER_ID, null, null);
+
+        assertThrows(IllegalStateException.class, () -> loans.restructure(disbursed.getId(), MANAGER_ID, product.getId(), "no"));
+    }
+
+    @Test
+    void topsUpADisbursedLoanWithFreshCashRollingTheOldPrincipalIntoTheNewOne() throws Exception {
+        Customer customer = newCustomer("Yaa", "Boateng");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 300_00, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+
+        Loan newLoan = loans.topUp(disbursed.getId(), MANAGER_ID, 200_00, "Customer requested more capital");
+
+        assertEquals(LoanStatus.DISBURSED, newLoan.getStatus());
+        assertEquals(disbursed.getId(), newLoan.getPreviousLoanId());
+        assertEquals(principalOutstanding, newLoan.getRolledOverAmount());
+        assertEquals(principalOutstanding + 200_00, newLoan.getPrincipalAmount());
+        assertEquals(disbursed.getLoanProductId(), newLoan.getLoanProductId());
+
+        Loan oldLoan = loans.findById(disbursed.getId());
+        assertEquals(LoanStatus.REFINANCED, oldLoan.getStatus());
+        assertEquals(0, oldLoan.getOutstandingBalance());
+        assertEquals("top_up", oldLoan.getRefinanceType());
+        assertEquals(0, findLedgerAccountById(oldLoan.getReceivableAccountId()).getBalance());
+
+        var newReceivable = findLedgerAccountById(newLoan.getReceivableAccountId());
+        assertEquals(newLoan.getPrincipalAmount(), newReceivable.getBalance());
+    }
+
+    @Test
+    void refusesToTopUpALoanThatIsNotDisbursed() throws Exception {
+        Customer customer = newCustomer("Kojo", "Nkrumah");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 150_00, null, null, null, null, null);
+
+        assertThrows(IllegalStateException.class, () -> loans.topUp(applied.getId(), MANAGER_ID, 100_00, "no"));
+    }
+
+    @Test
+    void refusesATopUpAmountThatIsNotPositive() throws Exception {
+        Customer customer = newCustomer("Abenaa", "Sarpong");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 150_00, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
+
+        assertThrows(IllegalArgumentException.class, () -> loans.topUp(disbursed.getId(), MANAGER_ID, 0, "no"));
+    }
+
+    @Test
+    void refusesToTopUpALoanWithAnOverdueInstallment() throws Exception {
+        Customer customer = newCustomer("Nana", "Yeboah");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), 300_00, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
+
+        LoanInstallment first = disbursed.getInstallments().get(0);
+        try (var conn = DatabaseConnection.getConnection();
+             var ps = conn.prepareStatement("UPDATE loan_installments SET due_date = ? WHERE id = ?")) {
+            ps.setString(1, java.time.LocalDate.now().minusDays(10).toString());
+            ps.setString(2, first.getId());
+            ps.executeUpdate();
+        }
+        loans.flagArrears();
+
+        assertThrows(IllegalStateException.class, () -> loans.topUp(disbursed.getId(), MANAGER_ID, 100_00, "no"));
     }
 
     private models.LedgerAccount findLedgerAccountById(String id) throws Exception {

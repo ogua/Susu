@@ -41,6 +41,13 @@ public class GroupLoan {
     private Instant disbursedAt;
     private Instant closedAt;
 
+    private String previousGroupLoanId;
+    private long rolledOverAmount;
+    private Instant refinancedAt;
+    private String refinanceType;
+    private String refinanceReason;
+    private Long refinanceAmount;
+
     /** Populated by list/detail queries via a join; not always present. */
     private LoanGroup loanGroup;
     private LoanProduct product;
@@ -127,6 +134,24 @@ public class GroupLoan {
 
     public Instant getClosedAt() { return closedAt; }
     public void setClosedAt(Instant closedAt) { this.closedAt = closedAt; }
+
+    public String getPreviousGroupLoanId() { return previousGroupLoanId; }
+    public void setPreviousGroupLoanId(String previousGroupLoanId) { this.previousGroupLoanId = previousGroupLoanId; }
+
+    public long getRolledOverAmount() { return rolledOverAmount; }
+    public void setRolledOverAmount(long rolledOverAmount) { this.rolledOverAmount = rolledOverAmount; }
+
+    public Instant getRefinancedAt() { return refinancedAt; }
+    public void setRefinancedAt(Instant refinancedAt) { this.refinancedAt = refinancedAt; }
+
+    public String getRefinanceType() { return refinanceType; }
+    public void setRefinanceType(String refinanceType) { this.refinanceType = refinanceType; }
+
+    public String getRefinanceReason() { return refinanceReason; }
+    public void setRefinanceReason(String refinanceReason) { this.refinanceReason = refinanceReason; }
+
+    public Long getRefinanceAmount() { return refinanceAmount; }
+    public void setRefinanceAmount(Long refinanceAmount) { this.refinanceAmount = refinanceAmount; }
 
     public LoanGroup getLoanGroup() { return loanGroup; }
     public void setLoanGroup(LoanGroup loanGroup) { this.loanGroup = loanGroup; }

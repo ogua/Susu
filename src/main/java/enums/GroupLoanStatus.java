@@ -6,7 +6,8 @@ public enum GroupLoanStatus {
     REJECTED("rejected"),
     DISBURSED("disbursed"),
     CLOSED("closed"),
-    WRITTEN_OFF("written_off");
+    WRITTEN_OFF("written_off"),
+    REFINANCED("refinanced");
 
     private final String value;
 

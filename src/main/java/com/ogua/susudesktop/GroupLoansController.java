@@ -17,6 +17,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.GridPane;
@@ -50,6 +51,8 @@ public class GroupLoansController {
     @FXML private Button rejectButton;
     @FXML private Button disburseButton;
     @FXML private Button repayButton;
+    @FXML private Button restructureButton;
+    @FXML private Button topUpButton;
 
     @FXML private TableView<GroupLoanBorrower> borrowersTable;
     @FXML private TableColumn<GroupLoanBorrower, String> borrowerNameColumn;
@@ -112,6 +115,10 @@ public class GroupLoansController {
         rejectButton.setManaged(canDecide);
         disburseButton.setVisible(canDecide);
         disburseButton.setManaged(canDecide);
+        restructureButton.setVisible(canDecide);
+        restructureButton.setManaged(canDecide);
+        topUpButton.setVisible(canDecide);
+        topUpButton.setManaged(canDecide);
 
         loadLoanGroups();
         loadProducts();
@@ -134,6 +141,8 @@ public class GroupLoansController {
         rejectButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.APPLIED);
         disburseButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.APPROVED);
         repayButton.setDisable(selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
+        restructureButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
+        topUpButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
     }
 
     private void loadLoanGroups() {
@@ -379,6 +388,135 @@ public class GroupLoansController {
     }
 
     private record RepaymentInput(GroupLoanBorrower borrower, long amount) {
+    }
+
+    @FXML
+    private void onRestructure() {
+        GroupLoan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        Optional<RestructureInput> input = showRestructureDialog(selected);
+        if (input.isEmpty()) {
+            return;
+        }
+
+        String restructuredBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runGroupLoanAction("Restructuring…",
+                () -> groupLoanService.restructure(selected.getId(), restructuredBy, input.get().product().getId(), input.get().reason()),
+                "Could not restructure group loan");
+    }
+
+    @FXML
+    private void onTopUp() {
+        GroupLoan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        Optional<TopUpInput> input = showTopUpDialog(selected);
+        if (input.isEmpty()) {
+            return;
+        }
+
+        String toppedUpBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runGroupLoanAction("Topping up…",
+                () -> groupLoanService.topUp(selected.getId(), toppedUpBy, input.get().amount(), input.get().reason()),
+                "Could not top up group loan");
+    }
+
+    /** TextInputDialog only supports one field — restructuring needs both a new product and a reason. */
+    private Optional<RestructureInput> showRestructureDialog(GroupLoan groupLoan) {
+        Dialog<RestructureInput> dialog = new Dialog<>();
+        dialog.setTitle("Restructure Group Loan");
+        dialog.setHeaderText(groupLoan.getLoanNumber() + " — this closes the group loan and opens a new one on new terms.");
+
+        ButtonType restructureButtonType = new ButtonType("Restructure", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(restructureButtonType, ButtonType.CANCEL);
+
+        ComboBox<LoanProduct> newProductCombo = new ComboBox<>(FXCollections.observableArrayList(productCombo.getItems()));
+        newProductCombo.setConverter(productCombo.getConverter());
+        newProductCombo.getItems().stream()
+                .filter(p -> p.getId().equals(groupLoan.getLoanProductId()))
+                .findFirst()
+                .ifPresentOrElse(newProductCombo.getSelectionModel()::select,
+                        () -> newProductCombo.getSelectionModel().selectFirst());
+        TextArea reasonArea = new TextArea();
+        reasonArea.setPrefRowCount(3);
+        reasonArea.setPromptText("Reason");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(10));
+        grid.add(new Label("New product:"), 0, 0);
+        grid.add(newProductCombo, 1, 0);
+        grid.add(new Label("Reason:"), 0, 1);
+        grid.add(reasonArea, 1, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType != restructureButtonType) {
+                return null;
+            }
+            LoanProduct product = newProductCombo.getValue();
+            String reason = reasonArea.getText().trim();
+            return (product != null && !reason.isBlank()) ? new RestructureInput(product, reason) : null;
+        });
+
+        return dialog.showAndWait();
+    }
+
+    /** TextInputDialog only supports one field — a top-up needs both an amount and a reason. */
+    private Optional<TopUpInput> showTopUpDialog(GroupLoan groupLoan) {
+        Dialog<TopUpInput> dialog = new Dialog<>();
+        dialog.setTitle("Top Up Group Loan");
+        dialog.setHeaderText(groupLoan.getLoanNumber() + " — this closes the group loan and opens a new one for the"
+                + " rolled-over balance plus the top-up cash disbursed today.");
+
+        ButtonType topUpButtonType = new ButtonType("Top Up", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(topUpButtonType, ButtonType.CANCEL);
+
+        TextField amountField = new TextField();
+        amountField.setPromptText("Amount (GHS)");
+        TextArea reasonArea = new TextArea();
+        reasonArea.setPrefRowCount(3);
+        reasonArea.setPromptText("Reason");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(10));
+        grid.add(new Label("Top-up amount (GHS):"), 0, 0);
+        grid.add(amountField, 1, 0);
+        grid.add(new Label("Reason:"), 0, 1);
+        grid.add(reasonArea, 1, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType != topUpButtonType) {
+                return null;
+            }
+            String reason = reasonArea.getText().trim();
+            if (reason.isBlank()) {
+                return null;
+            }
+            try {
+                long amount = Money.toMinorUnits(amountField.getText().trim());
+                return amount > 0 ? new TopUpInput(amount, reason) : null;
+            } catch (Exception e) {
+                return null;
+            }
+        });
+
+        return dialog.showAndWait();
+    }
+
+    private record RestructureInput(LoanProduct product, String reason) {
+    }
+
+    private record TopUpInput(long amount, String reason) {
     }
 
     private void runGroupLoanAction(String progressMessage, GroupLoanAction action, String failureMessage) {

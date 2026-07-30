@@ -5,6 +5,8 @@ import db.DatabaseConnection;
 import db.provider.SQLiteProvider;
 import enums.GroupLoanStatus;
 import enums.InstallmentStatus;
+import enums.InterestMethod;
+import enums.LoanFrequency;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -243,6 +245,150 @@ class GroupLoanServiceTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> groupLoans.recordRepayment(borrower.getId(), disbursed.getOutstandingBalance() + 1, MANAGER_ID, null, null));
+    }
+
+    @Test
+    void restructuresADisbursedGroupLoanOntoANewProductReSplittingTheRolledOverPrincipal() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-201");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 900_00, null, null);
+        groupLoans.approve(applied.getId(), MANAGER_ID);
+        GroupLoan disbursed = groupLoans.disburse(applied.getId(), MANAGER_ID);
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+
+        LoanProduct newProduct = new LoanProduct();
+        newProduct.setName("Restructure Product");
+        newProduct.setCode("GL-RESTR-" + UUID.randomUUID().toString().substring(0, 6));
+        newProduct.setInterestMethod(InterestMethod.FLAT);
+        newProduct.setInterestRateBps(500);
+        newProduct.setTermPeriodCount(6);
+        newProduct.setRepaymentFrequency(LoanFrequency.MONTHLY);
+        newProduct.setMinAmount(1);
+        newProduct.setMaxAmount(1_000_000_00);
+        newProduct = loanProducts.create(newProduct);
+
+        GroupLoan newGroupLoan = groupLoans.restructure(disbursed.getId(), MANAGER_ID, newProduct.getId(), "Group struggling with the old schedule");
+
+        assertEquals(GroupLoanStatus.DISBURSED, newGroupLoan.getStatus());
+        assertEquals(disbursed.getId(), newGroupLoan.getPreviousGroupLoanId());
+        assertEquals(principalOutstanding, newGroupLoan.getRolledOverAmount());
+        assertEquals(principalOutstanding, newGroupLoan.getPrincipalAmount());
+        assertEquals(3, (int) newGroupLoan.getMemberCountAtDisbursement());
+        assertEquals(6, newGroupLoan.getInstallments().size());
+
+        List<GroupLoanBorrower> newBorrowers = newGroupLoan.getBorrowers();
+        assertEquals(3, newBorrowers.size());
+        assertEquals(newGroupLoan.getPrincipalAmount(), newBorrowers.stream().mapToLong(GroupLoanBorrower::getSharePrincipal).sum());
+
+        GroupLoan oldGroupLoan = groupLoans.findById(disbursed.getId());
+        assertEquals(GroupLoanStatus.REFINANCED, oldGroupLoan.getStatus());
+        assertEquals(0, oldGroupLoan.getOutstandingBalance());
+        assertEquals("restructure", oldGroupLoan.getRefinanceType());
+        assertEquals(0, findLedgerAccountById(oldGroupLoan.getReceivableAccountId()).getBalance());
+        assertEquals(3, groupLoans.findBorrowers(disbursed.getId()).size()); // old borrowers untouched
+    }
+
+    @Test
+    void refusesToRestructureAGroupLoanThatIsNotDisbursed() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-202");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 500_00, null, null);
+
+        assertThrows(IllegalStateException.class, () -> groupLoans.restructure(applied.getId(), MANAGER_ID, product.getId(), "no"));
+    }
+
+    @Test
+    void refusesToRestructureAGroupLoanWhoseMembershipDroppedBelowTwo() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-203");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 500_00, null, null);
+        groupLoans.approve(applied.getId(), MANAGER_ID);
+        GroupLoan disbursed = groupLoans.disburse(applied.getId(), MANAGER_ID);
+
+        // Direct update, bypassing LoanGroupService.removeMember()'s own guard
+        // against removing a member still jointly liable on this very
+        // disbursed loan — simulates membership drift after disbursement,
+        // mirroring the backend test's direct ->update(['status' => 'left']).
+        List<LoanGroupMember> members = loanGroups.findMembers(group.getId());
+        markMembersLeft(members.get(1).getId(), members.get(2).getId());
+
+        assertThrows(IllegalStateException.class, () -> groupLoans.restructure(disbursed.getId(), MANAGER_ID, product.getId(), "no"));
+    }
+
+    @Test
+    void topsUpADisbursedGroupLoanWithFreshCashReSplittingTheNewPrincipal() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-204");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 900_00, null, null);
+        groupLoans.approve(applied.getId(), MANAGER_ID);
+        GroupLoan disbursed = groupLoans.disburse(applied.getId(), MANAGER_ID);
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+
+        GroupLoan newGroupLoan = groupLoans.topUp(disbursed.getId(), MANAGER_ID, 300_00, "Group requested more capital");
+
+        assertEquals(GroupLoanStatus.DISBURSED, newGroupLoan.getStatus());
+        assertEquals(disbursed.getId(), newGroupLoan.getPreviousGroupLoanId());
+        assertEquals(principalOutstanding, newGroupLoan.getRolledOverAmount());
+        assertEquals(principalOutstanding + 300_00, newGroupLoan.getPrincipalAmount());
+
+        List<GroupLoanBorrower> newBorrowers = newGroupLoan.getBorrowers();
+        assertEquals(3, newBorrowers.size());
+        assertEquals(newGroupLoan.getPrincipalAmount(), newBorrowers.stream().mapToLong(GroupLoanBorrower::getSharePrincipal).sum());
+
+        GroupLoan oldGroupLoan = groupLoans.findById(disbursed.getId());
+        assertEquals(GroupLoanStatus.REFINANCED, oldGroupLoan.getStatus());
+        assertEquals("top_up", oldGroupLoan.getRefinanceType());
+        assertEquals(0, findLedgerAccountById(oldGroupLoan.getReceivableAccountId()).getBalance());
+    }
+
+    @Test
+    void refusesToTopUpAGroupLoanThatIsNotDisbursed() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-205");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 500_00, null, null);
+
+        assertThrows(IllegalStateException.class, () -> groupLoans.topUp(applied.getId(), MANAGER_ID, 100_00, "no"));
+    }
+
+    @Test
+    void refusesToTopUpAGroupLoanWhoseMembershipDroppedBelowTwo() throws Exception {
+        LoanGroup group = newLoanGroupWithThreeMembers("LGRP-206");
+        LoanProduct product = loanProducts.getOrCreateDefault();
+
+        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 500_00, null, null);
+        groupLoans.approve(applied.getId(), MANAGER_ID);
+        GroupLoan disbursed = groupLoans.disburse(applied.getId(), MANAGER_ID);
+
+        List<LoanGroupMember> members = loanGroups.findMembers(group.getId());
+        markMembersLeft(members.get(1).getId(), members.get(2).getId());
+
+        assertThrows(IllegalStateException.class, () -> groupLoans.topUp(disbursed.getId(), MANAGER_ID, 100_00, "no"));
+    }
+
+    /**
+     * Bypasses LoanGroupService.removeMember()'s guard against removing a
+     * member still jointly liable on a disbursed group loan — used only to
+     * simulate membership drift after disbursement in tests, mirroring the
+     * backend test's direct model update.
+     */
+    private void markMembersLeft(String... memberIds) throws Exception {
+        try (var conn = DatabaseConnection.getConnection()) {
+            for (String memberId : memberIds) {
+                try (var ps = conn.prepareStatement(
+                        "UPDATE loan_group_members SET status = 'left', left_at = ?, updated_at = ? WHERE id = ?")) {
+                    String now = java.time.Instant.now().toString();
+                    ps.setString(1, now);
+                    ps.setString(2, now);
+                    ps.setString(3, memberId);
+                    ps.executeUpdate();
+                }
+            }
+        }
     }
 
     private models.LedgerAccount findLedgerAccountById(String id) throws Exception {
