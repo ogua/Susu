@@ -267,8 +267,9 @@ public class GroupLoanService {
      * re-splitting it across the loan group's currently active members
      * (membership can drift since the original disbursement, so the
      * >=2-active-member guard is re-checked here too, same as {@link
-     * #disburse}). Kept local-only (no outbox call) for now, same reasoning
-     * as {@link LoanService#restructure}.
+     * #disburse}). Hybrid mode pushes the outcome through the outbox
+     * afterward, same client-reference-as-id reasoning as
+     * {@link LoanService#restructure}.
      */
     public GroupLoan restructure(String groupLoanId, String restructuredBy, String newProductId, String reason)
             throws SQLException {
@@ -332,6 +333,12 @@ public class GroupLoanService {
             closeRefinancedGroupLoan(conn, groupLoan.getId(), "restructure", reason, refinanceAmount, now);
         }
 
+        outbox.enqueueIfHybrid("group_loan.restructure", new JSONObject()
+                .put("group_loan_id", groupLoanId)
+                .put("loan_product_id", newProductId)
+                .put("reason", reason)
+                .put("client_reference", newGroupLoanId));
+
         return findById(newGroupLoanId);
     }
 
@@ -340,8 +347,8 @@ public class GroupLoanService {
      * group loan whose principal is the old loan's outstanding PRINCIPAL
      * plus a manager-entered top-up amount of fresh cash, reusing the OLD
      * loan's own terms and re-splitting the new principal across the loan
-     * group's currently active members. Kept local-only (no outbox call) for
-     * now, same reasoning as {@link LoanService#topUp}.
+     * group's currently active members. Hybrid mode pushes the outcome
+     * through the outbox afterward, same reasoning as {@link LoanService#topUp}.
      */
     public GroupLoan topUp(String groupLoanId, String toppedUpBy, long topUpAmount, String reason) throws SQLException {
         GroupLoan groupLoan = requireStatus(groupLoanId, GroupLoanStatus.DISBURSED, "topped up");
@@ -411,6 +418,12 @@ public class GroupLoanService {
             insertRefinancedGroupInstallments(conn, newGroupLoanId, schedule);
             closeRefinancedGroupLoan(conn, groupLoan.getId(), "top_up", reason, refinanceAmount, now);
         }
+
+        outbox.enqueueIfHybrid("group_loan.top_up", new JSONObject()
+                .put("group_loan_id", groupLoanId)
+                .put("amount", topUpAmount)
+                .put("reason", reason)
+                .put("client_reference", newGroupLoanId));
 
         return findById(newGroupLoanId);
     }

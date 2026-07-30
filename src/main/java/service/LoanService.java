@@ -238,11 +238,12 @@ public class LoanService {
      * receivable account's cached balance — interest/penalty are never
      * rolled over, same discipline the backend's RestructureLoanAction
      * follows) onto a fresh schedule under the chosen product's terms. No
-     * fresh cash changes hands — see {@link #topUp} for that. Kept
-     * local-only (no outbox call) for now: the backend's SyncOpType enum
-     * doesn't have a loan.restructure case yet, and pushing an unrecognized
-     * op_type would abort the whole sync batch, same reasoning as
-     * GroupService's payout method.
+     * fresh cash changes hands — see {@link #topUp} for that. Hybrid mode
+     * pushes the outcome through the outbox afterward using the new loan's
+     * own locally-generated id as its client_reference, so the server mints
+     * the SAME id rather than a different one (unlike approve/reject/
+     * disburse, this op creates a brand-new master record, so it needs the
+     * same client-reference-as-id treatment as loan.apply).
      */
     public Loan restructure(String loanId, String restructuredBy, String newProductId, String reason) throws SQLException {
         Loan loan = requireStatus(loanId, LoanStatus.DISBURSED, "restructured");
@@ -300,6 +301,12 @@ public class LoanService {
             closeRefinancedLoan(conn, loan.getId(), "restructure", reason, refinanceAmount, now);
         }
 
+        outbox.enqueueIfHybrid("loan.restructure", new JSONObject()
+                .put("loan_id", loanId)
+                .put("loan_product_id", newProductId)
+                .put("reason", reason)
+                .put("client_reference", newLoanId));
+
         return findById(newLoanId);
     }
 
@@ -308,8 +315,9 @@ public class LoanService {
      * whose principal is the old loan's outstanding PRINCIPAL plus a
      * manager-entered top-up amount of fresh cash, reusing the OLD loan's
      * own terms (a top-up is "more of the same deal," not a renegotiation —
-     * unlike {@link #restructure}, there's no product picker). Kept
-     * local-only (no outbox call) for now, same reasoning as restructure.
+     * unlike {@link #restructure}, there's no product picker). Hybrid mode
+     * pushes the outcome through the outbox afterward, same client-reference-
+     * as-id reasoning as {@link #restructure}.
      */
     public Loan topUp(String loanId, String toppedUpBy, long topUpAmount, String reason) throws SQLException {
         Loan loan = requireStatus(loanId, LoanStatus.DISBURSED, "topped up");
@@ -373,6 +381,12 @@ public class LoanService {
 
             closeRefinancedLoan(conn, loan.getId(), "top_up", reason, refinanceAmount, now);
         }
+
+        outbox.enqueueIfHybrid("loan.top_up", new JSONObject()
+                .put("loan_id", loanId)
+                .put("amount", topUpAmount)
+                .put("reason", reason)
+                .put("client_reference", newLoanId));
 
         return findById(newLoanId);
     }
