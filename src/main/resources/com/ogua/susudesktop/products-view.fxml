@@ -4,6 +4,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.Tab?>
 <?import javafx.scene.control.TabPane?>
 <?import javafx.scene.control.TableColumn?>
@@ -20,10 +21,11 @@
 
     <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
         <Tab text="Savings Products">
+            <ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: -ogua-bg;">
             <HBox spacing="16">
                 <padding><Insets bottom="16" left="0" right="0" top="16"/></padding>
                 <VBox spacing="10" HBox.hgrow="ALWAYS">
-                    <TableView fx:id="savingsTable" VBox.vgrow="ALWAYS">
+                    <TableView fx:id="savingsTable" styleClass="table-view" VBox.vgrow="ALWAYS">
                         <columns>
                             <TableColumn fx:id="spNameColumn" prefWidth="160" text="Name"/>
                             <TableColumn fx:id="spCodeColumn" prefWidth="80" text="Code"/>
@@ -34,13 +36,14 @@
                         </columns>
                     </TableView>
                     <HBox spacing="8">
+                        <Button fx:id="spEditButton" onAction="#onEditSavingsProduct" styleClass="button-secondary" text="Edit"/>
                         <Button fx:id="spToggleButton" onAction="#onToggleSavingsProduct" styleClass="button-secondary" text="Activate / Deactivate"/>
                         <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
                     </HBox>
                     <Label fx:id="spStatusLabel" styleClass="text-danger" wrapText="true"/>
                 </VBox>
-                <VBox prefWidth="300" spacing="10" styleClass="card">
-                    <Label styleClass="card-title" text="New Savings Product"/>
+                <VBox minHeight="-Infinity" prefWidth="300" spacing="10" styleClass="card">
+                    <Label fx:id="spFormTitle" styleClass="card-title" text="New Savings Product"/>
                     <Label styleClass="text-muted" text="Name"/>
                     <TextField fx:id="spNameField"/>
                     <Label styleClass="text-muted" text="Code"/>
@@ -55,15 +58,22 @@
                     <ComboBox fx:id="spCommissionTypeCombo" maxWidth="Infinity"/>
                     <Label styleClass="text-muted" text="Commission value (bps or minor units)"/>
                     <TextField fx:id="spCommissionValueField" promptText="0"/>
-                    <Button maxWidth="Infinity" onAction="#onCreateSavingsProduct" styleClass="button-primary" text="Save Product"/>
+                    <Label styleClass="text-muted" text="Interest rate — fixed deposit only (bps, e.g. 1000 = 10% p.a.)"/>
+                    <TextField fx:id="spInterestRateBpsField" promptText="1000"/>
+                    <Label styleClass="text-muted" text="Par value per share — shares only (GHS)"/>
+                    <TextField fx:id="spParValueField" promptText="10.00"/>
+                    <Button fx:id="spSaveButton" maxWidth="Infinity" onAction="#onSaveSavingsProduct" styleClass="button-primary" text="Save Product"/>
+                    <Button fx:id="spCancelEditButton" maxWidth="Infinity" managed="false" onAction="#onCancelSavingsEdit" styleClass="button-secondary" text="Cancel" visible="false"/>
                 </VBox>
             </HBox>
+            </ScrollPane>
         </Tab>
         <Tab text="Loan Products">
+            <ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: -ogua-bg;">
             <HBox spacing="16">
                 <padding><Insets bottom="16" left="0" right="0" top="16"/></padding>
                 <VBox spacing="10" HBox.hgrow="ALWAYS">
-                    <TableView fx:id="loanTable" VBox.vgrow="ALWAYS">
+                    <TableView fx:id="loanTable" styleClass="table-view" VBox.vgrow="ALWAYS">
                         <columns>
                             <TableColumn fx:id="lpNameColumn" prefWidth="150" text="Name"/>
                             <TableColumn fx:id="lpCodeColumn" prefWidth="80" text="Code"/>
@@ -75,13 +85,14 @@
                         </columns>
                     </TableView>
                     <HBox spacing="8">
+                        <Button fx:id="lpEditButton" onAction="#onEditLoanProduct" styleClass="button-secondary" text="Edit"/>
                         <Button fx:id="lpToggleButton" onAction="#onToggleLoanProduct" styleClass="button-secondary" text="Activate / Deactivate"/>
                         <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
                     </HBox>
                     <Label fx:id="lpStatusLabel" styleClass="text-danger" wrapText="true"/>
                 </VBox>
-                <VBox prefWidth="300" spacing="10" styleClass="card">
-                    <Label styleClass="card-title" text="New Loan Product"/>
+                <VBox minHeight="-Infinity" prefWidth="300" spacing="10" styleClass="card">
+                    <Label fx:id="lpFormTitle" styleClass="card-title" text="New Loan Product"/>
                     <Label styleClass="text-muted" text="Name"/>
                     <TextField fx:id="lpNameField"/>
                     <Label styleClass="text-muted" text="Code"/>
@@ -98,9 +109,11 @@
                     <TextField fx:id="lpMinField" promptText="100.00"/>
                     <Label styleClass="text-muted" text="Maximum amount (GHS)"/>
                     <TextField fx:id="lpMaxField" promptText="2000.00"/>
-                    <Button maxWidth="Infinity" onAction="#onCreateLoanProduct" styleClass="button-primary" text="Save Product"/>
+                    <Button fx:id="lpSaveButton" maxWidth="Infinity" onAction="#onSaveLoanProduct" styleClass="button-primary" text="Save Product"/>
+                    <Button fx:id="lpCancelEditButton" maxWidth="Infinity" managed="false" onAction="#onCancelLoanEdit" styleClass="button-secondary" text="Cancel" visible="false"/>
                 </VBox>
             </HBox>
+            </ScrollPane>
         </Tab>
     </TabPane>
 </VBox>

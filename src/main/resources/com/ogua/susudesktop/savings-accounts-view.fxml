@@ -12,14 +12,15 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<HBox spacing="16" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.SavingsAccountsController">
+<ScrollPane fitToWidth="true" fitToHeight="true" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.SavingsAccountsController">
+<HBox spacing="16">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <VBox spacing="12" HBox.hgrow="ALWAYS">
         <Label styleClass="page-title" text="Savings Accounts"/>
 
-        <TableView fx:id="table" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
                 <TableColumn fx:id="accountNumberColumn" prefWidth="110" text="Account #"/>
                 <TableColumn fx:id="customerColumn" prefWidth="180" text="Customer"/>
@@ -32,13 +33,13 @@
 
         <HBox spacing="8">
             <Button onAction="#onRecordCollection" styleClass="button-primary" text="Record Collection"/>
+            <Button onAction="#onBuyShares" styleClass="button-primary" text="Buy Shares"/>
             <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
         </HBox>
         <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
     </VBox>
 
-    <ScrollPane fitToWidth="true" prefWidth="340" style="-fx-background-color: transparent;">
-        <VBox spacing="12" styleClass="card">
+    <VBox prefWidth="340" spacing="12" styleClass="card">
             <Label styleClass="card-title" text="Open New Account"/>
 
             <Label styleClass="text-muted" text="Find customer"/>
@@ -51,7 +52,7 @@
             <Label styleClass="text-muted" text="Product"/>
             <ComboBox fx:id="productCombo" maxWidth="Infinity"/>
 
-            <Label styleClass="text-muted" text="Daily contribution (GHS)"/>
+            <Label fx:id="contributionLabel" styleClass="text-muted" text="Daily contribution (GHS)"/>
             <TextField fx:id="contributionField" promptText="5.00"/>
 
             <VBox fx:id="targetFieldsBox" spacing="6">
@@ -61,8 +62,13 @@
                 <DatePicker fx:id="maturesAtPicker" maxWidth="Infinity"/>
             </VBox>
 
+            <VBox fx:id="fdFieldsBox" spacing="6">
+                <Label styleClass="text-muted" text="Maturity date"/>
+                <DatePicker fx:id="fdMaturesAtPicker" maxWidth="Infinity"/>
+            </VBox>
+
             <Label fx:id="openStatusLabel" styleClass="text-danger" wrapText="true"/>
             <Button maxWidth="Infinity" onAction="#onOpenAccount" styleClass="button-primary" text="Open Account"/>
-        </VBox>
-    </ScrollPane>
+    </VBox>
 </HBox>
+</ScrollPane>

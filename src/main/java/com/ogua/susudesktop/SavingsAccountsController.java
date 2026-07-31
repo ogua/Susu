@@ -27,6 +27,7 @@ import service.CollectionService;
 import service.CustomerService;
 import service.SavingsAccountService;
 import service.SavingsProductService;
+import service.SharesService;
 import support.Money;
 
 public class SavingsAccountsController {
@@ -43,16 +44,20 @@ public class SavingsAccountsController {
     @FXML private TextField customerSearchField;
     @FXML private ComboBox<Customer> customerCombo;
     @FXML private ComboBox<SavingsProduct> productCombo;
+    @FXML private Label contributionLabel;
     @FXML private TextField contributionField;
     @FXML private VBox targetFieldsBox;
     @FXML private TextField targetAmountField;
     @FXML private DatePicker maturesAtPicker;
+    @FXML private VBox fdFieldsBox;
+    @FXML private DatePicker fdMaturesAtPicker;
     @FXML private Label openStatusLabel;
 
     private final CustomerService customerService = new CustomerService();
     private final SavingsAccountService accountService = new SavingsAccountService();
     private final SavingsProductService productService = new SavingsProductService();
     private final CollectionService collectionService = new CollectionService();
+    private final SharesService sharesService = new SharesService();
 
     @FXML
     private void initialize() {
@@ -95,8 +100,12 @@ public class SavingsAccountsController {
         });
         productCombo.valueProperty().addListener((obs, old, selected) -> {
             boolean isTarget = selected != null && selected.isTarget();
+            boolean isFixedDeposit = selected != null && selected.isFixedDeposit();
             targetFieldsBox.setVisible(isTarget);
             targetFieldsBox.setManaged(isTarget);
+            fdFieldsBox.setVisible(isFixedDeposit);
+            fdFieldsBox.setManaged(isFixedDeposit);
+            contributionLabel.setText(isFixedDeposit ? "Principal amount (GHS)" : "Daily contribution (GHS)");
         });
         loadProducts();
 
@@ -109,7 +118,9 @@ public class SavingsAccountsController {
             protected List<SavingsProduct> call() throws Exception {
                 SavingsProduct dailySusu = productService.getOrCreateDefault();
                 SavingsProduct target = productService.getOrCreateDefaultTarget();
-                return List.of(dailySusu, target);
+                SavingsProduct fixedDeposit = productService.getOrCreateDefaultFixedDeposit();
+                SavingsProduct shares = productService.getOrCreateDefaultShares();
+                return List.of(dailySusu, target, fixedDeposit, shares);
             }
         };
         task.setOnSucceeded(event -> {
@@ -199,6 +210,13 @@ public class SavingsAccountsController {
                 return;
             }
             maturesAt = maturesAtDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        } else if (product.isFixedDeposit()) {
+            LocalDate maturesAtDate = fdMaturesAtPicker.getValue();
+            if (maturesAtDate == null) {
+                openStatusLabel.setText("Fixed deposit accounts require a maturity date.");
+                return;
+            }
+            maturesAt = maturesAtDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
         }
 
         String agentId = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
@@ -220,6 +238,7 @@ public class SavingsAccountsController {
             contributionField.clear();
             targetAmountField.clear();
             maturesAtPicker.setValue(null);
+            fdMaturesAtPicker.setValue(null);
             openStatusLabel.setText("");
             refresh();
         });
@@ -280,5 +299,59 @@ public class SavingsAccountsController {
         task.setOnFailed(event -> statusLabel.setText(
                 "Could not record collection: " + task.getException().getMessage()));
         new Thread(task, "collection-record").start();
+    }
+
+    @FXML
+    private void onBuyShares() {
+        statusLabel.setText("");
+        SavingsAccount selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            statusLabel.setText("Select an account first.");
+            return;
+        }
+
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Buy Shares");
+        dialog.setHeaderText(selected.getAccountNumber());
+        dialog.setContentText("Number of shares:");
+
+        Optional<String> input = dialog.showAndWait();
+        if (input.isEmpty() || input.get().isBlank()) {
+            return;
+        }
+
+        int shares;
+        try {
+            shares = Integer.parseInt(input.get().trim());
+        } catch (NumberFormatException e) {
+            statusLabel.setText("Invalid number of shares.");
+            return;
+        }
+
+        String agentId = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        String agentName = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getName() : "Agent";
+        statusLabel.setText("Buying shares…");
+
+        Task<SharesService.SharesResult> task = new Task<>() {
+            @Override
+            protected SharesService.SharesResult call() throws Exception {
+                return sharesService.buyShares(agentId, agentName, selected.getId(), shares, null, null);
+            }
+        };
+        task.setOnSucceeded(event -> {
+            SharesService.SharesResult result = task.getValue();
+            statusLabel.setText("");
+
+            Alert alert = new Alert(Alert.AlertType.INFORMATION,
+                    "Shares purchased. New balance: " + Money.format(result.account().getBalance())
+                    + " (" + result.account().getShareCount() + " shares)");
+            alert.setHeaderText(null);
+            alert.showAndWait();
+
+            refresh();
+        });
+        task.setOnFailed(event -> statusLabel.setText(
+                "Could not buy shares: " + task.getException().getMessage()));
+        new Thread(task, "shares-buy").start();
     }
 }

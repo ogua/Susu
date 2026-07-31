@@ -10,17 +10,19 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import models.JournalEntry;
 import models.SavingsAccount;
 import models.SavingsProduct;
 import org.json.JSONObject;
 
-/** Opens and lists savings accounts — mirrors App\Actions\Savings\OpenSavingsAccountAction. */
+/** Opens, closes, and lists savings accounts — mirrors App\Actions\Savings\OpenSavingsAccountAction. */
 public class SavingsAccountService {
 
     private final ChartOfAccounts chart = new ChartOfAccounts();
     private final CustomerService customerService = new CustomerService();
     private final SavingsProductService productService = new SavingsProductService();
     private final OutboxService outbox = new OutboxService();
+    private final LedgerService ledger = new LedgerService();
 
     public SavingsAccount open(String customerId, String productId, String agentId, Long contributionAmountOverride)
             throws SQLException {
@@ -35,6 +37,9 @@ public class SavingsAccountService {
         }
         if (product.isTarget() && (targetAmount == null || maturesAt == null)) {
             throw new IllegalArgumentException("Target savings accounts require a target amount and maturity date.");
+        }
+        if (product.isFixedDeposit() && maturesAt == null) {
+            throw new IllegalArgumentException("Fixed deposit accounts require a maturity date.");
         }
 
         String id = UUID.randomUUID().toString();
@@ -52,15 +57,17 @@ public class SavingsAccountService {
                 ? contributionAmountOverride
                 : product.getContributionAmount();
         Long effectiveTargetAmount = product.isTarget() ? targetAmount : null;
-        String effectiveMaturesAt = product.isTarget() ? maturesAt : null;
+        String effectiveMaturesAt = (product.isTarget() || product.isFixedDeposit()) ? maturesAt : null;
+        int effectiveInterestRateBps = product.isFixedDeposit() ? product.getInterestRateBps() : 0;
         String now = Instant.now().toString();
 
         SavingsAccount created;
         try (Connection conn = DatabaseConnection.getConnection()) {
             String sql = "INSERT INTO savings_accounts (id, customer_id, savings_product_id, agent_id,"
                     + " ledger_account_id, account_number, contribution_amount, cycle_number, cycle_started_at,"
-                    + " contributions_this_cycle, balance, target_amount, matures_at, status, opened_at,"
-                    + " created_at, updated_at) VALUES (?,?,?,?,?,?,?,1,?,0,0,?,?,?,?,?,?)";
+                    + " contributions_this_cycle, balance, target_amount, matures_at, interest_rate_bps,"
+                    + " share_count, status, opened_at, created_at, updated_at)"
+                    + " VALUES (?,?,?,?,?,?,?,1,?,0,0,?,?,?,0,?,?,?,?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, id);
                 ps.setString(2, customerId);
@@ -76,10 +83,11 @@ public class SavingsAccountService {
                     ps.setNull(9, java.sql.Types.BIGINT);
                 }
                 ps.setString(10, effectiveMaturesAt);
-                ps.setString(11, AccountStatus.ACTIVE.value());
-                ps.setString(12, now);
+                ps.setInt(11, effectiveInterestRateBps);
+                ps.setString(12, AccountStatus.ACTIVE.value());
                 ps.setString(13, now);
                 ps.setString(14, now);
+                ps.setString(15, now);
                 ps.executeUpdate();
             }
 
@@ -98,6 +106,8 @@ public class SavingsAccountService {
                 .put("contribution_amount", contributionAmount);
         if (effectiveTargetAmount != null) {
             payload.put("target_amount", effectiveTargetAmount);
+        }
+        if (effectiveMaturesAt != null) {
             payload.put("matures_at", effectiveMaturesAt);
         }
         outbox.enqueueIfHybrid("account.open", payload);
@@ -198,6 +208,8 @@ public class SavingsAccountService {
         account.setTargetAmount(rs.wasNull() ? null : targetAmount);
         account.setMaturesAt(rs.getString("matures_at"));
         account.setMaturedAt(rs.getString("matured_at"));
+        account.setInterestRateBps(rs.getInt("interest_rate_bps"));
+        account.setShareCount(rs.getInt("share_count"));
         account.setStatus(AccountStatus.fromValue(rs.getString("status")));
         account.setOpenedAt(rs.getString("opened_at"));
         account.setClosedAt(rs.getString("closed_at"));

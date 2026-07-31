@@ -18,6 +18,9 @@ public class SavingsAccount {
     private Long targetAmount;
     private String maturesAt;
     private String maturedAt;
+    /** Snapshotted from the product at open time for fixed deposits; 0 otherwise. */
+    private int interestRateBps;
+    private int shareCount;
     private AccountStatus status;
     private String openedAt;
     private String closedAt;
@@ -67,6 +70,12 @@ public class SavingsAccount {
 
     public String getMaturedAt() { return maturedAt; }
     public void setMaturedAt(String maturedAt) { this.maturedAt = maturedAt; }
+
+    public int getInterestRateBps() { return interestRateBps; }
+    public void setInterestRateBps(int interestRateBps) { this.interestRateBps = interestRateBps; }
+
+    public int getShareCount() { return shareCount; }
+    public void setShareCount(int shareCount) { this.shareCount = shareCount; }
 
     /** Null for non-target accounts; capped at 100 once the balance meets or exceeds the target. */
     public Double targetProgressPercent() {

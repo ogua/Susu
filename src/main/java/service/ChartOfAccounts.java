@@ -69,6 +69,11 @@ public class ChartOfAccounts {
         return firstOrCreate("5100-BADDEBT", "Bad Debt Expense", LedgerAccountType.EXPENSE, null, null, true);
     }
 
+    /** The cost of interest paid out at a fixed deposit's maturity — an Expense, not a reduction of income. */
+    public LedgerAccount savingsInterestExpense() throws SQLException {
+        return firstOrCreate("5200-SAVINT", "Savings Interest Expense", LedgerAccountType.EXPENSE, null, null, true);
+    }
+
     /** Pooled but not-yet-paid-out contributions for one susu group's current round. */
     public LedgerAccount groupLiability(String groupId, String groupCode) throws SQLException {
         return firstOrCreate("GRP-" + groupCode, "Group " + groupCode,

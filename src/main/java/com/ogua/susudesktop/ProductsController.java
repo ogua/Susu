@@ -43,8 +43,14 @@ public class ProductsController {
     @FXML private TextField spCycleDaysField;
     @FXML private ComboBox<String> spCommissionTypeCombo;
     @FXML private TextField spCommissionValueField;
+    @FXML private TextField spInterestRateBpsField;
+    @FXML private TextField spParValueField;
+    @FXML private Button spEditButton;
     @FXML private Button spToggleButton;
     @FXML private Label spStatusLabel;
+    @FXML private Label spFormTitle;
+    @FXML private Button spSaveButton;
+    @FXML private Button spCancelEditButton;
 
     // Loan products tab
     @FXML private TableView<LoanProduct> loanTable;
@@ -63,11 +69,17 @@ public class ProductsController {
     @FXML private ComboBox<String> lpFrequencyCombo;
     @FXML private TextField lpMinField;
     @FXML private TextField lpMaxField;
+    @FXML private Button lpEditButton;
     @FXML private Button lpToggleButton;
     @FXML private Label lpStatusLabel;
+    @FXML private Label lpFormTitle;
+    @FXML private Button lpSaveButton;
+    @FXML private Button lpCancelEditButton;
 
     private final SavingsProductService savingsProducts = new SavingsProductService();
     private final LoanProductService loanProducts = new LoanProductService();
+    private String editingSavingsProductId;
+    private String editingLoanProductId;
 
     @FXML
     private void initialize() {
@@ -80,7 +92,7 @@ public class ProductsController {
                 data.getValue().getCommissionType().value()));
         spActiveColumn.setCellValueFactory(data -> new SimpleStringProperty(
                 data.getValue().isActive() ? "Active" : "Inactive"));
-        spTypeCombo.setItems(FXCollections.observableArrayList("daily_susu", "target"));
+        spTypeCombo.setItems(FXCollections.observableArrayList("daily_susu", "target", "fixed_deposit", "shares"));
         spTypeCombo.getSelectionModel().selectFirst();
         spCommissionTypeCombo.setItems(FXCollections.observableArrayList(
                 "first_contribution_per_cycle", "flat_per_cycle", "percentage"));
@@ -138,7 +150,7 @@ public class ProductsController {
     }
 
     @FXML
-    private void onCreateSavingsProduct() {
+    private void onSaveSavingsProduct() {
         spStatusLabel.setText("");
         try {
             if (spNameField.getText().isBlank() || spCodeField.getText().isBlank()
@@ -157,19 +169,69 @@ public class ProductsController {
             product.setCommissionType(CommissionType.fromValue(spCommissionTypeCombo.getValue()));
             product.setCommissionValue(spCommissionValueField.getText().isBlank()
                     ? 0 : Long.parseLong(spCommissionValueField.getText().trim()));
+            product.setInterestRateBps(spInterestRateBpsField.getText().isBlank()
+                    ? 0 : Integer.parseInt(spInterestRateBpsField.getText().trim()));
+            product.setParValue(spParValueField.getText().isBlank()
+                    ? null : parseMoney(spParValueField.getText()));
 
-            savingsProducts.create(product);
-            spNameField.clear();
-            spCodeField.clear();
-            spContributionField.clear();
-            spCycleDaysField.clear();
-            spCommissionValueField.clear();
+            if (editingSavingsProductId != null) {
+                product.setId(editingSavingsProductId);
+                savingsProducts.update(product);
+            } else {
+                savingsProducts.create(product);
+            }
+            resetSavingsForm();
             refresh();
         } catch (NumberFormatException e) {
             spStatusLabel.setText("Amounts and day counts must be numbers.");
         } catch (Exception e) {
             spStatusLabel.setText("Could not save product: " + e.getMessage());
         }
+    }
+
+    @FXML
+    private void onEditSavingsProduct() {
+        SavingsProduct selected = savingsTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            spStatusLabel.setText("Select a product to edit.");
+            return;
+        }
+        spStatusLabel.setText("");
+        editingSavingsProductId = selected.getId();
+        spNameField.setText(selected.getName());
+        spCodeField.setText(selected.getCode());
+        spTypeCombo.setValue(selected.getType());
+        spContributionField.setText(String.format("%.2f", selected.getContributionAmount() / 100.0));
+        spCycleDaysField.setText(String.valueOf(selected.getCycleLengthDays()));
+        spCommissionTypeCombo.setValue(selected.getCommissionType().value());
+        spCommissionValueField.setText(String.valueOf(selected.getCommissionValue()));
+        spInterestRateBpsField.setText(String.valueOf(selected.getInterestRateBps()));
+        spParValueField.setText(selected.getParValue() == null
+                ? "" : String.format("%.2f", selected.getParValue() / 100.0));
+        spFormTitle.setText("Edit Savings Product");
+        spSaveButton.setText("Update Product");
+        spCancelEditButton.setVisible(true);
+        spCancelEditButton.setManaged(true);
+    }
+
+    @FXML
+    private void onCancelSavingsEdit() {
+        resetSavingsForm();
+    }
+
+    private void resetSavingsForm() {
+        editingSavingsProductId = null;
+        spNameField.clear();
+        spCodeField.clear();
+        spContributionField.clear();
+        spCycleDaysField.clear();
+        spCommissionValueField.clear();
+        spInterestRateBpsField.clear();
+        spParValueField.clear();
+        spFormTitle.setText("New Savings Product");
+        spSaveButton.setText("Save Product");
+        spCancelEditButton.setVisible(false);
+        spCancelEditButton.setManaged(false);
     }
 
     @FXML
@@ -188,7 +250,7 @@ public class ProductsController {
     }
 
     @FXML
-    private void onCreateLoanProduct() {
+    private void onSaveLoanProduct() {
         lpStatusLabel.setText("");
         try {
             if (lpNameField.getText().isBlank() || lpCodeField.getText().isBlank()
@@ -211,19 +273,61 @@ public class ProductsController {
             product.setMinAmount(parseMoney(lpMinField.getText()));
             product.setMaxAmount(parseMoney(lpMaxField.getText()));
 
-            loanProducts.create(product);
-            lpNameField.clear();
-            lpCodeField.clear();
-            lpRateField.clear();
-            lpTermField.clear();
-            lpMinField.clear();
-            lpMaxField.clear();
+            if (editingLoanProductId != null) {
+                product.setId(editingLoanProductId);
+                loanProducts.update(product);
+            } else {
+                loanProducts.create(product);
+            }
+            resetLoanForm();
             refresh();
         } catch (NumberFormatException e) {
             lpStatusLabel.setText("Rates, terms, and amounts must be numbers.");
         } catch (Exception e) {
             lpStatusLabel.setText("Could not save product: " + e.getMessage());
         }
+    }
+
+    @FXML
+    private void onEditLoanProduct() {
+        LoanProduct selected = loanTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            lpStatusLabel.setText("Select a product to edit.");
+            return;
+        }
+        lpStatusLabel.setText("");
+        editingLoanProductId = selected.getId();
+        lpNameField.setText(selected.getName());
+        lpCodeField.setText(selected.getCode());
+        lpMethodCombo.setValue(selected.getInterestMethod().value());
+        lpRateField.setText(String.valueOf(selected.getInterestRateBps()));
+        lpTermField.setText(String.valueOf(selected.getTermPeriodCount()));
+        lpFrequencyCombo.setValue(selected.getRepaymentFrequency().value());
+        lpMinField.setText(String.format("%.2f", selected.getMinAmount() / 100.0));
+        lpMaxField.setText(String.format("%.2f", selected.getMaxAmount() / 100.0));
+        lpFormTitle.setText("Edit Loan Product");
+        lpSaveButton.setText("Update Product");
+        lpCancelEditButton.setVisible(true);
+        lpCancelEditButton.setManaged(true);
+    }
+
+    @FXML
+    private void onCancelLoanEdit() {
+        resetLoanForm();
+    }
+
+    private void resetLoanForm() {
+        editingLoanProductId = null;
+        lpNameField.clear();
+        lpCodeField.clear();
+        lpRateField.clear();
+        lpTermField.clear();
+        lpMinField.clear();
+        lpMaxField.clear();
+        lpFormTitle.setText("New Loan Product");
+        lpSaveButton.setText("Save Product");
+        lpCancelEditButton.setVisible(false);
+        lpCancelEditButton.setManaged(false);
     }
 
     @FXML

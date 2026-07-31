@@ -33,12 +33,17 @@ public class WithdrawalService {
             throw new IllegalArgumentException("Withdrawals are only possible on active accounts.");
         }
 
+        SavingsProduct product = productService.findById(account.getSavingsProductId());
+        if (product != null && product.isFixedDeposit() && account.getMaturedAt() == null) {
+            throw new IllegalStateException("Fixed deposits cannot be withdrawn before their maturity date.");
+        }
+
         long held = heldAmount(accountId);
         if (amount <= 0 || amount > account.getBalance() - held) {
             throw new IllegalArgumentException("Requested amount exceeds the available balance.");
         }
 
-        long penaltyAmount = earlyWithdrawalPenalty(account, amount);
+        long penaltyAmount = earlyWithdrawalPenalty(account, product, amount);
 
         try (Connection conn = DatabaseConnection.getConnection()) {
             String id = UUID.randomUUID().toString();
@@ -64,11 +69,10 @@ public class WithdrawalService {
     }
 
     /** Applies only to target-savings accounts withdrawn from before their matures_at date. */
-    private long earlyWithdrawalPenalty(SavingsAccount account, long amount) throws SQLException {
+    private long earlyWithdrawalPenalty(SavingsAccount account, SavingsProduct product, long amount) {
         if (account.getTargetAmount() == null || account.getMaturedAt() != null) {
             return 0;
         }
-        SavingsProduct product = productService.findById(account.getSavingsProductId());
         if (product == null || !product.isTarget()) {
             return 0;
         }

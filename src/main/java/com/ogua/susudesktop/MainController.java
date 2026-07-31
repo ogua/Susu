@@ -17,6 +17,7 @@ import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import models.LocalUser;
+import service.FixedDepositService;
 import service.LicenseManager;
 import service.LoanService;
 import service.OutboxService;
@@ -63,6 +64,7 @@ public class MainController {
     private final OutboxService outbox = new OutboxService();
     private final SyncService syncService = new SyncService();
     private final LoanService loanService = new LoanService();
+    private final FixedDepositService fixedDepositService = new FixedDepositService();
     private Timeline licenseWatch;
 
     @FXML
@@ -105,6 +107,7 @@ public class MainController {
         refreshSyncStatus();
         pullProductsInBackground();
         flagArrearsInBackground();
+        matureFixedDepositsInBackground();
         startLicenseWatch();
 
         showDashboard();
@@ -188,6 +191,23 @@ public class MainController {
                 // Best-effort: a failure here shouldn't block the app from opening.
             }
         }, "loan-arrears-startup");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * This app has no background scheduler, so {@link FixedDepositService#matureFixedDeposits()}
+     * (the standalone mirror of the backend's scheduled fixed-deposit maturity
+     * command) runs once per launch instead, same pattern as {@link #flagArrearsInBackground()}.
+     */
+    private void matureFixedDepositsInBackground() {
+        Thread thread = new Thread(() -> {
+            try {
+                fixedDepositService.matureFixedDeposits();
+            } catch (Exception ignored) {
+                // Best-effort: a failure here shouldn't block the app from opening.
+            }
+        }, "fixed-deposit-maturity-startup");
         thread.setDaemon(true);
         thread.start();
     }
