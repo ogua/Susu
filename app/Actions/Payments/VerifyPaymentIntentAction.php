@@ -2,14 +2,17 @@
 
 namespace App\Actions\Payments;
 
+use App\Actions\Savings\BuySharesAction;
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
 use App\Enums\PaymentIntentStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\SavingsProductType;
 use App\Models\PaymentIntent;
 use App\Models\SavingsAccount;
 use App\Services\Payments\PaystackClient;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Confirms a payment intent and posts the ledger entry exactly once. Called
@@ -23,6 +26,7 @@ class VerifyPaymentIntentAction
     public function __construct(
         private PaystackClient $paystack,
         private RecordCollectionAction $recordCollection,
+        private BuySharesAction $buyShares,
     ) {}
 
     /** Polls Paystack directly — used by the client's fast verify screen. */
@@ -57,14 +61,33 @@ class VerifyPaymentIntentAction
 
             $account = $locked->payable;
             if ($account instanceof SavingsAccount) {
-                $result = $this->recordCollection->execute(
-                    agent: $locked->initiatedBy,
-                    account: $account,
-                    amount: $locked->amount,
-                    clientReference: $locked->client_reference,
-                    origin: ClientOrigin::System,
-                    paymentMethod: PaymentMethod::MobileMoney,
-                );
+                $account->loadMissing('product');
+
+                if ($account->product->type === SavingsProductType::Shares) {
+                    if ($locked->amount % $account->product->par_value !== 0) {
+                        throw ValidationException::withMessages([
+                            'amount' => 'Amount must be a positive multiple of the par value ('.$account->product->par_value.').',
+                        ]);
+                    }
+
+                    $result = $this->buyShares->execute(
+                        agent: $locked->initiatedBy,
+                        account: $account,
+                        shares: intdiv($locked->amount, $account->product->par_value),
+                        clientReference: $locked->client_reference,
+                        origin: ClientOrigin::System,
+                        paymentMethod: PaymentMethod::MobileMoney,
+                    );
+                } else {
+                    $result = $this->recordCollection->execute(
+                        agent: $locked->initiatedBy,
+                        account: $account,
+                        amount: $locked->amount,
+                        clientReference: $locked->client_reference,
+                        origin: ClientOrigin::System,
+                        paymentMethod: PaymentMethod::MobileMoney,
+                    );
+                }
 
                 $locked->forceFill([
                     'status' => PaymentIntentStatus::Success,

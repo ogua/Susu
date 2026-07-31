@@ -246,6 +246,34 @@ it('lets the webhook and a manual verify race without double-posting', function 
         ->and($this->account->contributions_this_cycle)->toBe(1);
 });
 
+it('buys shares instead of recording a collection when charging a shares account', function (): void {
+    $sharesProduct = SavingsProduct::factory()->shares(10_00)->create([
+        'company_id' => $this->branch->company_id,
+    ]);
+    $sharesAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+        'savings_product_id' => $sharesProduct->id,
+        'agent_id' => $this->agent->id,
+    ]);
+
+    Http::fake([
+        'https://api.paystack.co/charge' => Http::response(['status' => true, 'data' => ['status' => 'success', 'reference' => 'ref-shares']]),
+    ]);
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/payments/charge', [
+        'savings_account_id' => $sharesAccount->id,
+        'amount' => 50_00, // 5 shares * 10_00 par value
+        'phone' => '0244000111',
+        'provider' => 'mtn',
+    ])->assertCreated()->assertJsonPath('intent.status', 'success');
+
+    expect($sharesAccount->refresh()->share_count)->toBe(5)
+        ->and($sharesAccount->balance)->toBe(50_00)
+        ->and($sharesAccount->contributions_this_cycle)->toBe(0); // RecordCollectionAction never ran
+});
+
 it('lists payment intents scoped to the caller company, for back-office roles only', function (): void {
     $manager = User::factory()->branchManager($this->branch)->create();
 
