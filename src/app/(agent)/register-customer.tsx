@@ -64,6 +64,7 @@ export default function RegisterCustomerScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [savedCustomerId, setSavedCustomerId] = useState<string | null>(null);
 
   async function handleSubmit() {
     setError(null);
@@ -89,7 +90,10 @@ export default function RegisterCustomerScreen() {
 
     setSubmitting(true);
     try {
-      await enqueueCustomerRegistration({
+      // The returned id is also the customer's actual server-side primary
+      // key once synced (client_reference-as-id, see CreateCustomerAction) —
+      // usable immediately to open a savings account for them, offline.
+      const customerId = await enqueueCustomerRegistration({
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: phone.trim(),
@@ -112,9 +116,8 @@ export default function RegisterCustomerScreen() {
       });
 
       setSavedMessage('Customer saved. It will sync automatically.');
+      setSavedCustomerId(customerId);
       void drainOutbox();
-
-      setTimeout(() => router.back(), 900);
     } catch {
       setError('Could not save the customer locally. Please try again.');
     } finally {
@@ -238,7 +241,22 @@ export default function RegisterCustomerScreen() {
       {error ? <ThemedText style={{ color: Palette.danger }}>{error}</ThemedText> : null}
       {savedMessage ? <ThemedText style={{ color: Palette.success }}>{savedMessage}</ThemedText> : null}
 
-      <Button title="Save Customer" loading={submitting} onPress={handleSubmit} />
+      {savedCustomerId ? (
+        <>
+          <Button
+            title="Open Savings Account"
+            onPress={() =>
+              router.push({
+                pathname: '/(agent)/open-account',
+                params: { customerId: savedCustomerId, customerName: `${firstName.trim()} ${lastName.trim()}` },
+              })
+            }
+          />
+          <Button title="Done" variant="secondary" onPress={() => router.back()} />
+        </>
+      ) : (
+        <Button title="Save Customer" loading={submitting} onPress={handleSubmit} />
+      )}
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
         Works offline — the customer is saved on your device and synced automatically.

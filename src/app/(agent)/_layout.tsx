@@ -28,6 +28,7 @@ export default function AgentLayout() {
       <Stack.Screen name="accounts" options={{ title: 'My Accounts' }} />
       <Stack.Screen name="collect/[accountId]" options={{ title: 'Record Collection' }} />
       <Stack.Screen name="register-customer" options={{ title: 'Register Customer' }} />
+      <Stack.Screen name="open-account" options={{ title: 'Open Savings Account' }} />
       <Stack.Screen name="day-close" options={{ title: 'Day Summary' }} />
       <Stack.Screen name="sync" options={{ title: 'Sync Queue' }} />
       <Stack.Screen name="payment-verify" options={{ title: 'Mobile Money Payment' }} />

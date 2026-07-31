@@ -64,9 +64,11 @@ export default function CustomerHome() {
 
   function renderAccount(account: SavingsAccount) {
     const isTarget = account.target_amount !== null;
+    const isFixedDeposit = account.product?.type === 'fixed_deposit';
+    const isShares = account.product?.type === 'shares';
     const progress = isTarget
       ? (account.target_progress_percent ?? 0) / 100
-      : account.contribution_amount
+      : !isFixedDeposit && !isShares && account.contribution_amount
         ? account.contributions_this_cycle / (account.product?.cycle_length_days ?? 31)
         : 0;
 
@@ -78,10 +80,14 @@ export default function CustomerHome() {
             pathname: '/(customer)/account/[accountId]',
             params: {
               accountId: account.id,
+              productType: account.product?.type ?? '',
               targetAmountFormatted: account.target_amount_formatted ?? '',
               targetProgressPercent: String(account.target_progress_percent ?? ''),
               maturesAt: account.matures_at ?? '',
               maturedAt: account.matured_at ?? '',
+              parValue: String(account.product?.par_value ?? ''),
+              parValueFormatted: account.product?.par_value != null ? formatMoney(account.product.par_value) : '',
+              shareCount: String(account.share_count ?? 0),
             },
           })
         }
@@ -100,12 +106,21 @@ export default function CustomerHome() {
                 {account.target_progress_percent}% of {account.target_amount_formatted} target
                 {account.matured_at ? ' · Matured' : account.matures_at ? ` · Matures ${new Date(account.matures_at).toLocaleDateString()}` : ''}
               </ThemedText>
+            ) : isFixedDeposit ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Fixed deposit
+                {account.matured_at ? ' · Matured' : account.matures_at ? ` · Matures ${new Date(account.matures_at).toLocaleDateString()}` : ''}
+              </ThemedText>
+            ) : isShares ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {account.share_count} shares
+              </ThemedText>
             ) : (
               <ThemedText type="small" themeColor="textSecondary">
                 {account.contributions_this_cycle}/{account.product?.cycle_length_days ?? 31} days this cycle
               </ThemedText>
             )}
-            <ProgressBar progress={progress} />
+            {!isFixedDeposit && !isShares ? <ProgressBar progress={progress} /> : null}
           </Card>
         )}
       </Pressable>

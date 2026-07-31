@@ -21,6 +21,16 @@ export async function enqueueCollection(payload: {
   });
 }
 
+export async function enqueueOpenAccount(payload: {
+  customer_id: string;
+  savings_product_id: string;
+  contribution_amount?: number;
+  target_amount?: number;
+  matures_at?: string;
+}): Promise<string> {
+  return enqueue('account.open', payload);
+}
+
 export async function enqueueCustomerRegistration(payload: {
   first_name: string;
   last_name: string;

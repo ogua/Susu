@@ -7,9 +7,9 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-nati
 import { getAccountTransactions, getCustomerStatementUrl } from '@/api/accounts';
 import { apiErrorMessage } from '@/api/client';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, EmptyState, ListRow, ProgressBar, Screen } from '@/components/ui';
+import { Button, Card, EmptyState, ListRow, ProgressBar, Screen, StatTile } from '@/components/ui';
 import { Palette } from '@/constants/theme';
-import type { Transaction } from '@/types/api';
+import type { SavingsProductType, Transaction } from '@/types/api';
 
 const TYPE_LABELS: Record<Transaction['type'], string> = {
   collection: 'Deposit',
@@ -21,13 +21,30 @@ const TYPE_LABELS: Record<Transaction['type'], string> = {
 };
 
 export default function AccountDetailScreen() {
-  const { accountId, targetAmountFormatted, targetProgressPercent, maturesAt, maturedAt } = useLocalSearchParams<{
+  const {
+    accountId,
+    productType,
+    targetAmountFormatted,
+    targetProgressPercent,
+    maturesAt,
+    maturedAt,
+    parValue,
+    parValueFormatted,
+    shareCount,
+  } = useLocalSearchParams<{
     accountId: string;
+    productType?: SavingsProductType | '';
     targetAmountFormatted?: string;
     targetProgressPercent?: string;
     maturesAt?: string;
     maturedAt?: string;
+    parValue?: string;
+    parValueFormatted?: string;
+    shareCount?: string;
   }>();
+
+  const isFixedDeposit = productType === 'fixed_deposit';
+  const isShares = productType === 'shares';
 
   const transactions = useQuery({
     queryKey: ['customer', 'account', accountId, 'transactions'],
@@ -79,6 +96,21 @@ export default function AccountDetailScreen() {
         </Card>
       ) : null}
 
+      {isFixedDeposit ? (
+        <Card>
+          <ThemedText type="smallBold">Fixed deposit</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {maturedAt
+              ? 'Matured — available to withdraw'
+              : maturesAt
+                ? `Matures ${new Date(maturesAt).toLocaleDateString()} · cannot withdraw before this date`
+                : ''}
+          </ThemedText>
+        </Card>
+      ) : null}
+
+      {isShares ? <StatTile label="Shares owned" value={shareCount ?? '0'} /> : null}
+
       <View style={styles.actionRow}>
         <Button
           title="Deposit via Mobile Money"
@@ -87,8 +119,25 @@ export default function AccountDetailScreen() {
         <Button
           title="Request Withdrawal"
           variant="secondary"
-          onPress={() => router.push({ pathname: '/(customer)/withdraw', params: { accountId } })}
+          onPress={() =>
+            router.push({
+              pathname: '/(customer)/withdraw',
+              params: { accountId, productType: productType ?? '', maturesAt: maturesAt ?? '', maturedAt: maturedAt ?? '' },
+            })
+          }
         />
+        {isShares ? (
+          <Button
+            title="Buy Shares"
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: '/(customer)/buy-shares',
+                params: { accountId, parValue: parValue ?? '', parValueFormatted: parValueFormatted ?? '' },
+              })
+            }
+          />
+        ) : null}
         <Button
           title={downloadingStatement ? 'Opening…' : 'Download Statement'}
           variant="ghost"

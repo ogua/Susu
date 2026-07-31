@@ -68,6 +68,22 @@ export interface Customer {
   updated_at: string;
 }
 
+export type SavingsProductType = 'daily_susu' | 'target' | 'fixed_deposit' | 'shares';
+
+export interface SavingsProduct {
+  id: string;
+  name: string;
+  code: string;
+  type: SavingsProductType;
+  contribution_amount: number;
+  cycle_length_days: number;
+  commission_type: string;
+  commission_value: number;
+  interest_rate_bps: number;
+  par_value: number | null;
+  is_active: boolean;
+}
+
 export interface SavingsAccount {
   id: string;
   account_number: string;
@@ -76,8 +92,10 @@ export interface SavingsAccount {
   product?: {
     id: string;
     name: string;
-    type: string;
+    type: SavingsProductType;
     cycle_length_days: number;
+    interest_rate_bps: number;
+    par_value: number | null;
   };
   agent_id: string | null;
   contribution_amount: number;
@@ -91,6 +109,8 @@ export interface SavingsAccount {
   matures_at: string | null;
   matured_at: string | null;
   target_progress_percent: number | null;
+  interest_rate_bps: number;
+  share_count: number;
   status: 'active' | 'dormant' | 'closed';
   opened_at: string;
   updated_at: string;

@@ -28,6 +28,7 @@ export default function CustomerLayout() {
       <Stack.Screen name="account/[accountId]" options={{ title: 'Account' }} />
       <Stack.Screen name="withdraw" options={{ title: 'Request Withdrawal' }} />
       <Stack.Screen name="deposit" options={{ title: 'Deposit' }} />
+      <Stack.Screen name="buy-shares" options={{ title: 'Buy Shares' }} />
       <Stack.Screen name="payment-verify" options={{ title: 'Mobile Money Payment' }} />
       <Stack.Screen name="loans/index" options={{ title: 'My Loans' }} />
       <Stack.Screen name="loans/[loanId]" options={{ title: 'Loan' }} />
