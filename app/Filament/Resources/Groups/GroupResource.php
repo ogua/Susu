@@ -16,6 +16,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 /** Susu groups (ROSCA): members contribute per round, one member is paid out the pool each round. */
 class GroupResource extends Resource
@@ -23,6 +24,8 @@ class GroupResource extends Resource
     protected static ?string $model = Group::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Susu Groups';
 
     protected static ?string $recordTitleAttribute = 'name';
 

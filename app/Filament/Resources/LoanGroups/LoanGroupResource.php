@@ -15,6 +15,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 /** A persistent roster of customers that can take out group loans repeatedly over time. */
 class LoanGroupResource extends Resource
@@ -22,6 +23,8 @@ class LoanGroupResource extends Resource
     protected static ?string $model = LoanGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Loans';
 
     protected static ?string $recordTitleAttribute = 'name';
 

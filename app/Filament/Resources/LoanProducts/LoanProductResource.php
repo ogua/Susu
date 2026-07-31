@@ -16,6 +16,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use UnitEnum;
 
 /** Company-level, like SavingsProductResource — not branch-scoped. */
 class LoanProductResource extends Resource
@@ -25,6 +26,8 @@ class LoanProductResource extends Resource
     protected static bool $isScopedToTenant = false;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Loans';
 
     public static function getEloquentQuery(): Builder
     {

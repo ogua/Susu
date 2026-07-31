@@ -15,6 +15,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 /** Applications originate here (or via API/sync); decisions happen via table actions, never edit. */
 class LoanResource extends Resource
@@ -22,6 +23,8 @@ class LoanResource extends Resource
     protected static ?string $model = Loan::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Loans';
 
     protected static ?string $recordTitleAttribute = 'loan_number';
 

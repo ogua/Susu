@@ -16,12 +16,15 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 class SavingsAccountResource extends Resource
 {
     protected static ?string $model = SavingsAccount::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Savings';
 
     protected static ?string $recordTitleAttribute = 'account_number';
 

@@ -11,6 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 /** Withdrawals originate from the customer app/API — this panel only decides and pays them. */
 class WithdrawalRequestResource extends Resource
@@ -18,6 +19,8 @@ class WithdrawalRequestResource extends Resource
     protected static ?string $model = WithdrawalRequest::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowUpTray;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Savings';
 
     public static function getEloquentQuery(): Builder
     {
