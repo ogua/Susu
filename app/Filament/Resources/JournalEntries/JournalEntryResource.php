@@ -22,9 +22,22 @@ class JournalEntryResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'reference';
 
+    /** Company/super admins oversee every branch, so they get a company-wide query instead of the current tenant (see isScopedToTenant()). */
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('branch_id', Filament::getTenant()?->id);
+        $query = parent::getEloquentQuery();
+        $user = auth()->user();
+
+        if ($user?->hasAnyRole(['company_admin', 'super_admin'])) {
+            return $query->where('company_id', $user->company_id);
+        }
+
+        return $query->where('branch_id', Filament::getTenant()?->id);
+    }
+
+    public static function isScopedToTenant(): bool
+    {
+        return ! (auth()->user()?->hasAnyRole(['company_admin', 'super_admin']) ?? false);
     }
 
     public static function table(Table $table): Table

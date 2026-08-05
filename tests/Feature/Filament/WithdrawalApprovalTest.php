@@ -62,9 +62,8 @@ it('approves and pays a withdrawal from the table actions', function (): void {
     expect($this->request->refresh()->status)->toBe(WithdrawalStatus::Paid);
 });
 
-it('denies a field agent from approving withdrawals', function (): void {
+it('denies a field agent from viewing the branch withdrawal requests list', function (): void {
     $this->actingAs($this->agent);
 
-    livewire(ListWithdrawalRequests::class)
-        ->assertActionHidden(TestAction::make('approve')->table($this->request));
+    livewire(ListWithdrawalRequests::class)->assertForbidden();
 });

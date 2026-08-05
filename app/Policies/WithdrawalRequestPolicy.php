@@ -7,9 +7,10 @@ use App\Models\WithdrawalRequest;
 
 class WithdrawalRequestPolicy
 {
+    /** The branch-wide list is for managers to decide/pay requests — agents use their own Request Withdrawal page instead. */
     public function viewAny(User $user): bool
     {
-        return $user->company_id !== null;
+        return $user->company_id !== null && $user->hasRole(['company_admin', 'branch_manager']);
     }
 
     public function view(User $user, WithdrawalRequest $request): bool

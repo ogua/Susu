@@ -10,7 +10,7 @@ class JournalEntryPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->company_id !== null;
+        return $user->company_id !== null && $user->hasRole(['company_admin', 'branch_manager']);
     }
 
     public function view(User $user, JournalEntry $entry): bool

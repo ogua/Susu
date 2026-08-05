@@ -47,4 +47,9 @@ class SavingsAccountPolicy
         return $user->hasRole(['company_admin', 'branch_manager'])
             || ($user->hasRole('field_agent') && $account->agent_id === $user->id);
     }
+
+    public function buyShares(User $user, SavingsAccount $account): bool
+    {
+        return $this->recordCollection($user, $account);
+    }
 }

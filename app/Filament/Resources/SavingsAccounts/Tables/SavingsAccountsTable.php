@@ -57,6 +57,7 @@ class SavingsAccountsTable
                 Action::make('recordCollection')
                     ->label('Record Collection')
                     ->visible(fn (SavingsAccount $record): bool => $record->product->type !== SavingsProductType::Shares)
+                    ->authorize('recordCollection')
                     ->schema([
                         TextInput::make('amount')
                             ->label('Amount (GHS)')
@@ -76,6 +77,7 @@ class SavingsAccountsTable
                 Action::make('buyShares')
                     ->label('Buy Shares')
                     ->visible(fn (SavingsAccount $record): bool => $record->product->type === SavingsProductType::Shares)
+                    ->authorize('buyShares')
                     ->schema([
                         TextInput::make('shares')
                             ->numeric()

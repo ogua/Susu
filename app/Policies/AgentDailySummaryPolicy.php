@@ -7,9 +7,10 @@ use App\Models\User;
 
 class AgentDailySummaryPolicy
 {
+    /** The branch-wide day-sheet list is a manager reconciliation tool — agents use their own Close Daily page instead. */
     public function viewAny(User $user): bool
     {
-        return $user->company_id !== null;
+        return $user->company_id !== null && $user->hasRole(['company_admin', 'branch_manager']);
     }
 
     public function view(User $user, AgentDailySummary $summary): bool

@@ -1,0 +1,15 @@
+//link to public_html
+ln -s /home/u681407738/domains/sunrideafrica.com/susuapp/public susuapp
+
+//create a symlink
+ln -s /home/u681407738/domains/sunrideafrica.com/testapp/storage/app/public /home/u681407738/domains/sunrideafrica.com/testapp/public/storage
+
+
+ln -s /home/u681407738/domains/sunrideafrica.com/susuapp/storage/app/public storage
+ln -s /home/u681407738/domains/sunrideafrica.com/susuapp/public susuapp
+
+
+susu-admin@test.com password: password - All Branches - Owner
+branch@test.com password: password - All Branches
+agent1@test.com    password: password = Main Branch
+agent2@test.com  password: password = Nungua Branch

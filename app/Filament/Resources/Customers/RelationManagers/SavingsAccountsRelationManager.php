@@ -38,6 +38,7 @@ class SavingsAccountsRelationManager extends RelationManager
             ->recordActions([
                 Action::make('recordCollection')
                     ->label('Record Collection')
+                    ->authorize('recordCollection')
                     ->schema([
                         TextInput::make('amount')
                             ->label('Amount (GHS)')
