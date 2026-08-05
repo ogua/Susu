@@ -3,15 +3,20 @@
 namespace App\Filament\Resources\Groups;
 
 use App\Filament\Resources\Groups\Pages\CreateGroup;
+use App\Filament\Resources\Groups\Pages\EditGroup;
 use App\Filament\Resources\Groups\Pages\ListGroups;
+use App\Filament\Resources\Groups\Pages\ViewGroup;
 use App\Filament\Resources\Groups\RelationManagers\MembersRelationManager;
 use App\Filament\Resources\Groups\RelationManagers\RoundsRelationManager;
 use App\Filament\Resources\Groups\Schemas\GroupForm;
 use App\Filament\Resources\Groups\Tables\GroupsTable;
 use App\Models\Group;
+use App\Support\Money;
 use BackedEnum;
 use Filament\Facades\Filament;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
@@ -44,6 +49,27 @@ class GroupResource extends Resource
         return GroupsTable::configure($table);
     }
 
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                Section::make('Group')
+                    ->columns(2)
+                    ->schema([
+                        TextEntry::make('name'),
+                        TextEntry::make('code'),
+                        TextEntry::make('contribution_amount')
+                            ->label('Contribution per round')
+                            ->formatStateUsing(fn (int $state): string => Money::format($state)),
+                        TextEntry::make('frequency')->badge(),
+                        TextEntry::make('status')->badge(),
+                        TextEntry::make('members_count')->label('Members')->state(fn (Group $record): int => $record->members()->count()),
+                        TextEntry::make('activated_at')->dateTime()->placeholder('Not activated'),
+                        TextEntry::make('completed_at')->dateTime()->placeholder('Not completed'),
+                    ]),
+            ]);
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -57,6 +83,8 @@ class GroupResource extends Resource
         return [
             'index' => ListGroups::route('/'),
             'create' => CreateGroup::route('/create'),
+            'view' => ViewGroup::route('/{record}'),
+            'edit' => EditGroup::route('/{record}/edit'),
         ];
     }
 }

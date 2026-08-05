@@ -11,7 +11,7 @@ class CollectionsTrendChart extends ChartWidget
 {
     protected ?string $heading = 'Collections — Last 30 Days';
 
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 4;
 
     protected ?string $pollingInterval = null;
 

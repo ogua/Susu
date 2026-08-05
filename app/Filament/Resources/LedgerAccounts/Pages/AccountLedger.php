@@ -110,7 +110,7 @@ class AccountLedger extends Page implements HasTable
                 TextColumn::make('entry.type')->label('Type')->badge(),
                 TextColumn::make('memo')
                     ->label('Description')
-                    ->state(fn (JournalLine $record): ?string => $record->memo ?? $record->entry->description)
+                    ->state(fn (JournalLine $record): ?string => $record->memo ?? $record->entry?->description)
                     ->wrap(),
                 TextColumn::make('debit')
                     ->alignEnd()

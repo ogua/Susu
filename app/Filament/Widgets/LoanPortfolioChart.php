@@ -11,7 +11,7 @@ class LoanPortfolioChart extends ChartWidget
 {
     protected ?string $heading = 'Loan Portfolio by Status';
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 5;
 
     protected ?string $pollingInterval = null;
 

@@ -3,9 +3,14 @@
 namespace App\Filament\Resources\Groups\Tables;
 
 use App\Actions\Groups\ActivateGroupAction;
+use App\Actions\Groups\AddGroupMemberAction;
+use App\Models\Customer;
 use App\Models\Group;
 use App\Support\Money;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -32,6 +37,35 @@ class GroupsTable
                 ]),
             ])
             ->recordActions([
+                Action::make('addMember')
+                    ->label('Add Member')
+                    ->color('primary')
+                    ->visible(fn (Group $record): bool => $record->status->value === 'draft')
+                    ->authorize('update')
+                    ->schema([
+                        Select::make('customer_id')
+                            ->label('Customer')
+                            ->options(fn (): array => Customer::where('branch_id', Filament::getTenant()?->id)
+                                ->get()
+                                ->mapWithKeys(fn ($customer) => [$customer->id => $customer->fullName().' ('.$customer->customer_code.')'])
+                                ->all())
+                            ->searchable()
+                            ->required(),
+                        TextInput::make('rotation_position')
+                            ->label('Rotation position')
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                    ])
+                    ->action(function (array $data, Group $record): void {
+                        app(AddGroupMemberAction::class)->execute(
+                            $record,
+                            Customer::findOrFail($data['customer_id']),
+                            (int) $data['rotation_position'],
+                        );
+
+                        Notification::make()->title('Member added')->success()->send();
+                    }),
                 Action::make('activate')
                     ->color('success')
                     ->visible(fn (Group $record): bool => $record->status->value === 'draft')

@@ -11,7 +11,7 @@ class SavingsVsWithdrawalsChart extends ChartWidget
 {
     protected ?string $heading = 'Savings vs Withdrawals — Last 30 Days';
 
-    protected static ?int $sort = 4;
+    protected static ?int $sort = 6;
 
     protected ?string $pollingInterval = null;
 

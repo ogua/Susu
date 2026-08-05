@@ -24,7 +24,7 @@ class PendingGroupLoanApplicationsWidget extends TableWidget
 {
     protected static ?string $heading = 'Checker Inbox: Group Loan Applications';
 
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 3;
 
     public static function canView(): bool
     {

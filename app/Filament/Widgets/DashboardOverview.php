@@ -14,6 +14,8 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  */
 class DashboardOverview extends StatsOverviewWidget
 {
+    protected static ?int $sort = 1;
+
     /**
      * @return array<int, Stat>
      */

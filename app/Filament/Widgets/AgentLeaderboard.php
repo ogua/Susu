@@ -14,6 +14,8 @@ class AgentLeaderboard extends TableWidget
 {
     protected static ?string $heading = "Today's Leaderboard";
 
+    protected static ?int $sort = 2;
+
     public function table(Table $table): Table
     {
         return $table
