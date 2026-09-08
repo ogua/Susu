@@ -1,135 +1,142 @@
 package com.ogua.susudesktop;
 
 import db.SessionManager;
+import enums.LoanFrequency;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
-import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
-import javafx.scene.control.ButtonBar;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.Dialog;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
-import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
-import javafx.scene.layout.GridPane;
+import models.Customer;
 import models.GroupLoan;
-import models.GroupLoanBorrower;
+import models.GroupLoanInstallment;
 import models.LoanGroup;
-import models.LoanProduct;
+import service.CustomerService;
 import service.GroupLoanRepaymentResult;
 import service.GroupLoanService;
 import service.LoanGroupService;
-import service.LoanProductService;
+import service.PeriodicScheduleGenerator;
 import support.Money;
 
+/**
+ * Group loans — one loan per group member. Issue a loan (loan amount +
+ * security deposit + a directly-entered periodic repayment amount), then
+ * record the deposit, activate, take repayments, or apply the deposit against
+ * the balance. Write-off is manager-tier. No approve/reject/disburse step.
+ */
 public class GroupLoansController {
 
     @FXML private TableView<GroupLoan> table;
     @FXML private TableColumn<GroupLoan, String> loanNumberColumn;
     @FXML private TableColumn<GroupLoan, String> loanGroupColumn;
+    @FXML private TableColumn<GroupLoan, String> memberColumn;
     @FXML private TableColumn<GroupLoan, String> principalColumn;
+    @FXML private TableColumn<GroupLoan, String> depositColumn;
+    @FXML private TableColumn<GroupLoan, String> periodicColumn;
     @FXML private TableColumn<GroupLoan, String> outstandingColumn;
+    @FXML private TableColumn<GroupLoan, String> depositStatusColumn;
     @FXML private TableColumn<GroupLoan, String> statusColumn;
     @FXML private Label statusLabel;
 
     @FXML private ComboBox<LoanGroup> loanGroupCombo;
-    @FXML private ComboBox<LoanProduct> productCombo;
-    @FXML private TextField amountField;
+    @FXML private TextField customerSearchField;
+    @FXML private ComboBox<Customer> customerCombo;
+    @FXML private TextField principalField;
+    @FXML private TextField depositField;
+    @FXML private TextField periodicField;
+    @FXML private ComboBox<LoanFrequency> frequencyCombo;
+    @FXML private DatePicker startDatePicker;
     @FXML private TextField notesField;
+    @FXML private Label schedulePreviewLabel;
     @FXML private Label applyStatusLabel;
 
-    @FXML private Button approveButton;
-    @FXML private Button rejectButton;
-    @FXML private Button disburseButton;
+    @FXML private Button depositButton;
+    @FXML private Button activateButton;
     @FXML private Button repayButton;
-    @FXML private Button restructureButton;
-    @FXML private Button topUpButton;
+    @FXML private Button applyDepositButton;
     @FXML private Button writeOffButton;
 
-    @FXML private TableView<GroupLoanBorrower> borrowersTable;
-    @FXML private TableColumn<GroupLoanBorrower, String> borrowerNameColumn;
-    @FXML private TableColumn<GroupLoanBorrower, String> shareColumn;
-    @FXML private TableColumn<GroupLoanBorrower, String> shareOutstandingColumn;
+    @FXML private TableView<GroupLoanInstallment> installmentsTable;
+    @FXML private TableColumn<GroupLoanInstallment, String> seqColumn;
+    @FXML private TableColumn<GroupLoanInstallment, String> dueDateColumn;
+    @FXML private TableColumn<GroupLoanInstallment, String> amountDueColumn;
+    @FXML private TableColumn<GroupLoanInstallment, String> amountPaidColumn;
+    @FXML private TableColumn<GroupLoanInstallment, String> installmentStatusColumn;
 
     private final LoanGroupService loanGroupService = new LoanGroupService();
-    private final LoanProductService productService = new LoanProductService();
+    private final CustomerService customerService = new CustomerService();
     private final GroupLoanService groupLoanService = new GroupLoanService();
+    private final PeriodicScheduleGenerator scheduleGenerator = new PeriodicScheduleGenerator();
 
     @FXML
     private void initialize() {
         loanNumberColumn.setCellValueFactory(new javafx.scene.control.cell.PropertyValueFactory<>("loanNumber"));
         loanGroupColumn.setCellValueFactory(data -> new SimpleStringProperty(
                 data.getValue().getLoanGroup() != null ? data.getValue().getLoanGroup().getName() : ""));
-        principalColumn.setCellValueFactory(data -> new SimpleStringProperty(
-                Money.format(data.getValue().getPrincipalAmount())));
-        outstandingColumn.setCellValueFactory(data -> new SimpleStringProperty(
-                Money.format(data.getValue().getOutstandingBalance())));
+        memberColumn.setCellValueFactory(data -> new SimpleStringProperty(
+                data.getValue().getCustomer() != null ? data.getValue().getCustomer().fullName() : ""));
+        principalColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getPrincipalAmount())));
+        depositColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getSecurityDepositAmount())));
+        periodicColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getPeriodicAmount())));
+        outstandingColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getOutstandingBalance())));
+        depositStatusColumn.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getDepositStatus().value()));
         statusColumn.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getStatus().value()));
 
-        borrowerNameColumn.setCellValueFactory(data -> new SimpleStringProperty(
-                data.getValue().getCustomer() != null ? data.getValue().getCustomer().fullName() : ""));
-        shareColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getSharePrincipal())));
-        shareOutstandingColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getShareOutstanding())));
+        seqColumn.setCellValueFactory(data -> new SimpleStringProperty(String.valueOf(data.getValue().getSequence())));
+        dueDateColumn.setCellValueFactory(data -> new SimpleStringProperty(
+                data.getValue().getDueDate() != null ? data.getValue().getDueDate().toString() : ""));
+        amountDueColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getAmountDue())));
+        amountPaidColumn.setCellValueFactory(data -> new SimpleStringProperty(Money.format(data.getValue().getAmountPaid())));
+        installmentStatusColumn.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getStatus().value()));
 
         loanGroupCombo.setConverter(new javafx.util.StringConverter<>() {
-            @Override
-            public String toString(LoanGroup group) {
+            @Override public String toString(LoanGroup group) {
                 return group == null ? "" : group.getName() + " (" + group.getCode() + ")";
             }
-
-            @Override
-            public LoanGroup fromString(String string) {
-                return null;
-            }
+            @Override public LoanGroup fromString(String string) { return null; }
         });
-        productCombo.setConverter(new javafx.util.StringConverter<>() {
-            @Override
-            public String toString(LoanProduct product) {
-                return product == null ? "" : product.getName();
+        customerCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(Customer customer) {
+                return customer == null ? "" : customer.fullName() + " (" + customer.getCustomerCode() + ")";
             }
-
-            @Override
-            public LoanProduct fromString(String string) {
-                return null;
-            }
+            @Override public Customer fromString(String string) { return null; }
         });
+        frequencyCombo.setItems(FXCollections.observableArrayList(LoanFrequency.values()));
+        frequencyCombo.getSelectionModel().select(LoanFrequency.WEEKLY);
+        startDatePicker.setValue(LocalDate.now());
+
+        principalField.textProperty().addListener((o, a, b) -> updatePreview());
+        periodicField.textProperty().addListener((o, a, b) -> updatePreview());
+        frequencyCombo.valueProperty().addListener((o, a, b) -> updatePreview());
+
+        boolean canWriteOff = canWriteOff();
+        writeOffButton.setVisible(canWriteOff);
+        writeOffButton.setManaged(canWriteOff);
 
         table.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
             updateActionButtons(selected);
-            loadBorrowers(selected);
+            loadInstallments(selected);
         });
         updateActionButtons(null);
 
-        boolean canDecide = canDecideGroupLoans();
-        approveButton.setVisible(canDecide);
-        approveButton.setManaged(canDecide);
-        rejectButton.setVisible(canDecide);
-        rejectButton.setManaged(canDecide);
-        disburseButton.setVisible(canDecide);
-        disburseButton.setManaged(canDecide);
-        restructureButton.setVisible(canDecide);
-        restructureButton.setManaged(canDecide);
-        topUpButton.setVisible(canDecide);
-        topUpButton.setManaged(canDecide);
-        writeOffButton.setVisible(canDecide);
-        writeOffButton.setManaged(canDecide);
-
         loadLoanGroups();
-        loadProducts();
         refresh();
+        updatePreview();
     }
 
-    /** Mirrors GroupLoanPolicy::approve/reject/disburse — only managers/admins decide group loans. */
-    private boolean canDecideGroupLoans() {
+    /** Mirrors GroupLoanPolicy::writeOff — only managers/admins can write a loan off. */
+    private boolean canWriteOff() {
         var user = SessionManager.getCurrentUser();
         if (user == null || user.getRole() == null) {
             return false;
@@ -139,160 +146,172 @@ public class GroupLoansController {
     }
 
     private void updateActionButtons(GroupLoan selected) {
-        boolean canDecide = canDecideGroupLoans();
-        approveButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.APPLIED);
-        rejectButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.APPLIED);
-        disburseButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.APPROVED);
-        repayButton.setDisable(selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
-        restructureButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
-        topUpButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
-        writeOffButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.GroupLoanStatus.DISBURSED);
+        boolean pendingDeposit = selected != null
+                && selected.getStatus() == enums.GroupLoanStatus.DRAFT
+                && selected.getDepositStatus() == enums.DepositStatus.PENDING;
+        boolean readyToActivate = selected != null
+                && selected.getStatus() == enums.GroupLoanStatus.DRAFT
+                && selected.getDepositStatus() == enums.DepositStatus.HELD;
+        boolean active = selected != null && selected.getStatus() == enums.GroupLoanStatus.ACTIVE;
+        boolean depositHeld = active && selected.getDepositStatus() == enums.DepositStatus.HELD;
+
+        depositButton.setDisable(!pendingDeposit);
+        activateButton.setDisable(!readyToActivate);
+        repayButton.setDisable(!active);
+        applyDepositButton.setDisable(!depositHeld);
+        writeOffButton.setDisable(!canWriteOff() || !active);
+    }
+
+    private void updatePreview() {
+        long principal = parse(principalField.getText());
+        long periodic = parse(periodicField.getText());
+        LoanFrequency frequency = frequencyCombo.getValue() != null ? frequencyCombo.getValue() : LoanFrequency.WEEKLY;
+        if (principal <= 0 || periodic <= 0) {
+            schedulePreviewLabel.setText("Enter a loan amount and a periodic amount to preview the schedule.");
+            return;
+        }
+        try {
+            int count = scheduleGenerator.periodCount(principal, periodic);
+            long last = principal - periodic * (count - 1);
+            schedulePreviewLabel.setText(count + " " + frequency.value() + " payment" + (count == 1 ? "" : "s")
+                    + " of " + Money.format(periodic) + "; final payment " + Money.format(last) + ".");
+        } catch (RuntimeException e) {
+            schedulePreviewLabel.setText(e.getMessage());
+        }
     }
 
     private void loadLoanGroups() {
         Task<List<LoanGroup>> task = new Task<>() {
-            @Override
-            protected List<LoanGroup> call() throws Exception {
+            @Override protected List<LoanGroup> call() throws Exception {
                 return loanGroupService.findAll().stream().filter(LoanGroup::isActive).toList();
             }
         };
-        task.setOnSucceeded(event -> loanGroupCombo.setItems(FXCollections.observableArrayList(task.getValue())));
+        task.setOnSucceeded(e -> loanGroupCombo.setItems(FXCollections.observableArrayList(task.getValue())));
         new Thread(task, "group-loan-groups-load").start();
-    }
-
-    private void loadProducts() {
-        Task<List<LoanProduct>> task = new Task<>() {
-            @Override
-            protected List<LoanProduct> call() throws Exception {
-                LoanProduct defaultProduct = productService.getOrCreateDefault();
-                List<LoanProduct> products = productService.findActive();
-                return products.isEmpty() ? List.of(defaultProduct) : products;
-            }
-        };
-        task.setOnSucceeded(event -> {
-            productCombo.setItems(FXCollections.observableArrayList(task.getValue()));
-            productCombo.getSelectionModel().selectFirst();
-        });
-        new Thread(task, "group-loan-products-load").start();
     }
 
     @FXML
     private void refresh() {
         statusLabel.setText("Loading group loans…");
         Task<List<GroupLoan>> task = new Task<>() {
-            @Override
-            protected List<GroupLoan> call() throws Exception {
+            @Override protected List<GroupLoan> call() throws Exception {
                 return groupLoanService.findAll();
             }
         };
-        task.setOnSucceeded(event -> {
+        task.setOnSucceeded(e -> {
             table.setItems(FXCollections.observableArrayList(task.getValue()));
             statusLabel.setText("");
         });
-        task.setOnFailed(event -> statusLabel.setText(
-                "Could not load group loans: " + task.getException().getMessage()));
+        task.setOnFailed(e -> statusLabel.setText("Could not load group loans: " + task.getException().getMessage()));
         new Thread(task, "group-loans-refresh").start();
     }
 
-    private void loadBorrowers(GroupLoan selected) {
+    private void loadInstallments(GroupLoan selected) {
         if (selected == null) {
-            borrowersTable.setItems(FXCollections.observableArrayList());
+            installmentsTable.setItems(FXCollections.observableArrayList());
             return;
         }
-        Task<List<GroupLoanBorrower>> task = new Task<>() {
-            @Override
-            protected List<GroupLoanBorrower> call() throws Exception {
-                return groupLoanService.findBorrowers(selected.getId());
+        Task<List<GroupLoanInstallment>> task = new Task<>() {
+            @Override protected List<GroupLoanInstallment> call() throws Exception {
+                return groupLoanService.findInstallments(selected.getId());
             }
         };
-        task.setOnSucceeded(event -> borrowersTable.setItems(FXCollections.observableArrayList(task.getValue())));
-        new Thread(task, "group-loan-borrowers-load").start();
+        task.setOnSucceeded(e -> installmentsTable.setItems(FXCollections.observableArrayList(task.getValue())));
+        new Thread(task, "group-loan-installments-load").start();
     }
 
     @FXML
-    private void onSubmitApplication() {
+    private void onFindCustomer() {
+        applyStatusLabel.setText("Searching…");
+        Task<List<Customer>> task = new Task<>() {
+            @Override protected List<Customer> call() throws Exception {
+                return customerService.search(customerSearchField.getText());
+            }
+        };
+        task.setOnSucceeded(e -> {
+            customerCombo.setItems(FXCollections.observableArrayList(task.getValue()));
+            if (!task.getValue().isEmpty()) {
+                customerCombo.getSelectionModel().selectFirst();
+            }
+            applyStatusLabel.setText("");
+        });
+        task.setOnFailed(e -> applyStatusLabel.setText("Search failed: " + task.getException().getMessage()));
+        new Thread(task, "group-loan-customer-search").start();
+    }
+
+    @FXML
+    private void onIssueLoan() {
         applyStatusLabel.setText("");
         LoanGroup loanGroup = loanGroupCombo.getValue();
-        LoanProduct product = productCombo.getValue();
-        long amount = parsedAmount();
+        Customer customer = customerCombo.getValue();
+        long principal = parse(principalField.getText());
+        long deposit = parse(depositField.getText());
+        long periodic = parse(periodicField.getText());
+        LoanFrequency frequency = frequencyCombo.getValue();
+        LocalDate startDate = startDatePicker.getValue();
 
-        if (loanGroup == null) {
-            applyStatusLabel.setText("Select a loan group.");
-            return;
-        }
-        if (product == null) {
-            applyStatusLabel.setText("Select a loan product.");
-            return;
-        }
-        if (amount <= 0) {
-            applyStatusLabel.setText("Enter a valid amount.");
-            return;
-        }
+        if (loanGroup == null) { applyStatusLabel.setText("Select a loan group."); return; }
+        if (customer == null) { applyStatusLabel.setText("Find and select a member."); return; }
+        if (principal <= 0) { applyStatusLabel.setText("Enter a valid loan amount."); return; }
+        if (periodic <= 0) { applyStatusLabel.setText("Enter a valid periodic amount."); return; }
+        if (frequency == null) { applyStatusLabel.setText("Select a frequency."); return; }
+        if (startDate == null) { applyStatusLabel.setText("Pick a first payment date."); return; }
 
         String agentId = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
         String notes = notesField.getText().isBlank() ? null : notesField.getText().trim();
-        applyStatusLabel.setText("Submitting…");
+        applyStatusLabel.setText("Issuing…");
 
         Task<GroupLoan> task = new Task<>() {
-            @Override
-            protected GroupLoan call() throws Exception {
-                return groupLoanService.apply(agentId, loanGroup.getId(), product.getId(), amount, notes, null);
+            @Override protected GroupLoan call() throws Exception {
+                return groupLoanService.issue(agentId, loanGroup.getId(), customer.getId(), principal, deposit,
+                        periodic, frequency, startDate, notes, null);
             }
         };
-        task.setOnSucceeded(event -> {
-            amountField.clear();
+        task.setOnSucceeded(e -> {
+            principalField.clear();
+            depositField.clear();
+            periodicField.clear();
             notesField.clear();
             applyStatusLabel.setText("");
             refresh();
         });
-        task.setOnFailed(event -> applyStatusLabel.setText(
-                "Could not submit application: " + task.getException().getMessage()));
-        new Thread(task, "group-loan-apply").start();
+        task.setOnFailed(e -> applyStatusLabel.setText("Could not issue loan: " + task.getException().getMessage()));
+        new Thread(task, "group-loan-issue").start();
     }
 
     @FXML
-    private void onApprove() {
+    private void onRecordDeposit() {
         GroupLoan selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) {
             return;
         }
-        String approvedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-
-        runGroupLoanAction("Approving…", () -> groupLoanService.approve(selected.getId(), approvedBy),
-                "Could not approve group loan");
+        String recordedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        long amount = selected.getSecurityDepositAmount();
+        runAction("Recording deposit…",
+                () -> groupLoanService.recordDeposit(selected.getId(), amount, recordedBy, null, null),
+                "Could not record deposit");
     }
 
     @FXML
-    private void onReject() {
+    private void onActivate() {
         GroupLoan selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) {
             return;
         }
-
-        TextInputDialog dialog = new TextInputDialog();
-        dialog.setTitle("Reject Group Loan");
-        dialog.setHeaderText(selected.getLoanNumber());
-        dialog.setContentText("Reason:");
-        Optional<String> input = dialog.showAndWait();
-        if (input.isEmpty() || input.get().isBlank()) {
-            return;
-        }
-
-        String rejectedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-        runGroupLoanAction("Rejecting…", () -> groupLoanService.reject(selected.getId(), rejectedBy, input.get().trim()),
-                "Could not reject group loan");
+        String activatedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runAction("Activating…", () -> groupLoanService.activate(selected.getId(), activatedBy),
+                "Could not activate loan");
     }
 
     @FXML
-    private void onDisburse() {
+    private void onApplyDeposit() {
         GroupLoan selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) {
             return;
         }
-        String disbursedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-
-        runGroupLoanAction("Disbursing…", () -> groupLoanService.disburse(selected.getId(), disbursedBy),
-                "Could not disburse group loan");
+        String appliedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runAction("Applying deposit…", () -> groupLoanService.applyDeposit(selected.getId(), appliedBy, null),
+                "Could not apply deposit");
     }
 
     @FXML
@@ -302,132 +321,47 @@ public class GroupLoansController {
             return;
         }
 
-        Task<List<GroupLoanBorrower>> loadTask = new Task<>() {
-            @Override
-            protected List<GroupLoanBorrower> call() throws Exception {
-                return groupLoanService.findBorrowers(selected.getId());
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Record Repayment");
+        dialog.setHeaderText(selected.getLoanNumber() + " — outstanding " + Money.format(selected.getOutstandingBalance()));
+        dialog.setContentText("Amount (GHS):");
+        Optional<String> input = dialog.showAndWait();
+        if (input.isEmpty() || input.get().isBlank()) {
+            return;
+        }
+
+        long amount;
+        try {
+            amount = Money.toMinorUnits(input.get().trim());
+        } catch (RuntimeException e) {
+            statusLabel.setText("Enter a valid amount.");
+            return;
+        }
+        if (amount <= 0) {
+            statusLabel.setText("Enter a valid amount.");
+            return;
+        }
+
+        String recordedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        statusLabel.setText("Recording repayment…");
+
+        Task<GroupLoanRepaymentResult> task = new Task<>() {
+            @Override protected GroupLoanRepaymentResult call() throws Exception {
+                return groupLoanService.recordRepayment(selected.getId(), amount, recordedBy, null, null);
             }
         };
-        loadTask.setOnSucceeded(loadEvent -> {
-            List<GroupLoanBorrower> borrowers = loadTask.getValue();
-            if (borrowers.isEmpty()) {
-                statusLabel.setText("This group loan has no borrowers.");
-                return;
-            }
-
-            Optional<RepaymentInput> input = showRepaymentDialog(selected, borrowers);
-            if (input.isEmpty()) {
-                return;
-            }
-
-            String recordedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-            statusLabel.setText("Recording repayment…");
-
-            Task<GroupLoanRepaymentResult> task = new Task<>() {
-                @Override
-                protected GroupLoanRepaymentResult call() throws Exception {
-                    return groupLoanService.recordRepayment(input.get().borrower().getId(), input.get().amount(), recordedBy, null, null);
-                }
-            };
-            task.setOnSucceeded(event -> {
-                statusLabel.setText("");
-                GroupLoanRepaymentResult result = task.getValue();
-
-                Alert alert = new Alert(Alert.AlertType.INFORMATION,
-                        "Repayment recorded. Outstanding balance: " + Money.format(result.groupLoan().getOutstandingBalance()));
-                alert.setHeaderText(null);
-                alert.showAndWait();
-
-                refresh();
-                loadBorrowers(selected);
-            });
-            task.setOnFailed(event -> statusLabel.setText(
-                    "Could not record repayment: " + task.getException().getMessage()));
-            new Thread(task, "group-loan-repayment").start();
+        task.setOnSucceeded(e -> {
+            statusLabel.setText("");
+            Alert alert = new Alert(Alert.AlertType.INFORMATION,
+                    "Repayment recorded. Outstanding balance: "
+                    + Money.format(task.getValue().groupLoan().getOutstandingBalance()));
+            alert.setHeaderText(null);
+            alert.showAndWait();
+            refresh();
+            loadInstallments(selected);
         });
-        new Thread(loadTask, "group-loan-borrowers-for-repayment").start();
-    }
-
-    /** TextInputDialog only supports one field — a group loan repayment needs both a payer and an amount. */
-    private Optional<RepaymentInput> showRepaymentDialog(GroupLoan groupLoan, List<GroupLoanBorrower> borrowers) {
-        Dialog<RepaymentInput> dialog = new Dialog<>();
-        dialog.setTitle("Record Repayment");
-        dialog.setHeaderText(groupLoan.getLoanNumber() + " — outstanding " + Money.format(groupLoan.getOutstandingBalance()));
-
-        ButtonType recordButtonType = new ButtonType("Record", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(recordButtonType, ButtonType.CANCEL);
-
-        ComboBox<GroupLoanBorrower> borrowerCombo = new ComboBox<>(FXCollections.observableArrayList(borrowers));
-        borrowerCombo.getSelectionModel().selectFirst();
-        TextField amountField = new TextField();
-        amountField.setPromptText("Amount (GHS)");
-
-        GridPane grid = new GridPane();
-        grid.setHgap(8);
-        grid.setVgap(8);
-        grid.setPadding(new Insets(10));
-        grid.add(new Label("Paying member:"), 0, 0);
-        grid.add(borrowerCombo, 1, 0);
-        grid.add(new Label("Amount (GHS):"), 0, 1);
-        grid.add(amountField, 1, 1);
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(buttonType -> {
-            if (buttonType != recordButtonType) {
-                return null;
-            }
-            GroupLoanBorrower borrower = borrowerCombo.getValue();
-            if (borrower == null) {
-                return null;
-            }
-            try {
-                long amount = Money.toMinorUnits(amountField.getText().trim());
-                return amount > 0 ? new RepaymentInput(borrower, amount) : null;
-            } catch (Exception e) {
-                return null;
-            }
-        });
-
-        return dialog.showAndWait();
-    }
-
-    private record RepaymentInput(GroupLoanBorrower borrower, long amount) {
-    }
-
-    @FXML
-    private void onRestructure() {
-        GroupLoan selected = table.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            return;
-        }
-
-        Optional<RestructureInput> input = showRestructureDialog(selected);
-        if (input.isEmpty()) {
-            return;
-        }
-
-        String restructuredBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-        runGroupLoanAction("Restructuring…",
-                () -> groupLoanService.restructure(selected.getId(), restructuredBy, input.get().product().getId(), input.get().reason()),
-                "Could not restructure group loan");
-    }
-
-    @FXML
-    private void onTopUp() {
-        GroupLoan selected = table.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            return;
-        }
-
-        Optional<TopUpInput> input = showTopUpDialog(selected);
-        if (input.isEmpty()) {
-            return;
-        }
-
-        String toppedUpBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-        runGroupLoanAction("Topping up…",
-                () -> groupLoanService.topUp(selected.getId(), toppedUpBy, input.get().amount(), input.get().reason()),
-                "Could not top up group loan");
+        task.setOnFailed(e -> statusLabel.setText("Could not record repayment: " + task.getException().getMessage()));
+        new Thread(task, "group-loan-repayment").start();
     }
 
     @FXML
@@ -439,8 +373,8 @@ public class GroupLoansController {
 
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Write Off Group Loan");
-        dialog.setHeaderText(selected.getLoanNumber() + " — this permanently closes the group loan and recognizes"
-                + " the remaining balance as a loss. This cannot be undone.");
+        dialog.setHeaderText(selected.getLoanNumber() + " — this permanently closes the loan and recognizes the"
+                + " remaining balance as a loss. This cannot be undone.");
         dialog.setContentText("Reason:");
         Optional<String> input = dialog.showAndWait();
         if (input.isEmpty() || input.get().isBlank()) {
@@ -448,124 +382,31 @@ public class GroupLoansController {
         }
 
         String writtenOffBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-        runGroupLoanAction("Writing off…",
-                () -> groupLoanService.writeOff(selected.getId(), writtenOffBy, input.get().trim()),
-                "Could not write off group loan");
+        runAction("Writing off…", () -> groupLoanService.writeOff(selected.getId(), writtenOffBy, input.get().trim()),
+                "Could not write off loan");
     }
 
-    /** TextInputDialog only supports one field — restructuring needs both a new product and a reason. */
-    private Optional<RestructureInput> showRestructureDialog(GroupLoan groupLoan) {
-        Dialog<RestructureInput> dialog = new Dialog<>();
-        dialog.setTitle("Restructure Group Loan");
-        dialog.setHeaderText(groupLoan.getLoanNumber() + " — this closes the group loan and opens a new one on new terms.");
-
-        ButtonType restructureButtonType = new ButtonType("Restructure", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(restructureButtonType, ButtonType.CANCEL);
-
-        ComboBox<LoanProduct> newProductCombo = new ComboBox<>(FXCollections.observableArrayList(productCombo.getItems()));
-        newProductCombo.setConverter(productCombo.getConverter());
-        newProductCombo.getItems().stream()
-                .filter(p -> p.getId().equals(groupLoan.getLoanProductId()))
-                .findFirst()
-                .ifPresentOrElse(newProductCombo.getSelectionModel()::select,
-                        () -> newProductCombo.getSelectionModel().selectFirst());
-        TextArea reasonArea = new TextArea();
-        reasonArea.setPrefRowCount(3);
-        reasonArea.setPromptText("Reason");
-
-        GridPane grid = new GridPane();
-        grid.setHgap(8);
-        grid.setVgap(8);
-        grid.setPadding(new Insets(10));
-        grid.add(new Label("New product:"), 0, 0);
-        grid.add(newProductCombo, 1, 0);
-        grid.add(new Label("Reason:"), 0, 1);
-        grid.add(reasonArea, 1, 1);
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(buttonType -> {
-            if (buttonType != restructureButtonType) {
-                return null;
-            }
-            LoanProduct product = newProductCombo.getValue();
-            String reason = reasonArea.getText().trim();
-            return (product != null && !reason.isBlank()) ? new RestructureInput(product, reason) : null;
-        });
-
-        return dialog.showAndWait();
-    }
-
-    /** TextInputDialog only supports one field — a top-up needs both an amount and a reason. */
-    private Optional<TopUpInput> showTopUpDialog(GroupLoan groupLoan) {
-        Dialog<TopUpInput> dialog = new Dialog<>();
-        dialog.setTitle("Top Up Group Loan");
-        dialog.setHeaderText(groupLoan.getLoanNumber() + " — this closes the group loan and opens a new one for the"
-                + " rolled-over balance plus the top-up cash disbursed today.");
-
-        ButtonType topUpButtonType = new ButtonType("Top Up", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(topUpButtonType, ButtonType.CANCEL);
-
-        TextField amountField = new TextField();
-        amountField.setPromptText("Amount (GHS)");
-        TextArea reasonArea = new TextArea();
-        reasonArea.setPrefRowCount(3);
-        reasonArea.setPromptText("Reason");
-
-        GridPane grid = new GridPane();
-        grid.setHgap(8);
-        grid.setVgap(8);
-        grid.setPadding(new Insets(10));
-        grid.add(new Label("Top-up amount (GHS):"), 0, 0);
-        grid.add(amountField, 1, 0);
-        grid.add(new Label("Reason:"), 0, 1);
-        grid.add(reasonArea, 1, 1);
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(buttonType -> {
-            if (buttonType != topUpButtonType) {
-                return null;
-            }
-            String reason = reasonArea.getText().trim();
-            if (reason.isBlank()) {
-                return null;
-            }
-            try {
-                long amount = Money.toMinorUnits(amountField.getText().trim());
-                return amount > 0 ? new TopUpInput(amount, reason) : null;
-            } catch (Exception e) {
-                return null;
-            }
-        });
-
-        return dialog.showAndWait();
-    }
-
-    private record RestructureInput(LoanProduct product, String reason) {
-    }
-
-    private record TopUpInput(long amount, String reason) {
-    }
-
-    private void runGroupLoanAction(String progressMessage, GroupLoanAction action, String failureMessage) {
-        statusLabel.setText(progressMessage);
+    private void runAction(String progress, GroupLoanAction action, String failureMessage) {
+        GroupLoan selected = table.getSelectionModel().getSelectedItem();
+        statusLabel.setText(progress);
         Task<GroupLoan> task = new Task<>() {
-            @Override
-            protected GroupLoan call() throws Exception {
+            @Override protected GroupLoan call() throws Exception {
                 return action.run();
             }
         };
-        task.setOnSucceeded(event -> {
+        task.setOnSucceeded(e -> {
             statusLabel.setText("");
             refresh();
+            loadInstallments(selected);
         });
-        task.setOnFailed(event -> statusLabel.setText(failureMessage + ": " + task.getException().getMessage()));
+        task.setOnFailed(e -> statusLabel.setText(failureMessage + ": " + task.getException().getMessage()));
         new Thread(task, "group-loan-action").start();
     }
 
-    private long parsedAmount() {
+    private long parse(String text) {
         try {
-            return amountField.getText().isBlank() ? 0 : Money.toMinorUnits(amountField.getText().trim());
-        } catch (Exception e) {
+            return text == null || text.isBlank() ? 0 : Money.toMinorUnits(text.trim());
+        } catch (RuntimeException e) {
             return 0;
         }
     }

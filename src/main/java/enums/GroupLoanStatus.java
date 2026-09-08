@@ -1,13 +1,10 @@
 package enums;
 
 public enum GroupLoanStatus {
-    APPLIED("applied"),
-    APPROVED("approved"),
-    REJECTED("rejected"),
-    DISBURSED("disbursed"),
+    DRAFT("draft"),
+    ACTIVE("active"),
     CLOSED("closed"),
-    WRITTEN_OFF("written_off"),
-    REFINANCED("refinanced");
+    WRITTEN_OFF("written_off");
 
     private final String value;
 

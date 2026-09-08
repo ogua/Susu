@@ -4,18 +4,15 @@ import enums.InstallmentStatus;
 import java.time.Instant;
 import java.time.LocalDate;
 
+/** One row of a member's spread repayment schedule. Pure principal — no interest/penalty. */
 public class GroupLoanInstallment {
 
     private String id;
     private String groupLoanId;
     private int sequence;
     private LocalDate dueDate;
-    private long principalDue;
-    private long interestDue;
-    private long penaltyDue;
-    private long principalPaid;
-    private long interestPaid;
-    private long penaltyPaid;
+    private long amountDue;
+    private long amountPaid;
     private InstallmentStatus status;
     private Instant paidAt;
 
@@ -31,23 +28,11 @@ public class GroupLoanInstallment {
     public LocalDate getDueDate() { return dueDate; }
     public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
 
-    public long getPrincipalDue() { return principalDue; }
-    public void setPrincipalDue(long principalDue) { this.principalDue = principalDue; }
+    public long getAmountDue() { return amountDue; }
+    public void setAmountDue(long amountDue) { this.amountDue = amountDue; }
 
-    public long getInterestDue() { return interestDue; }
-    public void setInterestDue(long interestDue) { this.interestDue = interestDue; }
-
-    public long getPenaltyDue() { return penaltyDue; }
-    public void setPenaltyDue(long penaltyDue) { this.penaltyDue = penaltyDue; }
-
-    public long getPrincipalPaid() { return principalPaid; }
-    public void setPrincipalPaid(long principalPaid) { this.principalPaid = principalPaid; }
-
-    public long getInterestPaid() { return interestPaid; }
-    public void setInterestPaid(long interestPaid) { this.interestPaid = interestPaid; }
-
-    public long getPenaltyPaid() { return penaltyPaid; }
-    public void setPenaltyPaid(long penaltyPaid) { this.penaltyPaid = penaltyPaid; }
+    public long getAmountPaid() { return amountPaid; }
+    public void setAmountPaid(long amountPaid) { this.amountPaid = amountPaid; }
 
     public InstallmentStatus getStatus() { return status; }
     public void setStatus(InstallmentStatus status) { this.status = status; }
@@ -55,27 +40,7 @@ public class GroupLoanInstallment {
     public Instant getPaidAt() { return paidAt; }
     public void setPaidAt(Instant paidAt) { this.paidAt = paidAt; }
 
-    public long totalDue() {
-        return principalDue + interestDue + penaltyDue;
-    }
-
-    public long amountPaid() {
-        return principalPaid + interestPaid + penaltyPaid;
-    }
-
     public long remaining() {
-        return Math.max(0, totalDue() - amountPaid());
-    }
-
-    public long remainingPrincipal() {
-        return Math.max(0, principalDue - principalPaid);
-    }
-
-    public long remainingInterest() {
-        return Math.max(0, interestDue - interestPaid);
-    }
-
-    public long remainingPenalty() {
-        return Math.max(0, penaltyDue - penaltyPaid);
+        return Math.max(0, amountDue - amountPaid);
     }
 }

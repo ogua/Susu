@@ -91,6 +91,17 @@ public class ChartOfAccounts {
                 LedgerAccountType.ASSET, "group_loan", groupLoanId, true);
     }
 
+    /**
+     * A group loan member's refundable security deposit while it is held —
+     * money owed back to the member unless applied against their loan balance
+     * or seized on a write-off. Per-loan so each held deposit is individually
+     * traceable and released cleanly.
+     */
+    public LedgerAccount groupLoanDepositLiability(String groupLoanId, String loanNumber) throws SQLException {
+        return firstOrCreate("GLDEP-" + loanNumber, "Group Loan Deposit " + loanNumber,
+                LedgerAccountType.LIABILITY, "group_loan", groupLoanId, true);
+    }
+
     private LedgerAccount firstOrCreate(String code, String name, LedgerAccountType type,
                                          String accountableType, String accountableId, boolean system)
             throws SQLException {

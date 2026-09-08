@@ -2,13 +2,15 @@ package models;
 
 import java.time.Instant;
 
-public class GroupLoanRepayment {
+/** One event in a group loan's security-deposit lifecycle: held | applied | refunded | seized. */
+public class GroupLoanDeposit {
 
     private String id;
     private String groupLoanId;
     private String journalEntryId;
     private String recordedBy;
     private long amount;
+    private String type;
     private Instant recordedAt;
     private String clientReference;
 
@@ -26,6 +28,9 @@ public class GroupLoanRepayment {
 
     public long getAmount() { return amount; }
     public void setAmount(long amount) { this.amount = amount; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
     public Instant getRecordedAt() { return recordedAt; }
     public void setRecordedAt(Instant recordedAt) { this.recordedAt = recordedAt; }

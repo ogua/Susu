@@ -69,9 +69,9 @@ public class LoanGroupService {
     }
 
     public LoanGroupMember removeMember(String memberId) throws SQLException {
-        if (hasActiveGroupLoanDebt(memberId)) {
+        if (hasActiveLoan(memberId)) {
             throw new IllegalStateException(
-                    "This member cannot be removed while jointly liable on a disbursed, unclosed group loan.");
+                    "This member cannot be removed while they have an active loan in the group.");
         }
 
         String now = Instant.now().toString();
@@ -87,13 +87,27 @@ public class LoanGroupService {
         return findMemberById(memberId);
     }
 
-    private boolean hasActiveGroupLoanDebt(String memberId) throws SQLException {
+    /** Re-activates a member who previously left the roster (used when re-issuing them a loan). */
+    public LoanGroupMember reactivateMember(String memberId) throws SQLException {
+        String now = Instant.now().toString();
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT 1 FROM group_loan_borrowers glb JOIN group_loans gl ON gl.id = glb.group_loan_id"
-                     + " WHERE glb.loan_group_member_id = ? AND gl.status = ?")) {
+                     "UPDATE loan_group_members SET status = 'active', left_at = NULL, joined_at = ?,"
+                     + " updated_at = ? WHERE id = ?")) {
+            ps.setString(1, now);
+            ps.setString(2, now);
+            ps.setString(3, memberId);
+            ps.executeUpdate();
+        }
+        return findMemberById(memberId);
+    }
+
+    private boolean hasActiveLoan(String memberId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM group_loans WHERE loan_group_member_id = ? AND status = ?")) {
             ps.setString(1, memberId);
-            ps.setString(2, GroupLoanStatus.DISBURSED.value());
+            ps.setString(2, GroupLoanStatus.ACTIVE.value());
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }

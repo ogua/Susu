@@ -3,14 +3,15 @@ package service;
 import db.AppConfig;
 import db.DatabaseConnection;
 import db.provider.SQLiteProvider;
+import enums.LoanFrequency;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.UUID;
 import models.Customer;
 import models.GroupLoan;
 import models.LoanGroup;
 import models.LoanGroupMember;
-import models.LoanProduct;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -28,10 +29,8 @@ class LoanGroupServiceTest {
     private static String originalHome;
     private final CustomerService customers = new CustomerService();
     private final LoanGroupService loanGroups = new LoanGroupService();
-    private final LoanProductService loanProducts = new LoanProductService();
     private final GroupLoanService groupLoans = new GroupLoanService();
     private static final String AGENT_ID = "agent-1";
-    private static final String MANAGER_ID = "manager-1";
 
     @BeforeAll
     static void useTemporaryHome() throws Exception {
@@ -57,6 +56,13 @@ class LoanGroupServiceTest {
         return customers.register(customer, "setup", null);
     }
 
+    private GroupLoan activateLoanFor(LoanGroup group, Customer customer) throws Exception {
+        GroupLoan loan = groupLoans.issue(AGENT_ID, group.getId(), customer.getId(),
+                1000_00, 100_00, 100_00, LoanFrequency.WEEKLY, LocalDate.now(), null, null);
+        groupLoans.recordDeposit(loan.getId(), 100_00, AGENT_ID, null, null);
+        return groupLoans.activate(loan.getId(), AGENT_ID);
+    }
+
     @Test
     void addsMembersToALoanGroupWithNoRotationConcept() throws Exception {
         LoanGroup group = loanGroups.create("Market Traders", "LGRP-001", "setup");
@@ -78,7 +84,7 @@ class LoanGroupServiceTest {
     }
 
     @Test
-    void removesAMemberWithNoActiveGroupLoan() throws Exception {
+    void removesAMemberWithNoActiveLoan() throws Exception {
         LoanGroup group = loanGroups.create("Market Traders", "LGRP-003", "setup");
         Customer customer = newCustomer("Efua", "Boateng");
         LoanGroupMember member = loanGroups.addMember(group.getId(), customer.getId());
@@ -90,16 +96,20 @@ class LoanGroupServiceTest {
     }
 
     @Test
-    void blocksRemovingAMemberJointlyLiableOnADisbursedUnclosedGroupLoan() throws Exception {
+    void blocksRemovingAMemberWithAnActiveLoan() throws Exception {
         LoanGroup group = loanGroups.create("Market Traders", "LGRP-004", "setup");
-        LoanGroupMember memberOne = loanGroups.addMember(group.getId(), newCustomer("Yaw", "Asante").getId());
-        loanGroups.addMember(group.getId(), newCustomer("Abena", "Owusu").getId());
+        Customer customer = newCustomer("Yaw", "Asante");
+        GroupLoan loan = activateLoanFor(group, customer);
 
-        LoanProduct product = loanProducts.getOrCreateDefault();
-        GroupLoan applied = groupLoans.apply(AGENT_ID, group.getId(), product.getId(), 1000_00, null, null);
-        groupLoans.approve(applied.getId(), MANAGER_ID);
-        groupLoans.disburse(applied.getId(), MANAGER_ID);
+        assertThrows(IllegalStateException.class, () -> loanGroups.removeMember(loan.getLoanGroupMemberId()));
+    }
 
-        assertThrows(IllegalStateException.class, () -> loanGroups.removeMember(memberOne.getId()));
+    @Test
+    void reportsGroupOutstandingAsTheSumOfActiveMemberLoans() throws Exception {
+        LoanGroup group = loanGroups.create("Market Traders", "LGRP-005", "setup");
+        activateLoanFor(group, newCustomer("Adjoa", "Mensah"));
+        activateLoanFor(group, newCustomer("Kojo", "Danso"));
+
+        assertEquals(2000_00, groupLoans.groupOutstanding(group.getId()));
     }
 }

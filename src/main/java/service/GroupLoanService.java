@@ -1,8 +1,10 @@
 package service;
 
 import db.DatabaseConnection;
+import enums.DepositStatus;
 import enums.GroupLoanStatus;
 import enums.InstallmentStatus;
+import enums.LoanFrequency;
 import enums.PaymentMethod;
 import enums.TransactionType;
 import java.sql.Connection;
@@ -11,41 +13,44 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import models.GroupLoan;
-import models.GroupLoanBorrower;
+import models.GroupLoanDeposit;
 import models.GroupLoanInstallment;
 import models.GroupLoanRepayment;
 import models.JournalEntry;
+import models.LoanGroup;
 import models.LoanGroupMember;
-import models.LoanProduct;
 import org.json.JSONObject;
 
 /**
- * Group loan lifecycle: apply -> approve/reject -> disburse -> repayments —
- * joint & several liability under a shared schedule/receivable, split evenly
- * across the loan group's active members at disbursement. A parity port of
- * the backend's {@code App\Actions\GroupLoans\*Action} classes, mirroring
- * {@link LoanService}'s local-first-then-outbox shape exactly: approval and
- * disbursement run against the local engine (company_admin/branch_manager
- * decide offline), hybrid mode pushes the outcome through the outbox
- * afterward as an audit trail.
+ * Group loan lifecycle — one loan per group member. The member enters a total
+ * principal, a refundable security deposit, and a directly-entered periodic
+ * repayment amount; there is no product, no interest, no equal-split. A
+ * parity port of the backend's rebuilt {@code App\Actions\GroupLoans\*Action}
+ * classes: the local engine runs first (managers decide offline), hybrid mode
+ * pushes each step through the outbox afterward as an audit trail.
+ *
+ * Lifecycle: issue -&gt; recordDeposit -&gt; activate -&gt; recordRepayment -&gt;
+ * (auto) close. applyDeposit offsets a held deposit against outstanding on
+ * demand; writeOff seizes the deposit then bad-debts the residual.
  */
 public class GroupLoanService {
 
     private final LedgerService ledger = new LedgerService();
     private final ChartOfAccounts chart = new ChartOfAccounts();
-    private final ScheduleGenerator scheduleGenerator = new ScheduleGenerator();
+    private final PeriodicScheduleGenerator scheduleGenerator = new PeriodicScheduleGenerator();
     private final LoanGroupService loanGroupService = new LoanGroupService();
     private final CustomerService customerService = new CustomerService();
-    private final LoanProductService productService = new LoanProductService();
     private final OutboxService outbox = new OutboxService();
 
-    public GroupLoan apply(String agentId, String loanGroupId, String productId, long requestedAmount,
+    // ---------------------------------------------------------------- issue
+
+    public GroupLoan issue(String agentId, String loanGroupId, String customerId, long principal,
+                            long securityDeposit, long periodicAmount, LoanFrequency frequency, LocalDate startDate,
                             String notes, String clientReference) throws SQLException {
         String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
 
@@ -54,22 +59,31 @@ public class GroupLoanService {
             return existing;
         }
 
-        LoanProduct product = productService.findById(productId);
-        if (product == null || !product.isActive()) {
-            throw new IllegalArgumentException("This loan product is no longer offered.");
+        if (principal <= 0) {
+            throw new IllegalArgumentException("The loan amount must be greater than zero.");
         }
-        if (requestedAmount < product.getMinAmount() || requestedAmount > product.getMaxAmount()) {
-            throw new IllegalArgumentException(
-                    "Amount must be between " + product.getMinAmount() + " and " + product.getMaxAmount() + " pesewas.");
+        if (periodicAmount <= 0) {
+            throw new IllegalArgumentException("The periodic amount must be greater than zero.");
         }
-
-        long activeMemberCount = loanGroupService.findMembers(loanGroupId).stream()
-                .filter(m -> "active".equals(m.getStatus())).count();
-        if (activeMemberCount < 2) {
-            throw new IllegalArgumentException("A loan group needs at least 2 active members to apply for a group loan.");
+        if (securityDeposit < 0) {
+            throw new IllegalArgumentException("The security deposit cannot be negative.");
+        }
+        if (startDate.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("The first payment date cannot be in the past.");
         }
 
-        // The local id doubles as client_reference, same reasoning as LoanService.apply.
+        LoanGroup group = loanGroupService.findById(loanGroupId);
+        if (group == null || !group.isActive()) {
+            throw new IllegalArgumentException("This loan group is not active.");
+        }
+
+        LoanGroupMember member = resolveMember(loanGroupId, customerId);
+        if (hasActiveLoan(member.getId())) {
+            throw new IllegalStateException("This member already has an active loan in the group.");
+        }
+
+        int totalPeriods = scheduleGenerator.periodCount(principal, periodicAmount);
+
         String id = effectiveClientReference;
         String now = Instant.now().toString();
         String loanNumber;
@@ -77,26 +91,25 @@ public class GroupLoanService {
         try (Connection conn = DatabaseConnection.getConnection()) {
             loanNumber = nextLoanNumber(conn);
 
-            String sql = "INSERT INTO group_loans (id, loan_group_id, loan_product_id, agent_id,"
-                    + " loan_number, principal_amount, interest_method, interest_rate_bps, term_period_count,"
-                    + " repayment_frequency, origination_fee_amount, penalty_rate_bps, grace_period_days,"
-                    + " total_interest, total_repayable, outstanding_balance, status, notes, client_reference,"
-                    + " applied_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?)";
+            String sql = "INSERT INTO group_loans (id, loan_group_id, loan_group_member_id, customer_id, agent_id,"
+                    + " loan_number, principal_amount, security_deposit_amount, periodic_amount, outstanding_balance,"
+                    + " repayment_frequency, start_date, total_periods, deposit_status, status, notes, client_reference,"
+                    + " issued_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, id);
                 ps.setString(2, loanGroupId);
-                ps.setString(3, productId);
-                ps.setString(4, agentId);
-                ps.setString(5, loanNumber);
-                ps.setLong(6, requestedAmount);
-                ps.setString(7, product.getInterestMethod().value());
-                ps.setInt(8, product.getInterestRateBps());
-                ps.setInt(9, product.getTermPeriodCount());
-                ps.setString(10, product.getRepaymentFrequency().value());
-                ps.setLong(11, product.getOriginationFeeAmount());
-                ps.setInt(12, product.getPenaltyRateBps());
-                ps.setInt(13, product.getGracePeriodDays());
-                ps.setString(14, GroupLoanStatus.APPLIED.value());
+                ps.setString(3, member.getId());
+                ps.setString(4, customerId);
+                ps.setString(5, agentId);
+                ps.setString(6, loanNumber);
+                ps.setLong(7, principal);
+                ps.setLong(8, securityDeposit);
+                ps.setLong(9, periodicAmount);
+                ps.setString(10, frequency.value());
+                ps.setString(11, startDate.format(DateTimeFormatter.ISO_LOCAL_DATE));
+                ps.setInt(12, totalPeriods);
+                ps.setString(13, securityDeposit > 0 ? DepositStatus.PENDING.value() : DepositStatus.HELD.value());
+                ps.setString(14, GroupLoanStatus.DRAFT.value());
                 ps.setString(15, notes);
                 ps.setString(16, effectiveClientReference);
                 ps.setString(17, now);
@@ -106,354 +119,404 @@ public class GroupLoanService {
             }
         }
 
-        outbox.enqueueIfHybrid("group_loan.apply", new JSONObject()
+        outbox.enqueueIfHybrid("group_loan.issue", new JSONObject()
                 .put("loan_group_id", loanGroupId)
-                .put("loan_product_id", productId)
-                .put("amount", requestedAmount)
+                .put("customer_id", customerId)
+                .put("principal_amount", principal)
+                .put("security_deposit_amount", securityDeposit)
+                .put("periodic_amount", periodicAmount)
+                .put("repayment_frequency", frequency.value())
+                .put("start_date", startDate.format(DateTimeFormatter.ISO_LOCAL_DATE))
                 .put("notes", notes)
                 .put("client_reference", effectiveClientReference));
 
         return findById(id);
     }
 
-    public GroupLoan approve(String groupLoanId, String approvedBy) throws SQLException {
-        requireStatus(groupLoanId, GroupLoanStatus.APPLIED, "approved");
+    // -------------------------------------------------------- record deposit
 
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "UPDATE group_loans SET status = ?, approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?")) {
-            ps.setString(1, GroupLoanStatus.APPROVED.value());
-            ps.setString(2, approvedBy);
-            ps.setString(3, Instant.now().toString());
-            ps.setString(4, Instant.now().toString());
-            ps.setString(5, groupLoanId);
-            ps.executeUpdate();
+    public GroupLoan recordDeposit(String groupLoanId, long amount, String recordedBy, String clientReference,
+                                    Instant recordedAt) throws SQLException {
+        String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
+
+        if (findDepositByClientReference(effectiveClientReference) != null) {
+            return findById(groupLoanId);
         }
 
-        outbox.enqueueIfHybrid("group_loan.approve", new JSONObject().put("group_loan_id", groupLoanId));
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.DRAFT) {
+            throw new IllegalStateException("A deposit can only be recorded while the loan is a draft.");
+        }
+        if (groupLoan.getDepositStatus() != DepositStatus.PENDING) {
+            throw new IllegalStateException("This loan's security deposit has already been settled.");
+        }
+        if (amount <= 0 || amount != groupLoan.getSecurityDepositAmount()) {
+            throw new IllegalArgumentException(
+                    "The deposit must be paid in full (" + groupLoan.getSecurityDepositAmount() + " pesewas).");
+        }
+
+        Instant effectiveRecordedAt = recordedAt != null ? recordedAt : Instant.now();
+        String depositAccountId = chart.groupLoanDepositLiability(groupLoan.getId(), groupLoan.getLoanNumber()).getId();
+
+        List<LedgerLine> lines = new ArrayList<>();
+        lines.add(LedgerLine.debit(chart.branchCash().getId(), amount));
+        lines.add(LedgerLine.credit(depositAccountId, amount));
+
+        JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_HELD, lines)
+                .paymentMethod(PaymentMethod.CASH)
+                .recordedBy(recordedBy)
+                .recordedAt(effectiveRecordedAt)
+                .clientReference(effectiveClientReference)
+                .description("Group loan security deposit " + groupLoan.getLoanNumber()));
+
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            insertDeposit(conn, groupLoan.getId(), entry.getId(), recordedBy, amount, "held",
+                    effectiveRecordedAt, effectiveClientReference);
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE group_loans SET deposit_status = ?, deposit_liability_account_id = ?, updated_at = ?"
+                    + " WHERE id = ?")) {
+                ps.setString(1, DepositStatus.HELD.value());
+                ps.setString(2, depositAccountId);
+                ps.setString(3, Instant.now().toString());
+                ps.setString(4, groupLoan.getId());
+                ps.executeUpdate();
+            }
+        }
+
+        outbox.enqueueIfHybrid("group_loan.deposit.record", new JSONObject()
+                .put("group_loan_id", groupLoanId)
+                .put("amount", amount)
+                .put("client_reference", effectiveClientReference)
+                .put("recorded_at", effectiveRecordedAt.toString()));
 
         return findById(groupLoanId);
     }
 
-    public GroupLoan reject(String groupLoanId, String rejectedBy, String reason) throws SQLException {
-        requireStatus(groupLoanId, GroupLoanStatus.APPLIED, "rejected");
+    // -------------------------------------------------------------- activate
 
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "UPDATE group_loans SET status = ?, approved_by = ?, rejection_reason = ?, updated_at = ? WHERE id = ?")) {
-            ps.setString(1, GroupLoanStatus.REJECTED.value());
-            ps.setString(2, rejectedBy);
-            ps.setString(3, reason);
-            ps.setString(4, Instant.now().toString());
-            ps.setString(5, groupLoanId);
-            ps.executeUpdate();
+    public GroupLoan activate(String groupLoanId, String activatedBy) throws SQLException {
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.DRAFT) {
+            throw new IllegalStateException("Only a draft group loan can be activated.");
+        }
+        if (groupLoan.getDepositStatus() != DepositStatus.HELD) {
+            throw new IllegalStateException("Record the security deposit before activating the loan.");
         }
 
-        outbox.enqueueIfHybrid("group_loan.reject", new JSONObject().put("group_loan_id", groupLoanId).put("reason", reason));
-
-        return findById(groupLoanId);
-    }
-
-    public GroupLoan disburse(String groupLoanId, String disbursedBy) throws SQLException {
-        GroupLoan groupLoan = requireStatus(groupLoanId, GroupLoanStatus.APPROVED, "disbursed");
-
-        List<LoanGroupMember> members = loanGroupService.findMembers(groupLoan.getLoanGroupId()).stream()
-                .filter(m -> "active".equals(m.getStatus()))
-                .sorted((a, b) -> {
-                    int byJoined = a.getJoinedAt().compareTo(b.getJoinedAt());
-                    return byJoined != 0 ? byJoined : a.getId().compareTo(b.getId());
-                })
-                .toList();
-        if (members.size() < 2) {
-            throw new IllegalStateException("A group loan needs at least 2 active members to disburse.");
-        }
-
-        Instant disbursedAt = Instant.now();
-        LocalDate disbursedDate = LocalDate.ofInstant(disbursedAt, ZoneId.systemDefault());
-
+        Instant activatedAt = Instant.now();
         List<ScheduledInstallment> schedule = scheduleGenerator.generate(
-                groupLoan.getPrincipalAmount(), groupLoan.getInterestRateBps(), groupLoan.getTermPeriodCount(),
-                groupLoan.getInterestMethod(), groupLoan.getRepaymentFrequency(), disbursedDate);
-
-        long totalInterest = schedule.stream().mapToLong(ScheduledInstallment::interestDue).sum();
-        long totalRepayable = groupLoan.getPrincipalAmount() + totalInterest;
-        long netCash = groupLoan.getPrincipalAmount() - groupLoan.getOriginationFeeAmount();
+                groupLoan.getPrincipalAmount(), groupLoan.getPeriodicAmount(),
+                groupLoan.getRepaymentFrequency(), groupLoan.getStartDate());
 
         String receivableAccountId = chart.groupLoanReceivable(groupLoan.getId(), groupLoan.getLoanNumber()).getId();
 
         List<LedgerLine> lines = new ArrayList<>();
         lines.add(LedgerLine.debit(receivableAccountId, groupLoan.getPrincipalAmount()));
-        lines.add(LedgerLine.credit(chart.branchCash().getId(), netCash));
-        if (groupLoan.getOriginationFeeAmount() > 0) {
-            lines.add(LedgerLine.credit(chart.loanFeeIncome().getId(), groupLoan.getOriginationFeeAmount()));
-        }
+        lines.add(LedgerLine.credit(chart.branchCash().getId(), groupLoan.getPrincipalAmount()));
 
         ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DISBURSEMENT, lines)
                 .paymentMethod(PaymentMethod.CASH)
-                .recordedBy(disbursedBy)
-                .recordedAt(disbursedAt)
+                .recordedBy(activatedBy)
+                .recordedAt(activatedAt)
                 .description("Group loan disbursement " + groupLoan.getLoanNumber()));
 
-        int memberCount = members.size();
-        long sharePerMember = groupLoan.getPrincipalAmount() / memberCount;
-        long shareRemainder = groupLoan.getPrincipalAmount() - (sharePerMember * memberCount);
-
         try (Connection conn = DatabaseConnection.getConnection()) {
-            for (int i = 0; i < members.size(); i++) {
-                LoanGroupMember member = members.get(i);
-                long share = sharePerMember + (i == memberCount - 1 ? shareRemainder : 0);
-
-                String sql = "INSERT INTO group_loan_borrowers (id, group_loan_id, loan_group_member_id, customer_id,"
-                        + " share_principal, share_outstanding, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)";
-                try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                    String now = Instant.now().toString();
-                    ps.setString(1, UUID.randomUUID().toString());
-                    ps.setString(2, groupLoan.getId());
-                    ps.setString(3, member.getId());
-                    ps.setString(4, member.getCustomerId());
-                    ps.setLong(5, share);
-                    ps.setLong(6, share);
-                    ps.setString(7, now);
-                    ps.setString(8, now);
-                    ps.executeUpdate();
-                }
-            }
-
             for (ScheduledInstallment installment : schedule) {
-                String sql = "INSERT INTO group_loan_installments (id, group_loan_id, sequence, due_date, principal_due,"
-                        + " interest_due, penalty_due, principal_paid, interest_paid, penalty_paid, status,"
-                        + " created_at, updated_at) VALUES (?,?,?,?,?,?,0,0,0,0,?,?,?)";
-                try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                    String now = Instant.now().toString();
+                String instNow = Instant.now().toString();
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO group_loan_installments (id, group_loan_id, sequence, due_date, amount_due,"
+                        + " amount_paid, status, created_at, updated_at) VALUES (?,?,?,?,?,0,?,?,?)")) {
                     ps.setString(1, UUID.randomUUID().toString());
                     ps.setString(2, groupLoan.getId());
                     ps.setInt(3, installment.sequence());
                     ps.setString(4, installment.dueDate().format(DateTimeFormatter.ISO_LOCAL_DATE));
                     ps.setLong(5, installment.principalDue());
-                    ps.setLong(6, installment.interestDue());
-                    ps.setString(7, InstallmentStatus.PENDING.value());
-                    ps.setString(8, now);
-                    ps.setString(9, now);
+                    ps.setString(6, InstallmentStatus.PENDING.value());
+                    ps.setString(7, instNow);
+                    ps.setString(8, instNow);
                     ps.executeUpdate();
                 }
             }
 
             try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE group_loans SET receivable_account_id = ?, total_interest = ?, total_repayable = ?,"
-                    + " outstanding_balance = ?, member_count_at_disbursement = ?, status = ?, disbursed_at = ?,"
-                    + " updated_at = ? WHERE id = ?")) {
+                    "UPDATE group_loans SET receivable_account_id = ?, outstanding_balance = ?, total_periods = ?,"
+                    + " status = ?, activated_by = ?, activated_at = ?, updated_at = ? WHERE id = ?")) {
                 ps.setString(1, receivableAccountId);
-                ps.setLong(2, totalInterest);
-                ps.setLong(3, totalRepayable);
-                ps.setLong(4, totalRepayable);
-                ps.setInt(5, memberCount);
-                ps.setString(6, GroupLoanStatus.DISBURSED.value());
-                ps.setString(7, disbursedAt.toString());
-                ps.setString(8, Instant.now().toString());
-                ps.setString(9, groupLoan.getId());
+                ps.setLong(2, groupLoan.getPrincipalAmount());
+                ps.setInt(3, schedule.size());
+                ps.setString(4, GroupLoanStatus.ACTIVE.value());
+                ps.setString(5, activatedBy);
+                ps.setString(6, activatedAt.toString());
+                ps.setString(7, Instant.now().toString());
+                ps.setString(8, groupLoan.getId());
                 ps.executeUpdate();
             }
         }
 
-        outbox.enqueueIfHybrid("group_loan.disburse", new JSONObject().put("group_loan_id", groupLoanId));
+        outbox.enqueueIfHybrid("group_loan.activate", new JSONObject().put("group_loan_id", groupLoanId));
 
         return findById(groupLoanId);
     }
 
-    /**
-     * Closes a disbursed group loan whose schedule isn't working and opens a
-     * new linked group loan carrying over the old loan's outstanding
-     * PRINCIPAL onto a fresh schedule under the chosen product's terms,
-     * re-splitting it across the loan group's currently active members
-     * (membership can drift since the original disbursement, so the
-     * >=2-active-member guard is re-checked here too, same as {@link
-     * #disburse}). Hybrid mode pushes the outcome through the outbox
-     * afterward, same client-reference-as-id reasoning as
-     * {@link LoanService#restructure}.
-     */
-    public GroupLoan restructure(String groupLoanId, String restructuredBy, String newProductId, String reason)
-            throws SQLException {
-        GroupLoan groupLoan = requireStatus(groupLoanId, GroupLoanStatus.DISBURSED, "restructured");
+    // ------------------------------------------------------ record repayment
 
-        LoanProduct newProduct = productService.findById(newProductId);
-        if (newProduct == null || !newProduct.isActive()) {
-            throw new IllegalArgumentException("This loan product is no longer offered.");
+    public GroupLoanRepaymentResult recordRepayment(String groupLoanId, long amount, String recordedBy,
+                                                      String clientReference, Instant recordedAt) throws SQLException {
+        String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
+
+        GroupLoanRepayment existing = findRepaymentByClientReference(effectiveClientReference);
+        if (existing != null) {
+            JournalEntry entry = ledger.findByClientReference(effectiveClientReference);
+            return new GroupLoanRepaymentResult(entry, findById(existing.getGroupLoanId()), existing, true);
         }
 
-        long principalOutstanding = accountBalance(groupLoan.getReceivableAccountId());
-        if (principalOutstanding <= 0) {
-            throw new IllegalStateException("Nothing to restructure — outstanding principal is already zero.");
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
+            throw new IllegalStateException("Only an active group loan can receive repayments.");
+        }
+        if (amount <= 0 || amount > groupLoan.getOutstandingBalance()) {
+            throw new IllegalArgumentException("The amount must be positive and cannot exceed the outstanding balance.");
         }
 
-        List<LoanGroupMember> members = activeMembers(groupLoan.getLoanGroupId());
-        if (members.size() < 2) {
-            throw new IllegalStateException("A group loan needs at least 2 active members to restructure.");
-        }
-
-        Instant restructuredAt = Instant.now();
-        LocalDate restructuredDate = LocalDate.ofInstant(restructuredAt, ZoneId.systemDefault());
-        long refinanceAmount = groupLoan.getOutstandingBalance();
-
-        List<ScheduledInstallment> schedule = scheduleGenerator.generate(
-                principalOutstanding, newProduct.getInterestRateBps(), newProduct.getTermPeriodCount(),
-                newProduct.getInterestMethod(), newProduct.getRepaymentFrequency(), restructuredDate);
-        long totalInterest = schedule.stream().mapToLong(ScheduledInstallment::interestDue).sum();
-        long totalRepayable = principalOutstanding + totalInterest;
-
-        String newGroupLoanId = UUID.randomUUID().toString();
-        String newLoanNumber;
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            newLoanNumber = nextLoanNumber(conn);
-        }
-
-        String receivableAccountId = chart.groupLoanReceivable(newGroupLoanId, newLoanNumber).getId();
+        Instant effectiveRecordedAt = recordedAt != null ? recordedAt : Instant.now();
+        applyToInstallments(groupLoan.getId(), amount);
 
         List<LedgerLine> lines = new ArrayList<>();
-        lines.add(LedgerLine.debit(receivableAccountId, principalOutstanding));
-        lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), principalOutstanding));
+        lines.add(LedgerLine.debit(chart.branchCash().getId(), amount));
+        lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), amount));
 
-        ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_RESTRUCTURE, lines)
+        JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_REPAYMENT, lines)
                 .paymentMethod(PaymentMethod.CASH)
-                .recordedBy(restructuredBy)
-                .recordedAt(restructuredAt)
-                .description("Group loan restructure " + groupLoan.getLoanNumber() + " -> " + newLoanNumber));
+                .recordedBy(recordedBy)
+                .recordedAt(effectiveRecordedAt)
+                .clientReference(effectiveClientReference)
+                .description("Group loan repayment " + groupLoan.getLoanNumber()));
 
-        String now = restructuredAt.toString();
+        String repaymentId = UUID.randomUUID().toString();
+        long newOutstanding = groupLoan.getOutstandingBalance() - amount;
+
         try (Connection conn = DatabaseConnection.getConnection()) {
-            insertRefinancedGroupLoan(conn, newGroupLoanId, groupLoan.getLoanGroupId(), newProduct.getId(),
-                    groupLoan.getAgentId(), restructuredBy, receivableAccountId, newLoanNumber, principalOutstanding,
-                    newProduct.getInterestMethod().value(), newProduct.getInterestRateBps(),
-                    newProduct.getTermPeriodCount(), newProduct.getRepaymentFrequency().value(),
-                    newProduct.getOriginationFeeAmount(), newProduct.getPenaltyRateBps(),
-                    newProduct.getGracePeriodDays(), totalInterest, totalRepayable, members.size(),
-                    groupLoan.getId(), principalOutstanding, now);
+            String now = Instant.now().toString();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO group_loan_repayments (id, group_loan_id, journal_entry_id, recorded_by, amount,"
+                    + " recorded_at, client_reference, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)")) {
+                ps.setString(1, repaymentId);
+                ps.setString(2, groupLoan.getId());
+                ps.setString(3, entry.getId());
+                ps.setString(4, recordedBy);
+                ps.setLong(5, amount);
+                ps.setString(6, effectiveRecordedAt.toString());
+                ps.setString(7, effectiveClientReference);
+                ps.setString(8, now);
+                ps.setString(9, now);
+                ps.executeUpdate();
+            }
 
-            insertRefinancedBorrowers(conn, newGroupLoanId, members, principalOutstanding);
-            insertRefinancedGroupInstallments(conn, newGroupLoanId, schedule);
-            closeRefinancedGroupLoan(conn, groupLoan.getId(), "restructure", reason, refinanceAmount, now);
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE group_loans SET outstanding_balance = ?, updated_at = ? WHERE id = ?")) {
+                ps.setLong(1, newOutstanding);
+                ps.setString(2, now);
+                ps.setString(3, groupLoan.getId());
+                ps.executeUpdate();
+            }
         }
 
-        outbox.enqueueIfHybrid("group_loan.restructure", new JSONObject()
-                .put("group_loan_id", groupLoanId)
-                .put("loan_product_id", newProductId)
-                .put("reason", reason)
-                .put("client_reference", newGroupLoanId));
+        if (newOutstanding <= 0) {
+            close(groupLoan.getId(), recordedBy);
+        }
 
-        return findById(newGroupLoanId);
+        outbox.enqueueIfHybrid("group_loan.repayment.record", new JSONObject()
+                .put("group_loan_id", groupLoan.getId())
+                .put("amount", amount)
+                .put("client_reference", effectiveClientReference)
+                .put("recorded_at", effectiveRecordedAt.toString()));
+
+        return new GroupLoanRepaymentResult(entry, findById(groupLoan.getId()), findRepaymentById(repaymentId), false);
     }
 
-    /**
-     * Closes a disbursed group loan in good standing and opens a new linked
-     * group loan whose principal is the old loan's outstanding PRINCIPAL
-     * plus a manager-entered top-up amount of fresh cash, reusing the OLD
-     * loan's own terms and re-splitting the new principal across the loan
-     * group's currently active members. Hybrid mode pushes the outcome
-     * through the outbox afterward, same reasoning as {@link LoanService#topUp}.
-     */
-    public GroupLoan topUp(String groupLoanId, String toppedUpBy, long topUpAmount, String reason) throws SQLException {
-        GroupLoan groupLoan = requireStatus(groupLoanId, GroupLoanStatus.DISBURSED, "topped up");
-        if (topUpAmount <= 0) {
-            throw new IllegalArgumentException("The top-up amount must be greater than zero.");
-        }
-        boolean hasOverdue = findInstallments(groupLoanId).stream()
-                .anyMatch(i -> i.getStatus() == InstallmentStatus.OVERDUE);
-        if (hasOverdue) {
-            throw new IllegalStateException("This group loan has an overdue installment and is not eligible for a top-up.");
+    // --------------------------------------------------------- apply deposit
+
+    public GroupLoan applyDeposit(String groupLoanId, String appliedBy, String clientReference) throws SQLException {
+        String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
+
+        if (findDepositByClientReference(effectiveClientReference) != null) {
+            return findById(groupLoanId);
         }
 
-        List<LoanGroupMember> members = activeMembers(groupLoan.getLoanGroupId());
-        if (members.size() < 2) {
-            throw new IllegalStateException("A group loan needs at least 2 active members to top up.");
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
+            throw new IllegalStateException("The deposit can only be applied while the loan is active.");
+        }
+        if (groupLoan.getDepositStatus() != DepositStatus.HELD || groupLoan.getSecurityDepositAmount() <= 0) {
+            throw new IllegalStateException("There is no held deposit to apply.");
         }
 
-        long principalOutstanding = accountBalance(groupLoan.getReceivableAccountId());
-        long newPrincipal = principalOutstanding + topUpAmount;
+        long held = groupLoan.getSecurityDepositAmount();
+        long applied = Math.min(held, groupLoan.getOutstandingBalance());
+        long excess = held - applied;
 
-        Instant toppedUpAt = Instant.now();
-        LocalDate toppedUpDate = LocalDate.ofInstant(toppedUpAt, ZoneId.systemDefault());
-        long refinanceAmount = groupLoan.getOutstandingBalance();
+        if (applied > 0) {
+            applyToInstallments(groupLoan.getId(), applied);
 
-        List<ScheduledInstallment> schedule = scheduleGenerator.generate(
-                newPrincipal, groupLoan.getInterestRateBps(), groupLoan.getTermPeriodCount(),
-                groupLoan.getInterestMethod(), groupLoan.getRepaymentFrequency(), toppedUpDate);
-        long totalInterest = schedule.stream().mapToLong(ScheduledInstallment::interestDue).sum();
-        long totalRepayable = newPrincipal + totalInterest;
-        long netCash = topUpAmount - groupLoan.getOriginationFeeAmount();
+            List<LedgerLine> lines = new ArrayList<>();
+            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), applied));
+            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), applied));
 
-        String newGroupLoanId = UUID.randomUUID().toString();
-        String newLoanNumber;
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            newLoanNumber = nextLoanNumber(conn);
+            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_APPLIED, lines)
+                    .paymentMethod(PaymentMethod.INTERNAL)
+                    .recordedBy(appliedBy)
+                    .recordedAt(Instant.now())
+                    .clientReference(effectiveClientReference)
+                    .description("Group loan deposit applied to balance " + groupLoan.getLoanNumber()));
+
+            try (Connection conn = DatabaseConnection.getConnection()) {
+                insertDeposit(conn, groupLoan.getId(), entry.getId(), appliedBy, applied, "applied",
+                        Instant.now(), effectiveClientReference);
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE group_loans SET outstanding_balance = ?, updated_at = ? WHERE id = ?")) {
+                    ps.setLong(1, groupLoan.getOutstandingBalance() - applied);
+                    ps.setString(2, Instant.now().toString());
+                    ps.setString(3, groupLoan.getId());
+                    ps.executeUpdate();
+                }
+            }
         }
 
-        String receivableAccountId = chart.groupLoanReceivable(newGroupLoanId, newLoanNumber).getId();
+        if (excess > 0) {
+            List<LedgerLine> lines = new ArrayList<>();
+            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), excess));
+            lines.add(LedgerLine.credit(chart.branchCash().getId(), excess));
 
-        List<LedgerLine> lines = new ArrayList<>();
-        lines.add(LedgerLine.debit(receivableAccountId, newPrincipal));
-        if (principalOutstanding > 0) {
-            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), principalOutstanding));
-        }
-        lines.add(LedgerLine.credit(chart.branchCash().getId(), netCash));
-        if (groupLoan.getOriginationFeeAmount() > 0) {
-            lines.add(LedgerLine.credit(chart.loanFeeIncome().getId(), groupLoan.getOriginationFeeAmount()));
-        }
+            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_REFUNDED, lines)
+                    .paymentMethod(PaymentMethod.CASH)
+                    .recordedBy(appliedBy)
+                    .recordedAt(Instant.now())
+                    .description("Group loan deposit excess refund " + groupLoan.getLoanNumber()));
 
-        ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_TOP_UP, lines)
-                .paymentMethod(PaymentMethod.CASH)
-                .recordedBy(toppedUpBy)
-                .recordedAt(toppedUpAt)
-                .description("Group loan top-up " + groupLoan.getLoanNumber() + " -> " + newLoanNumber));
-
-        String now = toppedUpAt.toString();
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            insertRefinancedGroupLoan(conn, newGroupLoanId, groupLoan.getLoanGroupId(), groupLoan.getLoanProductId(),
-                    groupLoan.getAgentId(), toppedUpBy, receivableAccountId, newLoanNumber, newPrincipal,
-                    groupLoan.getInterestMethod().value(), groupLoan.getInterestRateBps(),
-                    groupLoan.getTermPeriodCount(), groupLoan.getRepaymentFrequency().value(),
-                    groupLoan.getOriginationFeeAmount(), groupLoan.getPenaltyRateBps(),
-                    groupLoan.getGracePeriodDays(), totalInterest, totalRepayable, members.size(),
-                    groupLoan.getId(), principalOutstanding, now);
-
-            insertRefinancedBorrowers(conn, newGroupLoanId, members, newPrincipal);
-            insertRefinancedGroupInstallments(conn, newGroupLoanId, schedule);
-            closeRefinancedGroupLoan(conn, groupLoan.getId(), "top_up", reason, refinanceAmount, now);
+            try (Connection conn = DatabaseConnection.getConnection()) {
+                insertDeposit(conn, groupLoan.getId(), entry.getId(), appliedBy, excess, "refunded",
+                        Instant.now(), null);
+            }
         }
 
-        outbox.enqueueIfHybrid("group_loan.top_up", new JSONObject()
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE group_loans SET deposit_status = ?, updated_at = ? WHERE id = ?")) {
+            ps.setString(1, DepositStatus.SETTLED.value());
+            ps.setString(2, Instant.now().toString());
+            ps.setString(3, groupLoan.getId());
+            ps.executeUpdate();
+        }
+
+        outbox.enqueueIfHybrid("group_loan.deposit.apply", new JSONObject()
                 .put("group_loan_id", groupLoanId)
-                .put("amount", topUpAmount)
-                .put("reason", reason)
-                .put("client_reference", newGroupLoanId));
+                .put("client_reference", effectiveClientReference));
 
-        return findById(newGroupLoanId);
+        GroupLoan refreshed = findById(groupLoanId);
+        if (refreshed.getOutstandingBalance() <= 0 && refreshed.getStatus() == GroupLoanStatus.ACTIVE) {
+            close(groupLoanId, appliedBy);
+            return findById(groupLoanId);
+        }
+        return refreshed;
     }
 
-    /**
-     * Declares a disbursed group loan's remaining shared balance
-     * uncollectible — mirrors {@link LoanService#writeOff} exactly,
-     * including crediting the receivable by its actual current balance
-     * (principal only) rather than the full outstanding_balance. Unlike a
-     * repayment, this does NOT touch any individual GroupLoanBorrower's
-     * share_outstanding: those remain as accountability history of what
-     * each member still owed at the moment the group's joint debt was
-     * written off.
-     */
+    // ----------------------------------------------------------------- close
+
+    /** Closes a fully-repaid loan; refunds a still-held deposit in cash (nothing left to offset). */
+    public GroupLoan close(String groupLoanId, String closedBy) throws SQLException {
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
+            throw new IllegalStateException("Only an active group loan can be closed.");
+        }
+        if (groupLoan.getOutstandingBalance() > 0) {
+            throw new IllegalStateException("This group loan still has an outstanding balance.");
+        }
+
+        if (groupLoan.getDepositStatus() == DepositStatus.HELD && groupLoan.getSecurityDepositAmount() > 0) {
+            long amount = groupLoan.getSecurityDepositAmount();
+            List<LedgerLine> lines = new ArrayList<>();
+            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), amount));
+            lines.add(LedgerLine.credit(chart.branchCash().getId(), amount));
+
+            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_REFUNDED, lines)
+                    .paymentMethod(PaymentMethod.CASH)
+                    .recordedBy(closedBy)
+                    .recordedAt(Instant.now())
+                    .description("Group loan deposit refund " + groupLoan.getLoanNumber()));
+
+            try (Connection conn = DatabaseConnection.getConnection()) {
+                insertDeposit(conn, groupLoan.getId(), entry.getId(), closedBy, amount, "refunded", Instant.now(), null);
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE group_loans SET deposit_status = ?, updated_at = ? WHERE id = ?")) {
+                    ps.setString(1, DepositStatus.SETTLED.value());
+                    ps.setString(2, Instant.now().toString());
+                    ps.setString(3, groupLoan.getId());
+                    ps.executeUpdate();
+                }
+            }
+        }
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE group_loans SET status = ?, closed_at = ?, updated_at = ? WHERE id = ?")) {
+            String now = Instant.now().toString();
+            ps.setString(1, GroupLoanStatus.CLOSED.value());
+            ps.setString(2, now);
+            ps.setString(3, now);
+            ps.setString(4, groupLoanId);
+            ps.executeUpdate();
+        }
+
+        return findById(groupLoanId);
+    }
+
+    // ------------------------------------------------------------- write off
+
     public GroupLoan writeOff(String groupLoanId, String writtenOffBy, String reason) throws SQLException {
-        GroupLoan groupLoan = requireStatus(groupLoanId, GroupLoanStatus.DISBURSED, "written off");
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
+            throw new IllegalStateException("Only an active group loan can be written off.");
+        }
         if (groupLoan.getOutstandingBalance() <= 0) {
             throw new IllegalStateException("This group loan has no outstanding balance to write off.");
         }
 
-        long writeOffAmount = groupLoan.getOutstandingBalance();
-        long principalOutstanding = accountBalance(groupLoan.getReceivableAccountId());
+        long outstanding = groupLoan.getOutstandingBalance();
+        long seized = 0;
 
-        if (principalOutstanding > 0) {
+        if (groupLoan.getDepositStatus() == DepositStatus.HELD && groupLoan.getSecurityDepositAmount() > 0) {
+            seized = Math.min(groupLoan.getSecurityDepositAmount(), outstanding);
+
             List<LedgerLine> lines = new ArrayList<>();
-            lines.add(LedgerLine.debit(chart.badDebtExpense().getId(), principalOutstanding));
-            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), principalOutstanding));
+            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), seized));
+            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), seized));
+
+            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_APPLIED, lines)
+                    .paymentMethod(PaymentMethod.INTERNAL)
+                    .recordedBy(writtenOffBy)
+                    .recordedAt(Instant.now())
+                    .description("Group loan deposit seized on write-off " + groupLoan.getLoanNumber()));
+
+            try (Connection conn = DatabaseConnection.getConnection()) {
+                insertDeposit(conn, groupLoan.getId(), entry.getId(), writtenOffBy, seized, "seized", Instant.now(), null);
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE group_loans SET deposit_status = ?, updated_at = ? WHERE id = ?")) {
+                    ps.setString(1, DepositStatus.SETTLED.value());
+                    ps.setString(2, Instant.now().toString());
+                    ps.setString(3, groupLoan.getId());
+                    ps.executeUpdate();
+                }
+            }
+        }
+
+        long residual = outstanding - seized;
+        if (residual > 0) {
+            List<LedgerLine> lines = new ArrayList<>();
+            lines.add(LedgerLine.debit(chart.badDebtExpense().getId(), residual));
+            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), residual));
 
             ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_WRITE_OFF, lines)
-                    .paymentMethod(PaymentMethod.CASH)
+                    .paymentMethod(PaymentMethod.INTERNAL)
                     .recordedBy(writtenOffBy)
                     .recordedAt(Instant.now())
                     .description("Group loan write-off " + groupLoan.getLoanNumber()));
@@ -462,15 +525,14 @@ public class GroupLoanService {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "UPDATE group_loans SET status = ?, outstanding_balance = 0, written_off_at = ?,"
-                     + " write_off_reason = ?, write_off_amount = ?, approved_by = ?, updated_at = ? WHERE id = ?")) {
+                     + " write_off_reason = ?, write_off_amount = ?, updated_at = ? WHERE id = ?")) {
             String now = Instant.now().toString();
             ps.setString(1, GroupLoanStatus.WRITTEN_OFF.value());
             ps.setString(2, now);
             ps.setString(3, reason);
-            ps.setLong(4, writeOffAmount);
-            ps.setString(5, writtenOffBy);
-            ps.setString(6, now);
-            ps.setString(7, groupLoanId);
+            ps.setLong(4, outstanding);
+            ps.setString(5, now);
+            ps.setString(6, groupLoanId);
             ps.executeUpdate();
         }
 
@@ -481,262 +543,56 @@ public class GroupLoanService {
         return findById(groupLoanId);
     }
 
-    private List<LoanGroupMember> activeMembers(String loanGroupId) throws SQLException {
-        return loanGroupService.findMembers(loanGroupId).stream()
-                .filter(m -> "active".equals(m.getStatus()))
-                .sorted((a, b) -> {
-                    int byJoined = a.getJoinedAt().compareTo(b.getJoinedAt());
-                    return byJoined != 0 ? byJoined : a.getId().compareTo(b.getId());
-                })
-                .toList();
-    }
+    // --------------------------------------------------------------- helpers
 
-    private void insertRefinancedGroupLoan(Connection conn, String newGroupLoanId, String loanGroupId,
-                                            String loanProductId, String agentId, String approvedBy,
-                                            String receivableAccountId, String loanNumber, long principalAmount,
-                                            String interestMethod, int interestRateBps, int termPeriodCount,
-                                            String repaymentFrequency, long originationFeeAmount, int penaltyRateBps,
-                                            int gracePeriodDays, long totalInterest, long totalRepayable,
-                                            int memberCount, String previousGroupLoanId, long rolledOverAmount,
-                                            String now) throws SQLException {
-        String sql = "INSERT INTO group_loans (id, loan_group_id, loan_product_id, agent_id, approved_by,"
-                + " receivable_account_id, loan_number, principal_amount, interest_method, interest_rate_bps,"
-                + " term_period_count, repayment_frequency, origination_fee_amount, penalty_rate_bps,"
-                + " grace_period_days, total_interest, total_repayable, outstanding_balance,"
-                + " member_count_at_disbursement, status, previous_group_loan_id, rolled_over_amount, applied_at,"
-                + " approved_at, disbursed_at, created_at, updated_at)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, newGroupLoanId);
-            ps.setString(2, loanGroupId);
-            ps.setString(3, loanProductId);
-            ps.setString(4, agentId);
-            ps.setString(5, approvedBy);
-            ps.setString(6, receivableAccountId);
-            ps.setString(7, loanNumber);
-            ps.setLong(8, principalAmount);
-            ps.setString(9, interestMethod);
-            ps.setInt(10, interestRateBps);
-            ps.setInt(11, termPeriodCount);
-            ps.setString(12, repaymentFrequency);
-            ps.setLong(13, originationFeeAmount);
-            ps.setInt(14, penaltyRateBps);
-            ps.setInt(15, gracePeriodDays);
-            ps.setLong(16, totalInterest);
-            ps.setLong(17, totalRepayable);
-            ps.setLong(18, totalRepayable);
-            ps.setInt(19, memberCount);
-            ps.setString(20, GroupLoanStatus.DISBURSED.value());
-            ps.setString(21, previousGroupLoanId);
-            ps.setLong(22, rolledOverAmount);
-            ps.setString(23, now);
-            ps.setString(24, now);
-            ps.setString(25, now);
-            ps.setString(26, now);
-            ps.setString(27, now);
-            ps.executeUpdate();
-        }
-    }
-
-    private void insertRefinancedBorrowers(Connection conn, String newGroupLoanId, List<LoanGroupMember> members,
-                                            long principalAmount) throws SQLException {
-        int memberCount = members.size();
-        long sharePerMember = principalAmount / memberCount;
-        long shareRemainder = principalAmount - (sharePerMember * memberCount);
-
-        for (int i = 0; i < members.size(); i++) {
-            LoanGroupMember member = members.get(i);
-            long share = sharePerMember + (i == memberCount - 1 ? shareRemainder : 0);
-
-            String sql = "INSERT INTO group_loan_borrowers (id, group_loan_id, loan_group_member_id, customer_id,"
-                    + " share_principal, share_outstanding, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                String now = Instant.now().toString();
-                ps.setString(1, UUID.randomUUID().toString());
-                ps.setString(2, newGroupLoanId);
-                ps.setString(3, member.getId());
-                ps.setString(4, member.getCustomerId());
-                ps.setLong(5, share);
-                ps.setLong(6, share);
-                ps.setString(7, now);
-                ps.setString(8, now);
-                ps.executeUpdate();
+    private LoanGroupMember resolveMember(String loanGroupId, String customerId) throws SQLException {
+        for (LoanGroupMember member : loanGroupService.findMembers(loanGroupId)) {
+            if (member.getCustomerId().equals(customerId)) {
+                if (!"active".equals(member.getStatus())) {
+                    return loanGroupService.reactivateMember(member.getId());
+                }
+                return member;
             }
         }
+        return loanGroupService.addMember(loanGroupId, customerId);
     }
 
-    private void insertRefinancedGroupInstallments(Connection conn, String newGroupLoanId,
-                                                    List<ScheduledInstallment> schedule) throws SQLException {
-        for (ScheduledInstallment installment : schedule) {
-            String sql = "INSERT INTO group_loan_installments (id, group_loan_id, sequence, due_date, principal_due,"
-                    + " interest_due, penalty_due, principal_paid, interest_paid, penalty_paid, status,"
-                    + " created_at, updated_at) VALUES (?,?,?,?,?,?,0,0,0,0,?,?,?)";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                String instNow = Instant.now().toString();
-                ps.setString(1, UUID.randomUUID().toString());
-                ps.setString(2, newGroupLoanId);
-                ps.setInt(3, installment.sequence());
-                ps.setString(4, installment.dueDate().format(DateTimeFormatter.ISO_LOCAL_DATE));
-                ps.setLong(5, installment.principalDue());
-                ps.setLong(6, installment.interestDue());
-                ps.setString(7, InstallmentStatus.PENDING.value());
-                ps.setString(8, instNow);
-                ps.setString(9, instNow);
-                ps.executeUpdate();
-            }
-        }
-    }
-
-    private void closeRefinancedGroupLoan(Connection conn, String oldGroupLoanId, String refinanceType, String reason,
-                                           long refinanceAmount, String now) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(
-                "UPDATE group_loans SET status = ?, outstanding_balance = 0, refinanced_at = ?, refinance_type = ?,"
-                + " refinance_reason = ?, refinance_amount = ?, updated_at = ? WHERE id = ?")) {
-            ps.setString(1, GroupLoanStatus.REFINANCED.value());
-            ps.setString(2, now);
-            ps.setString(3, refinanceType);
-            ps.setString(4, reason);
-            ps.setLong(5, refinanceAmount);
-            ps.setString(6, now);
-            ps.setString(7, oldGroupLoanId);
-            ps.executeUpdate();
-        }
-    }
-
-    private long accountBalance(String accountId) throws SQLException {
+    private boolean hasActiveLoan(String loanGroupMemberId) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT balance FROM ledger_accounts WHERE id = ?")) {
-            ps.setString(1, accountId);
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM group_loans WHERE loan_group_member_id = ? AND status = ?")) {
+            ps.setString(1, loanGroupMemberId);
+            ps.setString(2, GroupLoanStatus.ACTIVE.value());
             try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getLong("balance");
+                return rs.next();
             }
         }
     }
 
-    /**
-     * Records one member's repayment against the group's SHARED outstanding
-     * balance (not the borrower's own share) — under joint & several
-     * liability, any member may pay down more than their own share to cover
-     * a delinquent co-member. The borrower's own share_outstanding is
-     * accountability bookkeeping only: it floors at 0 and is never
-     * reallocated onto another member's share.
-     */
-    public GroupLoanRepaymentResult recordRepayment(String groupLoanBorrowerId, long amount, String recordedBy,
-                                                      String clientReference, Instant recordedAt) throws SQLException {
-        String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
-
-        JournalEntry existingEntry = ledger.findByClientReference(effectiveClientReference);
-        if (existingEntry != null) {
-            GroupLoanRepayment existingRepayment = findRepaymentByClientReference(effectiveClientReference);
-            GroupLoanBorrower existingBorrower = existingRepayment != null
-                    ? findBorrowerById(existingRepayment.getGroupLoanBorrowerId()) : findBorrowerById(groupLoanBorrowerId);
-            GroupLoan existingLoan = existingBorrower != null ? findById(existingBorrower.getGroupLoanId()) : null;
-            return new GroupLoanRepaymentResult(existingEntry, existingLoan, existingBorrower, true);
+    private void insertDeposit(Connection conn, String groupLoanId, String journalEntryId, String recordedBy,
+                                long amount, String type, Instant recordedAt, String clientReference)
+            throws SQLException {
+        String now = Instant.now().toString();
+        try (PreparedStatement ps = conn.prepareStatement(
+                "INSERT INTO group_loan_deposits (id, group_loan_id, journal_entry_id, recorded_by, amount, type,"
+                + " recorded_at, client_reference, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)")) {
+            ps.setString(1, UUID.randomUUID().toString());
+            ps.setString(2, groupLoanId);
+            ps.setString(3, journalEntryId);
+            ps.setString(4, recordedBy);
+            ps.setLong(5, amount);
+            ps.setString(6, type);
+            ps.setString(7, recordedAt.toString());
+            ps.setString(8, clientReference);
+            ps.setString(9, now);
+            ps.setString(10, now);
+            ps.executeUpdate();
         }
-
-        GroupLoanBorrower borrower = findBorrowerById(groupLoanBorrowerId);
-        if (borrower == null) {
-            throw new IllegalArgumentException("Borrower not found.");
-        }
-        GroupLoan groupLoan = findById(borrower.getGroupLoanId());
-        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.DISBURSED) {
-            throw new IllegalStateException("Only disbursed group loans can receive repayments.");
-        }
-        if (amount <= 0 || amount > groupLoan.getOutstandingBalance()) {
-            throw new IllegalArgumentException("Amount must be positive and cannot exceed the group loan's outstanding balance.");
-        }
-
-        Instant effectiveRecordedAt = recordedAt != null ? recordedAt : Instant.now();
-        long[] applied = applyToInstallments(groupLoan.getId(), amount);
-        long principalApplied = applied[0];
-        long interestApplied = applied[1];
-        long penaltyApplied = applied[2];
-
-        List<LedgerLine> lines = new ArrayList<>();
-        lines.add(LedgerLine.debit(chart.branchCash().getId(), amount));
-        if (principalApplied > 0) {
-            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), principalApplied));
-        }
-        if (interestApplied > 0) {
-            lines.add(LedgerLine.credit(chart.loanInterestIncome().getId(), interestApplied));
-        }
-        if (penaltyApplied > 0) {
-            lines.add(LedgerLine.credit(chart.loanPenaltyIncome().getId(), penaltyApplied));
-        }
-
-        JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_REPAYMENT, lines)
-                .paymentMethod(PaymentMethod.CASH)
-                .recordedBy(recordedBy)
-                .recordedAt(effectiveRecordedAt)
-                .clientReference(effectiveClientReference)
-                .description("Group loan repayment " + groupLoan.getLoanNumber()));
-
-        String repaymentId = UUID.randomUUID().toString();
-        long newBorrowerOutstanding = Math.max(0, borrower.getShareOutstanding() - amount);
-        long newOutstanding = groupLoan.getOutstandingBalance() - amount;
-
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            String now = Instant.now().toString();
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO group_loan_repayments (id, group_loan_id, group_loan_borrower_id, journal_entry_id,"
-                    + " recorded_by, amount, recorded_at, client_reference, created_at, updated_at)"
-                    + " VALUES (?,?,?,?,?,?,?,?,?,?)")) {
-                ps.setString(1, repaymentId);
-                ps.setString(2, groupLoan.getId());
-                ps.setString(3, borrower.getId());
-                ps.setString(4, entry.getId());
-                ps.setString(5, recordedBy);
-                ps.setLong(6, amount);
-                ps.setString(7, effectiveRecordedAt.toString());
-                ps.setString(8, effectiveClientReference);
-                ps.setString(9, now);
-                ps.setString(10, now);
-                ps.executeUpdate();
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE group_loan_borrowers SET share_outstanding = ?, updated_at = ? WHERE id = ?")) {
-                ps.setLong(1, newBorrowerOutstanding);
-                ps.setString(2, now);
-                ps.setString(3, borrower.getId());
-                ps.executeUpdate();
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE group_loans SET outstanding_balance = ?, status = ?, closed_at = ?, updated_at = ? WHERE id = ?")) {
-                ps.setLong(1, newOutstanding);
-                ps.setString(2, newOutstanding <= 0 ? GroupLoanStatus.CLOSED.value() : groupLoan.getStatus().value());
-                ps.setString(3, newOutstanding <= 0 ? now : null);
-                ps.setString(4, now);
-                ps.setString(5, groupLoan.getId());
-                ps.executeUpdate();
-            }
-        }
-
-        outbox.enqueueIfHybrid("group_loan.repayment.record", new JSONObject()
-                .put("group_loan_id", groupLoan.getId())
-                .put("group_loan_borrower_id", borrower.getId())
-                .put("amount", amount)
-                .put("client_reference", effectiveClientReference)
-                .put("recorded_at", effectiveRecordedAt.toString()));
-
-        return new GroupLoanRepaymentResult(entry, findById(groupLoan.getId()), findBorrowerById(borrower.getId()), false);
     }
 
-    /**
-     * Applies a repayment across the group's outstanding installments
-     * oldest-first — penalty, then interest, then principal within each.
-     * Identical algorithm to LoanService.applyToInstallments, retargeted at
-     * group_loan_installments.
-     *
-     * @return [principalApplied, interestApplied, penaltyApplied]
-     */
-    private long[] applyToInstallments(String groupLoanId, long amount) throws SQLException {
+    /** Applies a payment across the member's installments oldest-first (pure principal). */
+    private void applyToInstallments(String groupLoanId, long amount) throws SQLException {
         long remaining = amount;
-        long principalApplied = 0;
-        long interestApplied = 0;
-        long penaltyApplied = 0;
 
         List<GroupLoanInstallment> installments = findInstallments(groupLoanId).stream()
                 .filter(i -> i.getStatus() == InstallmentStatus.PENDING
@@ -748,26 +604,17 @@ public class GroupLoanService {
             if (remaining <= 0) {
                 break;
             }
-
-            long installmentTotal = Math.min(installment.remaining(), remaining);
-            if (installmentTotal <= 0) {
+            long portion = Math.min(installment.remaining(), remaining);
+            if (portion <= 0) {
                 continue;
             }
 
-            long penaltyPortion = Math.min(installment.remainingPenalty(), installmentTotal);
-            long interestPortion = Math.min(installment.remainingInterest(), installmentTotal - penaltyPortion);
-            long principalPortion = Math.min(installment.remainingPrincipal(),
-                    installmentTotal - penaltyPortion - interestPortion);
-
             boolean wasOverdue = installment.getStatus() == InstallmentStatus.OVERDUE;
-            long newPenaltyPaid = installment.getPenaltyPaid() + penaltyPortion;
-            long newInterestPaid = installment.getInterestPaid() + interestPortion;
-            long newPrincipalPaid = installment.getPrincipalPaid() + principalPortion;
-            long newAmountPaid = newPenaltyPaid + newInterestPaid + newPrincipalPaid;
+            long newAmountPaid = installment.getAmountPaid() + portion;
 
             InstallmentStatus newStatus;
             Instant paidAt = null;
-            if (newAmountPaid >= installment.totalDue()) {
+            if (newAmountPaid >= installment.getAmountDue()) {
                 newStatus = InstallmentStatus.PAID;
                 paidAt = Instant.now();
             } else if (wasOverdue) {
@@ -778,36 +625,21 @@ public class GroupLoanService {
 
             try (Connection conn = DatabaseConnection.getConnection();
                  PreparedStatement ps = conn.prepareStatement(
-                         "UPDATE group_loan_installments SET penalty_paid = ?, interest_paid = ?, principal_paid = ?,"
-                         + " status = ?, paid_at = ?, updated_at = ? WHERE id = ?")) {
-                ps.setLong(1, newPenaltyPaid);
-                ps.setLong(2, newInterestPaid);
-                ps.setLong(3, newPrincipalPaid);
-                ps.setString(4, newStatus.value());
-                ps.setString(5, paidAt != null ? paidAt.toString() : null);
-                ps.setString(6, Instant.now().toString());
-                ps.setString(7, installment.getId());
+                         "UPDATE group_loan_installments SET amount_paid = ?, status = ?, paid_at = ?, updated_at = ?"
+                         + " WHERE id = ?")) {
+                ps.setLong(1, newAmountPaid);
+                ps.setString(2, newStatus.value());
+                ps.setString(3, paidAt != null ? paidAt.toString() : null);
+                ps.setString(4, Instant.now().toString());
+                ps.setString(5, installment.getId());
                 ps.executeUpdate();
             }
 
-            penaltyApplied += penaltyPortion;
-            interestApplied += interestPortion;
-            principalApplied += principalPortion;
-            remaining -= installmentTotal;
+            remaining -= portion;
         }
-
-        return new long[] {principalApplied, interestApplied, penaltyApplied};
     }
 
-    private GroupLoan requireStatus(String groupLoanId, GroupLoanStatus expected, String action) throws SQLException {
-        GroupLoan groupLoan = findById(groupLoanId);
-        if (groupLoan == null || groupLoan.getStatus() != expected) {
-            throw new IllegalStateException("Only " + expected.value() + " group loans can be " + action + ".");
-        }
-        return groupLoan;
-    }
-
-    /** G7 numbering: GL-{sequence} — GL distinguishes from an individual loan's LN prefix. */
+    /** GL-{sequence} — GL distinguishes a group member loan from an individual loan's LN prefix. */
     private String nextLoanNumber(Connection conn) throws SQLException {
         int sequence;
         try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM group_loans");
@@ -834,6 +666,8 @@ public class GroupLoanService {
         }
     }
 
+    // ----------------------------------------------------------------- reads
+
     public GroupLoan findById(String id) throws SQLException {
         GroupLoan groupLoan;
         try (Connection conn = DatabaseConnection.getConnection();
@@ -848,8 +682,7 @@ public class GroupLoanService {
         }
 
         groupLoan.setLoanGroup(loanGroupService.findById(groupLoan.getLoanGroupId()));
-        groupLoan.setProduct(productService.findById(groupLoan.getLoanProductId()));
-        groupLoan.setBorrowers(findBorrowers(id));
+        groupLoan.setCustomer(customerService.findById(groupLoan.getCustomerId()));
         groupLoan.setInstallments(findInstallments(id));
         return groupLoan;
     }
@@ -857,7 +690,7 @@ public class GroupLoanService {
     public List<GroupLoan> findAll() throws SQLException {
         List<GroupLoan> groupLoans = new ArrayList<>();
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM group_loans ORDER BY applied_at DESC");
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM group_loans ORDER BY issued_at DESC");
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 groupLoans.add(map(rs));
@@ -865,42 +698,42 @@ public class GroupLoanService {
         }
         for (GroupLoan groupLoan : groupLoans) {
             groupLoan.setLoanGroup(loanGroupService.findById(groupLoan.getLoanGroupId()));
+            groupLoan.setCustomer(customerService.findById(groupLoan.getCustomerId()));
         }
         return groupLoans;
     }
 
-    public List<GroupLoanBorrower> findBorrowers(String groupLoanId) throws SQLException {
-        List<GroupLoanBorrower> borrowers = new ArrayList<>();
+    public List<GroupLoan> findByLoanGroup(String loanGroupId) throws SQLException {
+        List<GroupLoan> groupLoans = new ArrayList<>();
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT * FROM group_loan_borrowers WHERE group_loan_id = ? ORDER BY created_at")) {
-            ps.setString(1, groupLoanId);
+                     "SELECT * FROM group_loans WHERE loan_group_id = ? ORDER BY issued_at DESC")) {
+            ps.setString(1, loanGroupId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    borrowers.add(mapBorrower(rs));
+                    groupLoans.add(map(rs));
                 }
             }
         }
-        for (GroupLoanBorrower borrower : borrowers) {
-            borrower.setCustomer(customerService.findById(borrower.getCustomerId()));
+        for (GroupLoan groupLoan : groupLoans) {
+            groupLoan.setCustomer(customerService.findById(groupLoan.getCustomerId()));
         }
-        return borrowers;
+        return groupLoans;
     }
 
-    public GroupLoanBorrower findBorrowerById(String id) throws SQLException {
-        GroupLoanBorrower borrower;
+    /** Sum of every active member loan's outstanding balance — the group's total debt. */
+    public long groupOutstanding(String loanGroupId) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM group_loan_borrowers WHERE id = ?")) {
-            ps.setString(1, id);
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT COALESCE(SUM(outstanding_balance), 0) FROM group_loans"
+                     + " WHERE loan_group_id = ? AND status = ?")) {
+            ps.setString(1, loanGroupId);
+            ps.setString(2, GroupLoanStatus.ACTIVE.value());
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return null;
-                }
-                borrower = mapBorrower(rs);
+                rs.next();
+                return rs.getLong(1);
             }
         }
-        borrower.setCustomer(customerService.findById(borrower.getCustomerId()));
-        return borrower;
     }
 
     public List<GroupLoanInstallment> findInstallments(String groupLoanId) throws SQLException {
@@ -918,6 +751,16 @@ public class GroupLoanService {
         return installments;
     }
 
+    private GroupLoanRepayment findRepaymentById(String id) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM group_loan_repayments WHERE id = ?")) {
+            ps.setString(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? mapRepayment(rs) : null;
+            }
+        }
+    }
+
     private GroupLoanRepayment findRepaymentByClientReference(String clientReference) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
@@ -925,6 +768,17 @@ public class GroupLoanService {
             ps.setString(1, clientReference);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? mapRepayment(rs) : null;
+            }
+        }
+    }
+
+    private GroupLoanDeposit findDepositByClientReference(String clientReference) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT * FROM group_loan_deposits WHERE client_reference = ?")) {
+            ps.setString(1, clientReference);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? mapDeposit(rs) : null;
             }
         }
     }
@@ -943,43 +797,29 @@ public class GroupLoanService {
         GroupLoan groupLoan = new GroupLoan();
         groupLoan.setId(rs.getString("id"));
         groupLoan.setLoanGroupId(rs.getString("loan_group_id"));
-        groupLoan.setLoanProductId(rs.getString("loan_product_id"));
+        groupLoan.setLoanGroupMemberId(rs.getString("loan_group_member_id"));
+        groupLoan.setCustomerId(rs.getString("customer_id"));
         groupLoan.setAgentId(rs.getString("agent_id"));
-        groupLoan.setApprovedBy(rs.getString("approved_by"));
+        groupLoan.setActivatedBy(rs.getString("activated_by"));
         groupLoan.setReceivableAccountId(rs.getString("receivable_account_id"));
+        groupLoan.setDepositLiabilityAccountId(rs.getString("deposit_liability_account_id"));
         groupLoan.setLoanNumber(rs.getString("loan_number"));
         groupLoan.setPrincipalAmount(rs.getLong("principal_amount"));
-        groupLoan.setInterestMethod(enums.InterestMethod.fromValue(rs.getString("interest_method")));
-        groupLoan.setInterestRateBps(rs.getInt("interest_rate_bps"));
-        groupLoan.setTermPeriodCount(rs.getInt("term_period_count"));
-        groupLoan.setRepaymentFrequency(enums.LoanFrequency.fromValue(rs.getString("repayment_frequency")));
-        groupLoan.setOriginationFeeAmount(rs.getLong("origination_fee_amount"));
-        groupLoan.setPenaltyRateBps(rs.getInt("penalty_rate_bps"));
-        groupLoan.setGracePeriodDays(rs.getInt("grace_period_days"));
-        groupLoan.setTotalInterest(rs.getLong("total_interest"));
-        groupLoan.setTotalRepayable(rs.getLong("total_repayable"));
+        groupLoan.setSecurityDepositAmount(rs.getLong("security_deposit_amount"));
+        groupLoan.setPeriodicAmount(rs.getLong("periodic_amount"));
         groupLoan.setOutstandingBalance(rs.getLong("outstanding_balance"));
-        int memberCount = rs.getInt("member_count_at_disbursement");
-        groupLoan.setMemberCountAtDisbursement(rs.wasNull() ? null : memberCount);
+        groupLoan.setRepaymentFrequency(LoanFrequency.fromValue(rs.getString("repayment_frequency")));
+        groupLoan.setStartDate(LocalDate.parse(rs.getString("start_date")));
+        groupLoan.setTotalPeriods(rs.getInt("total_periods"));
+        groupLoan.setDepositStatus(DepositStatus.fromValue(rs.getString("deposit_status")));
         groupLoan.setStatus(GroupLoanStatus.fromValue(rs.getString("status")));
-        groupLoan.setRejectionReason(rs.getString("rejection_reason"));
         groupLoan.setNotes(rs.getString("notes"));
         groupLoan.setClientReference(rs.getString("client_reference"));
-        groupLoan.setAppliedAt(Instant.parse(rs.getString("applied_at")));
-        String approvedAt = rs.getString("approved_at");
-        groupLoan.setApprovedAt(approvedAt != null ? Instant.parse(approvedAt) : null);
-        String disbursedAt = rs.getString("disbursed_at");
-        groupLoan.setDisbursedAt(disbursedAt != null ? Instant.parse(disbursedAt) : null);
+        groupLoan.setIssuedAt(Instant.parse(rs.getString("issued_at")));
+        String activatedAt = rs.getString("activated_at");
+        groupLoan.setActivatedAt(activatedAt != null ? Instant.parse(activatedAt) : null);
         String closedAt = rs.getString("closed_at");
         groupLoan.setClosedAt(closedAt != null ? Instant.parse(closedAt) : null);
-        groupLoan.setPreviousGroupLoanId(rs.getString("previous_group_loan_id"));
-        groupLoan.setRolledOverAmount(rs.getLong("rolled_over_amount"));
-        String refinancedAt = rs.getString("refinanced_at");
-        groupLoan.setRefinancedAt(refinancedAt != null ? Instant.parse(refinancedAt) : null);
-        groupLoan.setRefinanceType(rs.getString("refinance_type"));
-        groupLoan.setRefinanceReason(rs.getString("refinance_reason"));
-        long refinanceAmount = rs.getLong("refinance_amount");
-        groupLoan.setRefinanceAmount(rs.wasNull() ? null : refinanceAmount);
         String writtenOffAt = rs.getString("written_off_at");
         groupLoan.setWrittenOffAt(writtenOffAt != null ? Instant.parse(writtenOffAt) : null);
         groupLoan.setWriteOffReason(rs.getString("write_off_reason"));
@@ -988,29 +828,14 @@ public class GroupLoanService {
         return groupLoan;
     }
 
-    private GroupLoanBorrower mapBorrower(ResultSet rs) throws SQLException {
-        GroupLoanBorrower borrower = new GroupLoanBorrower();
-        borrower.setId(rs.getString("id"));
-        borrower.setGroupLoanId(rs.getString("group_loan_id"));
-        borrower.setLoanGroupMemberId(rs.getString("loan_group_member_id"));
-        borrower.setCustomerId(rs.getString("customer_id"));
-        borrower.setSharePrincipal(rs.getLong("share_principal"));
-        borrower.setShareOutstanding(rs.getLong("share_outstanding"));
-        return borrower;
-    }
-
     private GroupLoanInstallment mapInstallment(ResultSet rs) throws SQLException {
         GroupLoanInstallment installment = new GroupLoanInstallment();
         installment.setId(rs.getString("id"));
         installment.setGroupLoanId(rs.getString("group_loan_id"));
         installment.setSequence(rs.getInt("sequence"));
         installment.setDueDate(LocalDate.parse(rs.getString("due_date")));
-        installment.setPrincipalDue(rs.getLong("principal_due"));
-        installment.setInterestDue(rs.getLong("interest_due"));
-        installment.setPenaltyDue(rs.getLong("penalty_due"));
-        installment.setPrincipalPaid(rs.getLong("principal_paid"));
-        installment.setInterestPaid(rs.getLong("interest_paid"));
-        installment.setPenaltyPaid(rs.getLong("penalty_paid"));
+        installment.setAmountDue(rs.getLong("amount_due"));
+        installment.setAmountPaid(rs.getLong("amount_paid"));
         installment.setStatus(InstallmentStatus.fromValue(rs.getString("status")));
         String paidAt = rs.getString("paid_at");
         installment.setPaidAt(paidAt != null ? Instant.parse(paidAt) : null);
@@ -1021,12 +846,24 @@ public class GroupLoanService {
         GroupLoanRepayment repayment = new GroupLoanRepayment();
         repayment.setId(rs.getString("id"));
         repayment.setGroupLoanId(rs.getString("group_loan_id"));
-        repayment.setGroupLoanBorrowerId(rs.getString("group_loan_borrower_id"));
         repayment.setJournalEntryId(rs.getString("journal_entry_id"));
         repayment.setRecordedBy(rs.getString("recorded_by"));
         repayment.setAmount(rs.getLong("amount"));
         repayment.setRecordedAt(Instant.parse(rs.getString("recorded_at")));
         repayment.setClientReference(rs.getString("client_reference"));
         return repayment;
+    }
+
+    private GroupLoanDeposit mapDeposit(ResultSet rs) throws SQLException {
+        GroupLoanDeposit deposit = new GroupLoanDeposit();
+        deposit.setId(rs.getString("id"));
+        deposit.setGroupLoanId(rs.getString("group_loan_id"));
+        deposit.setJournalEntryId(rs.getString("journal_entry_id"));
+        deposit.setRecordedBy(rs.getString("recorded_by"));
+        deposit.setAmount(rs.getLong("amount"));
+        deposit.setType(rs.getString("type"));
+        deposit.setRecordedAt(Instant.parse(rs.getString("recorded_at")));
+        deposit.setClientReference(rs.getString("client_reference"));
+        return deposit;
     }
 }

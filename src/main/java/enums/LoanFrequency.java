@@ -3,6 +3,7 @@ package enums;
 import java.time.LocalDate;
 
 public enum LoanFrequency {
+    DAILY("daily"),
     WEEKLY("weekly"),
     MONTHLY("monthly");
 
@@ -18,6 +19,7 @@ public enum LoanFrequency {
 
     public LocalDate addPeriod(LocalDate date, int periods) {
         return switch (this) {
+            case DAILY -> date.plusDays(periods);
             case WEEKLY -> date.plusWeeks(periods);
             case MONTHLY -> date.plusMonths(periods);
         };
