@@ -246,32 +246,30 @@ export interface LoanEligibility {
   reasons: string[];
 }
 
-export type GroupLoanStatus = LoanStatus;
+/**
+ * Group loans are now one loan per group member (redesigned 2026-09): the
+ * member has their own security deposit, their own directly-entered periodic
+ * repayment amount, and their own outstanding balance. No product, no
+ * interest, no equal-split-across-members.
+ */
+export type GroupLoanStatus = 'draft' | 'active' | 'closed' | 'written_off';
 
-export interface LoanGroupMember {
-  id: string;
-  customer_id: string;
-  customer_name: string;
-  status: 'active' | 'left';
-  joined_at: string | null;
-}
+export type GroupLoanDepositStatus = 'pending' | 'held' | 'settled';
 
-export interface LoanGroup {
-  id: string;
-  name: string;
-  code: string;
-  is_active: boolean;
-  members?: LoanGroupMember[];
-}
+export type RepaymentFrequency = 'daily' | 'weekly' | 'monthly';
 
-export interface GroupLoanBorrower {
+export interface GroupLoanInstallment {
   id: string;
-  customer_id: string;
-  customer_name: string;
-  share_principal: number;
-  share_principal_formatted: string;
-  share_outstanding: number;
-  share_outstanding_formatted: string;
+  sequence: number;
+  due_date: string;
+  amount_due: number;
+  amount_due_formatted: string;
+  amount_paid: number;
+  amount_paid_formatted: string;
+  remaining: number;
+  remaining_formatted: string;
+  status: InstallmentStatus;
+  paid_at: string | null;
 }
 
 export interface GroupLoan {
@@ -279,27 +277,49 @@ export interface GroupLoan {
   loan_number: string;
   loan_group_id: string;
   loan_group?: { id: string; name: string };
-  loan_product?: { id: string; name: string };
+  loan_group_member_id: string;
+  customer_id: string;
+  customer_name?: string;
   principal_amount: number;
   principal_amount_formatted: string;
-  interest_method: 'flat' | 'reducing_balance';
-  interest_rate_bps: number;
-  term_period_count: number;
-  repayment_frequency: 'weekly' | 'monthly';
-  total_interest: number;
-  total_repayable: number;
-  total_repayable_formatted: string;
+  security_deposit_amount: number;
+  security_deposit_amount_formatted: string;
+  periodic_amount: number;
+  periodic_amount_formatted: string;
+  repayment_frequency: RepaymentFrequency;
+  start_date: string | null;
+  total_periods: number;
   outstanding_balance: number;
   outstanding_balance_formatted: string;
-  member_count_at_disbursement: number | null;
+  amount_repaid: number;
+  amount_repaid_formatted: string;
+  deposit_status: GroupLoanDepositStatus;
   status: GroupLoanStatus;
-  rejection_reason: string | null;
-  borrowers?: GroupLoanBorrower[];
-  installments?: LoanInstallment[];
-  applied_at: string | null;
-  approved_at: string | null;
-  disbursed_at: string | null;
+  installments?: GroupLoanInstallment[];
+  issued_at: string | null;
+  activated_at: string | null;
   closed_at: string | null;
+  written_off_at: string | null;
+}
+
+export interface LoanGroupMember {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  status: 'active' | 'left';
+  joined_at: string | null;
+  active_loan?: GroupLoan | null;
+}
+
+export interface LoanGroup {
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
+  member_count?: number;
+  group_outstanding?: number;
+  group_outstanding_formatted?: string;
+  members?: LoanGroupMember[];
 }
 
 export type GroupStatus = 'draft' | 'active' | 'completed';

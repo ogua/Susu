@@ -8,10 +8,8 @@ import type { GroupLoan } from '@/types/api';
 import { Palette } from '@/constants/theme';
 
 const STATUS_COLORS: Record<GroupLoan['status'], string> = {
-  applied: '#a16207',
-  approved: Palette.primary500,
-  rejected: Palette.danger,
-  disbursed: Palette.success,
+  draft: '#a16207',
+  active: Palette.success,
   closed: Palette.neutral,
   written_off: Palette.neutral,
 };
@@ -30,7 +28,10 @@ export default function AgentGroupLoansScreen() {
       >
         <View style={{ flex: 1 }}>
           <ThemedText type="smallBold">{item.loan_number}</ThemedText>
-          <ThemedText type="small">{item.loan_group?.name}</ThemedText>
+          <ThemedText type="small">
+            {item.customer_name ?? item.loan_group?.name}
+            {item.customer_name && item.loan_group?.name ? ` · ${item.loan_group.name}` : ''}
+          </ThemedText>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <ThemedText>{item.outstanding_balance_formatted}</ThemedText>
@@ -45,7 +46,7 @@ export default function AgentGroupLoansScreen() {
   return (
     <View style={styles.container}>
       <Pressable style={styles.applyButton} onPress={() => router.push('/(agent)/group-loans/apply')}>
-        <ThemedText style={styles.applyButtonText}>+ Apply for Group Loan</ThemedText>
+        <ThemedText style={styles.applyButtonText}>+ Issue Member Loan</ThemedText>
       </Pressable>
 
       {groupLoans.isLoading ? (

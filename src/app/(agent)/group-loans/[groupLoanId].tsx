@@ -4,24 +4,28 @@ import { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { apiErrorMessage } from '@/api/client';
-import { getGroupLoan, recordGroupLoanRepayment } from '@/api/groupLoans';
+import {
+  activateGroupLoan,
+  applyGroupLoanDeposit,
+  getGroupLoan,
+  recordGroupLoanDeposit,
+  recordGroupLoanRepayment,
+} from '@/api/groupLoans';
 import { ThemedText } from '@/components/themed-text';
-import type { GroupLoanBorrower, LoanInstallment } from '@/types/api';
+import type { GroupLoanInstallment } from '@/types/api';
 import { Palette } from '@/constants/theme';
 
 /**
- * No approve/reject/disburse actions here — mirrors the individual-loan
- * detail screen exactly: those decisions have no direct API route on mobile
- * either (Filament web + the desktop app's local-first sync are the only
- * paths), so this screen only supports viewing and recording a repayment.
+ * Per-member group loan: draft -> record deposit -> activate -> repayments,
+ * with an "apply deposit to balance" option. No approve/reject step — the
+ * group loan feature has no maker-checker.
  */
 export default function GroupLoanDetailScreen() {
   const { groupLoanId } = useLocalSearchParams<{ groupLoanId: string }>();
   const queryClient = useQueryClient();
 
-  const [selectedBorrowerId, setSelectedBorrowerId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const groupLoan = useQuery({
@@ -30,31 +34,21 @@ export default function GroupLoanDetailScreen() {
     enabled: !!groupLoanId,
   });
 
-  async function handleRecordRepayment() {
+  async function run(key: string, fn: () => Promise<unknown>) {
     setError(null);
-    if (!selectedBorrowerId) {
-      setError('Select which member is paying.');
-      return;
-    }
-    const parsed = Number(amount);
-    if (!parsed || parsed <= 0) {
-      setError('Enter a valid amount.');
-      return;
-    }
-
-    setSubmitting(true);
+    setBusy(key);
     try {
-      await recordGroupLoanRepayment(groupLoanId, selectedBorrowerId, Math.round(parsed * 100));
+      await fn();
       setAmount('');
       await queryClient.invalidateQueries({ queryKey: ['groupLoan', groupLoanId] });
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
-      setSubmitting(false);
+      setBusy(null);
     }
   }
 
-  function renderInstallment({ item }: { item: LoanInstallment }) {
+  function renderInstallment({ item }: { item: GroupLoanInstallment }) {
     return (
       <View style={styles.installmentRow}>
         <View style={{ flex: 1 }}>
@@ -64,9 +58,9 @@ export default function GroupLoanDetailScreen() {
           <ThemedText type="small">{item.status.replaceAll('_', ' ')}</ThemedText>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <ThemedText>{item.total_due_formatted}</ThemedText>
-          {item.remaining > 0 && item.remaining < item.total_due ? (
-            <ThemedText type="small">Remaining: GHS {(item.remaining / 100).toFixed(2)}</ThemedText>
+          <ThemedText>{item.amount_due_formatted}</ThemedText>
+          {item.remaining > 0 && item.remaining < item.amount_due ? (
+            <ThemedText type="small">Remaining: {item.remaining_formatted}</ThemedText>
           ) : null}
         </View>
       </View>
@@ -81,7 +75,7 @@ export default function GroupLoanDetailScreen() {
   }
 
   const data = groupLoan.data;
-  const borrowers = data.borrowers ?? [];
+  const parsedAmount = Math.round(Number(amount) * 100);
 
   return (
     <FlatList
@@ -94,57 +88,60 @@ export default function GroupLoanDetailScreen() {
         <View style={{ gap: 12, marginBottom: 12 }}>
           <View style={styles.card}>
             <ThemedText type="subtitle">{data.loan_number}</ThemedText>
-            <ThemedText type="small">{data.loan_group?.name}</ThemedText>
-            <ThemedText>Principal: {data.principal_amount_formatted}</ThemedText>
-            <ThemedText>Total repayable: {data.total_repayable_formatted}</ThemedText>
+            <ThemedText type="small">
+              {data.customer_name ?? ''}
+              {data.customer_name && data.loan_group?.name ? ` · ${data.loan_group.name}` : data.loan_group?.name ?? ''}
+            </ThemedText>
+            <ThemedText>Loan amount: {data.principal_amount_formatted}</ThemedText>
+            <ThemedText>Security deposit: {data.security_deposit_amount_formatted}</ThemedText>
+            <ThemedText>Amount to be paid: {data.periodic_amount_formatted}</ThemedText>
             <ThemedText>Outstanding: {data.outstanding_balance_formatted}</ThemedText>
-            <ThemedText type="small">Status: {data.status.replaceAll('_', ' ')}</ThemedText>
-            {data.rejection_reason ? (
-              <ThemedText type="small" style={styles.error}>
-                Rejected: {data.rejection_reason}
-              </ThemedText>
-            ) : null}
+            <ThemedText type="small">
+              Status: {data.status.replaceAll('_', ' ')} · deposit {data.deposit_status}
+            </ThemedText>
           </View>
 
-          {borrowers.length > 0 ? (
+          {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
+
+          {data.status === 'draft' && data.deposit_status === 'pending' ? (
             <View style={styles.card}>
-              <ThemedText type="subtitle">Members</ThemedText>
-              {borrowers.map((borrower: GroupLoanBorrower) => (
-                <View key={borrower.id} style={styles.borrowerRow}>
-                  <ThemedText type="small">{borrower.customer_name}</ThemedText>
-                  <ThemedText type="small">
-                    {borrower.share_outstanding_formatted} / {borrower.share_principal_formatted}
-                  </ThemedText>
-                </View>
-              ))}
+              <ThemedText type="subtitle">Record Security Deposit</ThemedText>
+              <ThemedText type="small">Due: {data.security_deposit_amount_formatted}</ThemedText>
+              <Pressable
+                style={[styles.button, busy && styles.buttonDisabled]}
+                disabled={!!busy}
+                onPress={() => run('deposit', () => recordGroupLoanDeposit(data.id, data.security_deposit_amount))}
+              >
+                {busy === 'deposit' ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.buttonText}>Record Deposit</ThemedText>
+                )}
+              </Pressable>
             </View>
           ) : null}
 
-          {data.status === 'disbursed' && borrowers.length > 0 ? (
+          {data.status === 'draft' && data.deposit_status === 'held' ? (
+            <View style={styles.card}>
+              <ThemedText type="subtitle">Activate Loan</ThemedText>
+              <ThemedText type="small">Generates the repayment schedule and disburses the principal.</ThemedText>
+              <Pressable
+                style={[styles.button, busy && styles.buttonDisabled]}
+                disabled={!!busy}
+                onPress={() => run('activate', () => activateGroupLoan(data.id))}
+              >
+                {busy === 'activate' ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.buttonText}>Activate</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+
+          {data.status === 'active' ? (
             <View style={styles.card}>
               <ThemedText type="subtitle">Record Repayment</ThemedText>
-              <ThemedText type="small">Paying member</ThemedText>
-              <View style={styles.segmentWrapRow}>
-                {borrowers.map((borrower: GroupLoanBorrower) => {
-                  const active = selectedBorrowerId === borrower.id;
-
-                  return (
-                    <Pressable
-                      key={borrower.id}
-                      style={[
-                        styles.segmentWrapChip,
-                        { borderColor: active ? Palette.primary500 : Palette.border },
-                        active && styles.segmentActive,
-                      ]}
-                      onPress={() => setSelectedBorrowerId(borrower.id)}
-                    >
-                      <ThemedText type="smallBold" style={active ? styles.segmentTextActive : undefined}>
-                        {borrower.customer_name}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
               <TextInput
                 style={styles.input}
                 keyboardType="decimal-pad"
@@ -152,18 +149,34 @@ export default function GroupLoanDetailScreen() {
                 onChangeText={setAmount}
                 placeholder="Amount (GHS)"
               />
-              {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
               <Pressable
-                style={[styles.button, submitting && styles.buttonDisabled]}
-                onPress={handleRecordRepayment}
-                disabled={submitting}
+                style={[styles.button, busy && styles.buttonDisabled]}
+                disabled={!!busy}
+                onPress={() => {
+                  if (!parsedAmount || parsedAmount <= 0) return setError('Enter a valid amount.');
+                  run('repay', () => recordGroupLoanRepayment(data.id, parsedAmount));
+                }}
               >
-                {submitting ? (
+                {busy === 'repay' ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <ThemedText style={styles.buttonText}>Record Repayment</ThemedText>
                 )}
               </Pressable>
+
+              {data.deposit_status === 'held' ? (
+                <Pressable
+                  style={[styles.buttonSecondary, busy && styles.buttonDisabled]}
+                  disabled={!!busy}
+                  onPress={() => run('applyDeposit', () => applyGroupLoanDeposit(data.id))}
+                >
+                  {busy === 'applyDeposit' ? (
+                    <ActivityIndicator color={Palette.primary500} />
+                  ) : (
+                    <ThemedText style={styles.buttonSecondaryText}>Apply deposit to balance</ThemedText>
+                  )}
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
 
@@ -182,21 +195,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.border,
     padding: 16,
-    gap: 6,
+    gap: 8,
     backgroundColor: '#ffffff',
   },
-  borrowerRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   installmentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
   separator: { height: 1, backgroundColor: Palette.border },
-  segmentWrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  segmentWrapChip: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  segmentActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
-  segmentTextActive: { color: '#ffffff' },
   input: {
     borderWidth: 1,
     borderColor: Palette.border,
@@ -211,8 +214,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
+  buttonSecondary: {
+    borderWidth: 1,
+    borderColor: Palette.primary500,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#ffffff', fontWeight: '700' },
+  buttonSecondaryText: { color: Palette.primary500, fontWeight: '700' },
   error: { color: Palette.danger },
   empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
 });
