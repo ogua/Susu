@@ -4,6 +4,7 @@ namespace App\Filament\Resources\LoanGroups\Tables;
 
 use App\Models\LoanGroup;
 use Filament\Actions\Action;
+use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -21,6 +22,7 @@ class LoanGroupsTable
                 IconColumn::make('is_active')->label('Active')->boolean(),
             ])
             ->recordActions([
+                ViewAction::make(),
                 Action::make('toggleActive')
                     ->label(fn (LoanGroup $record): string => $record->is_active ? 'Deactivate' : 'Reactivate')
                     ->color(fn (LoanGroup $record): string => $record->is_active ? 'danger' : 'success')

@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\LoanGroups;
 
 use App\Filament\Resources\LoanGroups\Pages\CreateLoanGroup;
+use App\Filament\Resources\LoanGroups\Pages\EditLoanGroup;
 use App\Filament\Resources\LoanGroups\Pages\ListLoanGroups;
+use App\Filament\Resources\LoanGroups\Pages\ViewLoanGroup;
 use App\Filament\Resources\LoanGroups\RelationManagers\MembersRelationManager;
 use App\Filament\Resources\LoanGroups\Schemas\LoanGroupForm;
 use App\Filament\Resources\LoanGroups\Tables\LoanGroupsTable;
@@ -68,6 +70,8 @@ class LoanGroupResource extends Resource
         return [
             'index' => ListLoanGroups::route('/'),
             'create' => CreateLoanGroup::route('/create'),
+            'view' => ViewLoanGroup::route('/{record}'),
+            'edit' => EditLoanGroup::route('/{record}/edit'),
         ];
     }
 }
