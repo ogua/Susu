@@ -22,6 +22,9 @@ class LoanGroupMemberResource extends JsonResource
             'customer_name' => $this->whenLoaded('customer', fn (): string => $this->customer->fullName()),
             'status' => $this->status,
             'joined_at' => $this->joined_at?->toISOString(),
+            'active_loan' => $this->whenLoaded('activeLoan', fn () => $this->activeLoan
+                ? GroupLoanResource::make($this->activeLoan)
+                : null),
         ];
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\LoanGroups\Tables;
 
 use App\Models\LoanGroup;
+use App\Support\Money;
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
@@ -19,6 +20,9 @@ class LoanGroupsTable
                 TextColumn::make('name')->searchable(),
                 TextColumn::make('code')->searchable(),
                 TextColumn::make('members_count')->label('Members')->counts('members'),
+                TextColumn::make('group_outstanding')
+                    ->label('Group outstanding')
+                    ->state(fn (LoanGroup $record): string => Money::format($record->outstandingBalance())),
                 IconColumn::make('is_active')->label('Active')->boolean(),
             ])
             ->recordActions([

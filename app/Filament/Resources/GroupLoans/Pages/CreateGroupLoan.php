@@ -2,13 +2,16 @@
 
 namespace App\Filament\Resources\GroupLoans\Pages;
 
-use App\Actions\GroupLoans\ApplyForGroupLoanAction;
+use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
+use App\Enums\LoanFrequency;
 use App\Filament\Resources\GroupLoans\GroupLoanResource;
+use App\Models\Customer;
 use App\Models\LoanGroup;
-use App\Models\LoanProduct;
+use App\Support\Money;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
 class CreateGroupLoan extends CreateRecord
@@ -16,26 +19,26 @@ class CreateGroupLoan extends CreateRecord
     protected static string $resource = GroupLoanResource::class;
 
     /**
-     * Routed through ApplyForGroupLoanAction (never a raw Eloquent create) so
-     * a group loan application made in Filament snapshots the product's terms
-     * and validates amount/product/membership scoping exactly like the
-     * API/sync paths do.
-     *
-     * The action keys its ValidationException by the raw input name
-     * (loan_group_id, amount, ...); Filament only renders field errors under
-     * the "data." state path, so we re-map the keys before rethrowing —
-     * otherwise a failed guard just aborts the submit with nothing on screen.
+     * Routed through IssueGroupMemberLoanAction (never a raw Eloquent create)
+     * so the schedule spread, the one-active-loan guard, and company scoping
+     * all match the API/sync paths. The action keys its ValidationException by
+     * the raw input name; Filament renders field errors under "data.", so we
+     * re-map before rethrowing.
      *
      * @param  array<string, mixed>  $data
      */
     protected function handleRecordCreation(array $data): Model
     {
         try {
-            return app(ApplyForGroupLoanAction::class)->execute(
-                submittedBy: Filament::auth()->user(),
+            return app(IssueGroupMemberLoanAction::class)->execute(
+                issuedBy: Filament::auth()->user(),
                 loanGroup: LoanGroup::findOrFail($data['loan_group_id']),
-                product: LoanProduct::findOrFail($data['loan_product_id']),
-                requestedAmount: (int) round((float) $data['amount'] * 100),
+                customer: Customer::findOrFail($data['customer_id']),
+                principal: Money::toMinorUnits($data['principal_amount']),
+                securityDeposit: Money::toMinorUnits($data['security_deposit_amount'] ?? 0),
+                periodicAmount: Money::toMinorUnits($data['periodic_amount']),
+                frequency: LoanFrequency::from($data['repayment_frequency']),
+                startDate: Carbon::parse($data['start_date']),
                 notes: $data['notes'] ?: null,
             );
         } catch (ValidationException $exception) {

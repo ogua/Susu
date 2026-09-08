@@ -4,22 +4,21 @@ namespace App\Http\Requests\Api\V1;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class RejectGroupLoanRequest extends FormRequest
+class ApplyGroupLoanDepositRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->hasRole(['branch_manager', 'company_admin']);
+        return $this->user()->hasRole(['field_agent', 'branch_manager', 'company_admin']);
     }
 
     /**
-     * Only used via the sync batch — there's no direct HTTP route for this
-     * op, so only payloadRules() (which needs group_loan_id in the body) applies.
-     *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'client_reference' => ['nullable', 'uuid'],
+        ];
     }
 
     /**
@@ -29,7 +28,7 @@ class RejectGroupLoanRequest extends FormRequest
     {
         return [
             'group_loan_id' => ['required', 'uuid'],
-            'reason' => ['required', 'string', 'max:500'],
+            'client_reference' => ['nullable', 'uuid'],
         ];
     }
 }

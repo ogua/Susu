@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
-use Database\Factories\GroupLoanRepaymentFactory;
+use Database\Factories\GroupLoanDepositFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class GroupLoanRepayment extends Model
+/** One event in a group loan's security-deposit lifecycle: held | applied | refunded | seized. */
+class GroupLoanDeposit extends Model
 {
-    /** @use HasFactory<GroupLoanRepaymentFactory> */
+    /** @use HasFactory<GroupLoanDepositFactory> */
     use HasFactory, HasUuids;
 
     protected $fillable = [
@@ -18,6 +19,7 @@ class GroupLoanRepayment extends Model
         'journal_entry_id',
         'recorded_by',
         'amount',
+        'type',
         'recorded_at',
         'client_reference',
     ];

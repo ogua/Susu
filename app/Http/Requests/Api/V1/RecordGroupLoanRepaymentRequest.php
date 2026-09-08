@@ -12,16 +12,14 @@ class RecordGroupLoanRepaymentRequest extends FormRequest
     }
 
     /**
-     * Unlike RecordLoanRepaymentRequest, the direct route only carries
-     * {groupLoan} — it never identifies which member paid, so
-     * group_loan_borrower_id must be in both rules() and payloadRules().
+     * The direct route carries {groupLoan} in the URL; the sync batch needs
+     * group_loan_id in the body.
      *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
         return [
-            'group_loan_borrower_id' => ['required', 'uuid'],
             'amount' => ['required', 'integer', 'min:1'],
             'recorded_at' => ['nullable', 'date'],
             'client_reference' => ['nullable', 'uuid'],
@@ -35,7 +33,6 @@ class RecordGroupLoanRepaymentRequest extends FormRequest
     {
         return [
             'group_loan_id' => ['required', 'uuid'],
-            'group_loan_borrower_id' => ['required', 'uuid'],
             'amount' => ['required', 'integer', 'min:1'],
             'recorded_at' => ['nullable', 'date'],
             'client_reference' => ['nullable', 'uuid'],

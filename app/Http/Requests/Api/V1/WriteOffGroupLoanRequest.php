@@ -12,14 +12,16 @@ class WriteOffGroupLoanRequest extends FormRequest
     }
 
     /**
-     * Only used via the sync batch — there's no direct HTTP route for this
-     * op, so only payloadRules() (which needs group_loan_id in the body) applies.
+     * The direct route carries {groupLoan} in the URL; the sync batch needs
+     * group_loan_id in the body.
      *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'reason' => ['required', 'string', 'max:500'],
+        ];
     }
 
     /**

@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\DepositStatus;
 use App\Enums\GroupLoanStatus;
-use App\Enums\InterestMethod;
 use App\Enums\LoanFrequency;
 use Database\Factories\GroupLoanFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -11,8 +11,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/**
+ * One loan issued to a single member of a loan group. The member enters a
+ * total principal, a refundable security deposit, and a periodic repayment
+ * amount; ActivateGroupLoanAction spreads the principal into installments of
+ * that periodic amount (remainder on the last). No product, no interest.
+ */
 class GroupLoan extends Model
 {
     /** @use HasFactory<GroupLoanFactory> */
@@ -22,40 +27,30 @@ class GroupLoan extends Model
         'company_id',
         'branch_id',
         'loan_group_id',
-        'loan_product_id',
+        'loan_group_member_id',
+        'customer_id',
         'agent_id',
-        'approved_by',
+        'activated_by',
         'receivable_account_id',
+        'deposit_liability_account_id',
         'loan_number',
         'principal_amount',
-        'interest_method',
-        'interest_rate_bps',
-        'term_period_count',
-        'repayment_frequency',
-        'origination_fee_amount',
-        'penalty_rate_bps',
-        'grace_period_days',
-        'total_interest',
-        'total_repayable',
+        'security_deposit_amount',
+        'periodic_amount',
         'outstanding_balance',
-        'member_count_at_disbursement',
+        'repayment_frequency',
+        'start_date',
+        'total_periods',
+        'deposit_status',
         'status',
-        'rejection_reason',
         'notes',
         'client_reference',
-        'applied_at',
-        'approved_at',
-        'disbursed_at',
+        'issued_at',
+        'activated_at',
         'closed_at',
         'written_off_at',
         'write_off_reason',
         'write_off_amount',
-        'previous_group_loan_id',
-        'rolled_over_amount',
-        'refinanced_at',
-        'refinance_type',
-        'refinance_reason',
-        'refinance_amount',
     ];
 
     /**
@@ -65,27 +60,19 @@ class GroupLoan extends Model
     {
         return [
             'principal_amount' => 'integer',
-            'interest_method' => InterestMethod::class,
-            'interest_rate_bps' => 'integer',
-            'term_period_count' => 'integer',
-            'repayment_frequency' => LoanFrequency::class,
-            'origination_fee_amount' => 'integer',
-            'penalty_rate_bps' => 'integer',
-            'grace_period_days' => 'integer',
-            'total_interest' => 'integer',
-            'total_repayable' => 'integer',
+            'security_deposit_amount' => 'integer',
+            'periodic_amount' => 'integer',
             'outstanding_balance' => 'integer',
-            'member_count_at_disbursement' => 'integer',
+            'repayment_frequency' => LoanFrequency::class,
+            'start_date' => 'date',
+            'total_periods' => 'integer',
+            'deposit_status' => DepositStatus::class,
             'status' => GroupLoanStatus::class,
-            'applied_at' => 'datetime',
-            'approved_at' => 'datetime',
-            'disbursed_at' => 'datetime',
+            'write_off_amount' => 'integer',
+            'issued_at' => 'datetime',
+            'activated_at' => 'datetime',
             'closed_at' => 'datetime',
             'written_off_at' => 'datetime',
-            'write_off_amount' => 'integer',
-            'rolled_over_amount' => 'integer',
-            'refinanced_at' => 'datetime',
-            'refinance_amount' => 'integer',
         ];
     }
 
@@ -104,9 +91,14 @@ class GroupLoan extends Model
         return $this->belongsTo(LoanGroup::class);
     }
 
-    public function loanProduct(): BelongsTo
+    public function loanGroupMember(): BelongsTo
     {
-        return $this->belongsTo(LoanProduct::class);
+        return $this->belongsTo(LoanGroupMember::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function agent(): BelongsTo
@@ -114,9 +106,9 @@ class GroupLoan extends Model
         return $this->belongsTo(User::class, 'agent_id');
     }
 
-    public function approvedBy(): BelongsTo
+    public function activatedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'approved_by');
+        return $this->belongsTo(User::class, 'activated_by');
     }
 
     public function receivableAccount(): BelongsTo
@@ -124,9 +116,9 @@ class GroupLoan extends Model
         return $this->belongsTo(LedgerAccount::class, 'receivable_account_id');
     }
 
-    public function borrowers(): HasMany
+    public function depositLiabilityAccount(): BelongsTo
     {
-        return $this->hasMany(GroupLoanBorrower::class);
+        return $this->belongsTo(LedgerAccount::class, 'deposit_liability_account_id');
     }
 
     public function installments(): HasMany
@@ -139,13 +131,14 @@ class GroupLoan extends Model
         return $this->hasMany(GroupLoanRepayment::class);
     }
 
-    public function previousGroupLoan(): BelongsTo
+    public function deposits(): HasMany
     {
-        return $this->belongsTo(GroupLoan::class, 'previous_group_loan_id');
+        return $this->hasMany(GroupLoanDeposit::class);
     }
 
-    public function nextGroupLoan(): HasOne
+    /** Principal repaid so far — the receivable started at the full principal. */
+    public function amountRepaid(): int
     {
-        return $this->hasOne(GroupLoan::class, 'previous_group_loan_id');
+        return max(0, $this->principal_amount - $this->outstanding_balance);
     }
 }

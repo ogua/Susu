@@ -19,13 +19,9 @@ class GroupLoanInstallmentFactory extends Factory
         return [
             'group_loan_id' => GroupLoan::factory(),
             'sequence' => 1,
-            'due_date' => now()->addMonth()->toDateString(),
-            'principal_due' => 166_67,
-            'interest_due' => 30_00,
-            'penalty_due' => 0,
-            'principal_paid' => 0,
-            'interest_paid' => 0,
-            'penalty_paid' => 0,
+            'due_date' => now()->addWeek()->toDateString(),
+            'amount_due' => 100_00,
+            'amount_paid' => 0,
             'status' => 'pending',
         ];
     }

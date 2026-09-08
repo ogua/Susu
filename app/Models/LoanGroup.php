@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\GroupLoanStatus;
 use Database\Factories\LoanGroupFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -57,5 +58,16 @@ class LoanGroup extends Model
     public function groupLoans(): HasMany
     {
         return $this->hasMany(GroupLoan::class);
+    }
+
+    public function activeGroupLoans(): HasMany
+    {
+        return $this->hasMany(GroupLoan::class)->where('status', GroupLoanStatus::Active);
+    }
+
+    /** Sum of every active member loan's outstanding balance — the group's total debt. */
+    public function outstandingBalance(): int
+    {
+        return (int) $this->activeGroupLoans()->sum('outstanding_balance');
     }
 }

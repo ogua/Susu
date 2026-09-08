@@ -1,20 +1,15 @@
 <?php
 
-use App\Actions\GroupLoans\ApplyForGroupLoanAction;
-use App\Actions\LoanGroups\AddLoanGroupMemberAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
 use App\Actions\Savings\RequestWithdrawalAction;
-use App\Enums\GroupLoanStatus;
 use App\Enums\LoanStatus;
 use App\Enums\WithdrawalStatus;
-use App\Filament\Widgets\PendingGroupLoanApplicationsWidget;
 use App\Filament\Widgets\PendingLoanApplicationsWidget;
 use App\Filament\Widgets\PendingWithdrawalRequestsWidget;
 use App\Models\Branch;
 use App\Models\Customer;
-use App\Models\LoanGroup;
 use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
@@ -54,31 +49,6 @@ it('shows a pending loan application and lets a manager approve it from the widg
     expect($loan->refresh()->status)->toBe(LoanStatus::Approved);
 });
 
-it('shows a pending group loan application and lets a manager approve it from the widget', function (): void {
-    $loanGroup = LoanGroup::factory()->create([
-        'company_id' => $this->branch->company_id,
-        'branch_id' => $this->branch->id,
-    ]);
-    $product = LoanProduct::factory()->create(['company_id' => $this->branch->company_id]);
-    collect(range(1, 2))->each(function () use ($loanGroup): void {
-        $customer = Customer::factory()->forBranch($this->branch)->create();
-        app(AddLoanGroupMemberAction::class)->execute($loanGroup, $customer);
-    });
-
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $loanGroup->fresh(), $product, 1000_00);
-
-    $this->actingAs($this->manager);
-    bootAdminPanelWithTenant($this->branch);
-
-    livewire(PendingGroupLoanApplicationsWidget::class)
-        ->assertOk()
-        ->assertSee($groupLoan->loan_number)
-        ->callAction(TestAction::make('approve')->table($groupLoan))
-        ->assertNotified();
-
-    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::Approved);
-});
-
 it('shows a pending withdrawal request and lets a manager approve it from the widget', function (): void {
     $product = SavingsProduct::factory()->create([
         'company_id' => $this->branch->company_id,
@@ -113,7 +83,6 @@ it('denies field agents from viewing the checker inbox widgets', function (): vo
     bootAdminPanelWithTenant($this->branch);
 
     expect(PendingLoanApplicationsWidget::canView())->toBeFalse()
-        ->and(PendingGroupLoanApplicationsWidget::canView())->toBeFalse()
         ->and(PendingWithdrawalRequestsWidget::canView())->toBeFalse();
 });
 

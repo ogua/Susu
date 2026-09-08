@@ -167,6 +167,27 @@ class ChartOfAccounts
     }
 
     /**
+     * A group loan member's refundable security deposit while it is held —
+     * money the company owes back to the member unless it is applied against
+     * their loan balance or seized on a write-off. Per-loan (not per-company)
+     * so each held deposit is individually traceable and released cleanly.
+     */
+    public function groupLoanDepositLiability(GroupLoan $groupLoan): LedgerAccount
+    {
+        return LedgerAccount::firstOrCreate(
+            ['company_id' => $groupLoan->company_id, 'code' => 'GLDEP-'.$groupLoan->loan_number],
+            [
+                'branch_id' => $groupLoan->branch_id,
+                'name' => 'Group Loan Deposit '.$groupLoan->loan_number,
+                'type' => LedgerAccountType::Liability,
+                'accountable_type' => GroupLoan::class,
+                'accountable_id' => $groupLoan->id,
+                'is_system' => true,
+            ],
+        );
+    }
+
+    /**
      * Pooled but not-yet-paid-out contributions for one susu group's current
      * round — a liability to whichever member is due the payout.
      */

@@ -3,13 +3,13 @@
 namespace Database\Factories;
 
 use App\Models\GroupLoan;
-use App\Models\GroupLoanRepayment;
+use App\Models\GroupLoanDeposit;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends Factory<GroupLoanRepayment>
+ * @extends Factory<GroupLoanDeposit>
  */
-class GroupLoanRepaymentFactory extends Factory
+class GroupLoanDepositFactory extends Factory
 {
     /**
      * @return array<string, mixed>
@@ -19,6 +19,7 @@ class GroupLoanRepaymentFactory extends Factory
         return [
             'group_loan_id' => GroupLoan::factory(),
             'amount' => 100_00,
+            'type' => 'held',
             'recorded_at' => now(),
         ];
     }

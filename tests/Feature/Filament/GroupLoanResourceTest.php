@@ -1,18 +1,20 @@
 <?php
 
-use App\Actions\GroupLoans\ApplyForGroupLoanAction;
-use App\Actions\LoanGroups\AddLoanGroupMemberAction;
+use App\Actions\GroupLoans\ActivateGroupLoanAction;
+use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
+use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Enums\GroupLoanStatus;
+use App\Enums\LoanFrequency;
 use App\Filament\Resources\GroupLoans\Pages\CreateGroupLoan;
 use App\Filament\Resources\GroupLoans\Pages\ListGroupLoans;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\LoanGroup;
-use App\Models\LoanProduct;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Illuminate\Support\Carbon;
 
 beforeEach(function (): void {
     seedRoles();
@@ -25,211 +27,109 @@ beforeEach(function (): void {
         'company_id' => $this->branch->company_id,
         'branch_id' => $this->branch->id,
     ]);
-    $this->loanProduct = LoanProduct::factory()->create(['company_id' => $this->branch->company_id]);
-
-    $this->members = collect(range(1, 2))->map(function () {
-        $customer = Customer::factory()->forBranch($this->branch)->create();
-
-        return app(AddLoanGroupMemberAction::class)->execute($this->loanGroup, $customer);
-    });
+    $this->customer = Customer::factory()->forBranch($this->branch)->create();
 });
 
-it('lets a branch manager apply for a group loan via the Filament create page', function (): void {
-    $this->actingAs($this->manager);
+function bootAdmin(User $user, Branch $branch): void
+{
+    test()->actingAs($user);
     Filament::setCurrentPanel('admin');
-    Filament::setTenant($this->branch);
+    Filament::setTenant($branch);
     Filament::bootCurrentPanel();
+}
+
+function draftLoan(User $agent, LoanGroup $group, Customer $customer): GroupLoan
+{
+    return app(IssueGroupMemberLoanAction::class)->execute(
+        issuedBy: $agent,
+        loanGroup: $group,
+        customer: $customer,
+        principal: 1000_00,
+        securityDeposit: 100_00,
+        periodicAmount: 100_00,
+        frequency: LoanFrequency::Weekly,
+        startDate: Carbon::now(),
+    );
+}
+
+it('issues a member loan via the Filament create page routed through the action', function (): void {
+    bootAdmin($this->manager, $this->branch);
 
     livewire(CreateGroupLoan::class)
         ->fillForm([
             'loan_group_id' => $this->loanGroup->id,
-            'loan_product_id' => $this->loanProduct->id,
-            'amount' => '1000.00',
+            'customer_id' => $this->customer->id,
+            'principal_amount' => '1000.00',
+            'security_deposit_amount' => '100.00',
+            'periodic_amount' => '100.00',
+            'repayment_frequency' => 'weekly',
+            'start_date' => Carbon::now()->toDateString(),
         ])
         ->call('create')
         ->assertNotified();
 
-    $groupLoan = GroupLoan::where('loan_group_id', $this->loanGroup->id)->firstOrFail();
-    expect($groupLoan->principal_amount)->toBe(1000_00)
-        ->and($groupLoan->status)->toBe(GroupLoanStatus::Applied);
-});
-
-it('surfaces a form error (instead of silently doing nothing) when the group has fewer than 2 active members', function (): void {
-    $thinGroup = LoanGroup::factory()->create([
-        'company_id' => $this->branch->company_id,
-        'branch_id' => $this->branch->id,
-    ]);
-    app(AddLoanGroupMemberAction::class)->execute($thinGroup, Customer::factory()->forBranch($this->branch)->create());
-
-    $this->actingAs($this->manager);
-    Filament::setCurrentPanel('admin');
-    Filament::setTenant($this->branch);
-    Filament::bootCurrentPanel();
-
-    livewire(CreateGroupLoan::class)
-        ->fillForm([
-            'loan_group_id' => $thinGroup->id,
-            'loan_product_id' => $this->loanProduct->id,
-            'amount' => '1000.00',
-        ])
-        ->call('create')
-        ->assertHasFormErrors(['loan_group_id']);
-
-    expect(GroupLoan::where('loan_group_id', $thinGroup->id)->exists())->toBeFalse();
+    $loan = GroupLoan::where('loan_group_id', $this->loanGroup->id)->firstOrFail();
+    expect($loan->principal_amount)->toBe(1000_00)
+        ->and($loan->periodic_amount)->toBe(100_00)
+        ->and($loan->total_periods)->toBe(10)
+        ->and($loan->status)->toBe(GroupLoanStatus::Draft);
 });
 
 it('renders the group loans list scoped to the tenant branch', function (): void {
-    $ownLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+    $own = draftLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
 
     $otherBranch = Branch::factory()->create(['company_id' => $this->branch->company_id]);
     $otherGroup = LoanGroup::factory()->create(['company_id' => $otherBranch->company_id, 'branch_id' => $otherBranch->id]);
-    $otherCustomers = collect(range(1, 2))->map(fn () => Customer::factory()->forBranch($otherBranch)->create());
-    $otherCustomers->each(fn ($customer) => app(AddLoanGroupMemberAction::class)->execute($otherGroup, $customer));
-    $otherProduct = LoanProduct::factory()->create(['company_id' => $otherBranch->company_id]);
-    $otherLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $otherGroup->fresh(), $otherProduct, 1000_00);
+    $other = draftLoan(
+        User::factory()->fieldAgent($otherBranch)->create(),
+        $otherGroup->fresh(),
+        Customer::factory()->forBranch($otherBranch)->create(),
+    );
 
-    $this->actingAs($this->manager);
-    Filament::setCurrentPanel('admin');
-    Filament::setTenant($this->branch);
-    Filament::bootCurrentPanel();
+    bootAdmin($this->manager, $this->branch);
 
     livewire(ListGroupLoans::class)
         ->assertOk()
-        ->assertCanSeeTableRecords([$ownLoan])
-        ->assertCanNotSeeTableRecords([$otherLoan]);
+        ->assertCanSeeTableRecords([$own])
+        ->assertCanNotSeeTableRecords([$other]);
 });
 
-it('lets a branch manager approve then disburse a group loan from the table actions', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
-
-    $this->actingAs($this->manager);
-    Filament::setCurrentPanel('admin');
-    Filament::setTenant($this->branch);
-    Filament::bootCurrentPanel();
+it('walks deposit -> activate -> repayment from the table row actions', function (): void {
+    $loan = draftLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
+    bootAdmin($this->manager, $this->branch);
 
     livewire(ListGroupLoans::class)
-        ->assertOk()
-        ->callAction(TestAction::make('approve')->table($groupLoan))
-        ->assertNotified();
+        ->callAction(TestAction::make('recordDeposit')->table($loan), data: ['amount' => '100.00'])
+        ->assertHasNoActionErrors();
 
-    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::Approved);
+    expect($loan->fresh()->deposit_status->value)->toBe('held');
 
     livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('disburse')->table($groupLoan))
-        ->assertNotified();
+        ->callAction(TestAction::make('activate')->table($loan->fresh()))
+        ->assertHasNoActionErrors();
 
-    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::Disbursed)
-        ->and($groupLoan->installments)->toHaveCount($this->loanProduct->term_period_count)
-        ->and($groupLoan->borrowers)->toHaveCount(2);
+    expect($loan->fresh()->status)->toBe(GroupLoanStatus::Active);
+
+    livewire(ListGroupLoans::class)
+        ->callAction(TestAction::make('recordRepayment')->table($loan->fresh()), data: ['amount' => '250.00'])
+        ->assertHasNoActionErrors();
+
+    expect($loan->fresh()->outstanding_balance)->toBe(750_00);
 });
 
-it('denies field agents from approving a group loan', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
+it('denies a field agent the write-off action but allows a branch manager', function (): void {
+    $loan = draftLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
+    app(RecordGroupLoanDepositAction::class)->execute($loan, 100_00, $this->agent);
+    app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $this->agent);
 
-    $this->actingAs($this->agent);
-    expect($this->agent->can('approve', $groupLoan))->toBeFalse();
-});
-
-it('lets a branch manager write off a disbursed group loan from the table action', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
-
-    $this->actingAs($this->manager);
-    Filament::setCurrentPanel('admin');
-    Filament::setTenant($this->branch);
-    Filament::bootCurrentPanel();
-
+    bootAdmin($this->agent, $this->branch);
     livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('approve')->table($groupLoan))
-        ->assertNotified();
+        ->assertActionHidden(TestAction::make('writeOff')->table($loan->fresh()));
 
+    bootAdmin($this->manager, $this->branch);
     livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('disburse')->table($groupLoan->fresh()))
-        ->assertNotified();
+        ->callAction(TestAction::make('writeOff')->table($loan->fresh()), data: ['reason' => 'Uncollectible'])
+        ->assertHasNoActionErrors();
 
-    livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('writeOff')->table($groupLoan->fresh()), data: ['reason' => 'Group disbanded'])
-        ->assertNotified();
-
-    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::WrittenOff)
-        ->and($groupLoan->write_off_reason)->toBe('Group disbanded');
-});
-
-it('denies field agents from writing off a group loan', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
-
-    $this->actingAs($this->agent);
-    expect($this->agent->can('writeOff', $groupLoan))->toBeFalse();
-});
-
-it('lets a branch manager restructure a disbursed group loan from the table action', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
-
-    $this->actingAs($this->manager);
-    Filament::setCurrentPanel('admin');
-    Filament::setTenant($this->branch);
-    Filament::bootCurrentPanel();
-
-    livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('approve')->table($groupLoan))
-        ->assertNotified();
-
-    livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('disburse')->table($groupLoan->fresh()))
-        ->assertNotified();
-
-    livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('restructure')->table($groupLoan->fresh()), data: [
-            'loan_product_id' => $this->loanProduct->id,
-            'reason' => 'Group struggling with the old schedule',
-        ])
-        ->assertNotified();
-
-    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::Refinanced);
-
-    $newGroupLoan = GroupLoan::where('previous_group_loan_id', $groupLoan->id)->firstOrFail();
-    expect($newGroupLoan->status)->toBe(GroupLoanStatus::Disbursed);
-});
-
-it('denies field agents from restructuring a group loan', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
-
-    $this->actingAs($this->agent);
-    expect($this->agent->can('restructure', $groupLoan))->toBeFalse();
-});
-
-it('lets a branch manager top up a disbursed group loan from the table action', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
-
-    $this->actingAs($this->manager);
-    Filament::setCurrentPanel('admin');
-    Filament::setTenant($this->branch);
-    Filament::bootCurrentPanel();
-
-    livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('approve')->table($groupLoan))
-        ->assertNotified();
-
-    livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('disburse')->table($groupLoan->fresh()))
-        ->assertNotified();
-
-    livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('topUp')->table($groupLoan->fresh()), data: [
-            'amount' => '200.00',
-            'reason' => 'Group requested more capital',
-        ])
-        ->assertNotified();
-
-    expect($groupLoan->refresh()->status)->toBe(GroupLoanStatus::Refinanced);
-
-    $newGroupLoan = GroupLoan::where('previous_group_loan_id', $groupLoan->id)->firstOrFail();
-    expect($newGroupLoan->status)->toBe(GroupLoanStatus::Disbursed)
-        ->and($newGroupLoan->rolled_over_amount + 200_00)->toBe($newGroupLoan->principal_amount);
-});
-
-it('denies field agents from topping up a group loan', function (): void {
-    $groupLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
-
-    $this->actingAs($this->agent);
-    expect($this->agent->can('topUp', $groupLoan))->toBeFalse();
+    expect($loan->fresh()->status)->toBe(GroupLoanStatus::WrittenOff);
 });

@@ -4,7 +4,7 @@ namespace App\Filament\Resources\GroupLoans;
 
 use App\Filament\Resources\GroupLoans\Pages\CreateGroupLoan;
 use App\Filament\Resources\GroupLoans\Pages\ListGroupLoans;
-use App\Filament\Resources\GroupLoans\RelationManagers\BorrowersRelationManager;
+use App\Filament\Resources\GroupLoans\Pages\ViewGroupLoan;
 use App\Filament\Resources\GroupLoans\RelationManagers\InstallmentsRelationManager;
 use App\Filament\Resources\GroupLoans\Schemas\GroupLoanForm;
 use App\Filament\Resources\GroupLoans\Tables\GroupLoansTable;
@@ -18,7 +18,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
-/** Applications originate here (or via API/sync); decisions happen via table actions, never edit. */
+/** One loan per group member. Issued here (or via API/sync); deposit/activate/repay happen via table actions, never edit. */
 class GroupLoanResource extends Resource
 {
     protected static ?string $model = GroupLoan::class;
@@ -60,7 +60,6 @@ class GroupLoanResource extends Resource
     public static function getRelations(): array
     {
         return [
-            BorrowersRelationManager::class,
             InstallmentsRelationManager::class,
         ];
     }
@@ -70,6 +69,7 @@ class GroupLoanResource extends Resource
         return [
             'index' => ListGroupLoans::route('/'),
             'create' => CreateGroupLoan::route('/create'),
+            'view' => ViewGroupLoan::route('/{record}'),
         ];
     }
 }

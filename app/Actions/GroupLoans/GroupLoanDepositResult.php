@@ -3,15 +3,15 @@
 namespace App\Actions\GroupLoans;
 
 use App\Models\GroupLoan;
-use App\Models\GroupLoanRepayment;
+use App\Models\GroupLoanDeposit;
 use App\Models\JournalEntry;
 
-class GroupLoanRepaymentResult
+class GroupLoanDepositResult
 {
     public function __construct(
-        public readonly JournalEntry $entry,
+        public readonly ?JournalEntry $entry,
         public readonly GroupLoan $groupLoan,
-        public readonly ?GroupLoanRepayment $repayment,
+        public readonly GroupLoanDeposit $deposit,
         public readonly bool $duplicate,
     ) {}
 }

@@ -85,13 +85,16 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->name('repayments.store');
     });
 
-    // Staff-only — a group loan has no single customer, so there's no
-    // customer self-service view here (unlike individual loans/susu groups).
+    // Staff-only — a group loan is issued per member; roster management
+    // (create group, add/remove members) lives here too.
     Route::prefix('loan-groups')->name('loan-groups.')
         ->middleware(['throttle:20,1', 'role:field_agent|branch_manager|company_admin'])
         ->group(function (): void {
             Route::get('/', [LoanGroupController::class, 'index'])->name('index');
             Route::get('/{loanGroup}', [LoanGroupController::class, 'show'])->name('show');
+            Route::post('/', [LoanGroupController::class, 'store'])->name('store');
+            Route::post('/{loanGroup}/members', [LoanGroupController::class, 'storeMember'])->name('members.store');
+            Route::delete('/{loanGroup}/members/{member}', [LoanGroupController::class, 'destroyMember'])->name('members.destroy');
         });
 
     Route::prefix('group-loans')->name('group-loans.')
@@ -100,10 +103,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::get('/', [GroupLoanController::class, 'index'])->name('index');
             Route::get('/{groupLoan}', [GroupLoanController::class, 'show'])->name('show');
             Route::post('/', [GroupLoanController::class, 'store'])->name('store');
+            Route::post('/{groupLoan}/deposit', [GroupLoanController::class, 'recordDeposit'])->name('deposit.store');
+            Route::post('/{groupLoan}/apply-deposit', [GroupLoanController::class, 'applyDeposit'])->name('deposit.apply');
+            Route::post('/{groupLoan}/activate', [GroupLoanController::class, 'activate'])->name('activate');
+            Route::post('/{groupLoan}/repayments', [GroupLoanController::class, 'recordRepayment'])->name('repayments.store');
 
-            // Repayments are staff-recorded only (cash collected in the field).
-            Route::post('/{groupLoan}/repayments', [GroupLoanController::class, 'recordRepayment'])
-                ->name('repayments.store');
+            // Write-off is manager-tier only (enforced in WriteOffGroupLoanRequest).
+            Route::post('/{groupLoan}/write-off', [GroupLoanController::class, 'writeOff'])->name('write-off');
         });
 
     // Role-shaped dashboard stats — one endpoint per home screen.

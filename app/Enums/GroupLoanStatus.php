@@ -4,16 +4,13 @@ namespace App\Enums;
 
 enum GroupLoanStatus: string
 {
-    case Applied = 'applied';
-    case Approved = 'approved';
-    case Rejected = 'rejected';
-    case Disbursed = 'disbursed';
+    case Draft = 'draft';
+    case Active = 'active';
     case Closed = 'closed';
     case WrittenOff = 'written_off';
-    case Refinanced = 'refinanced';
 
     public function isTerminal(): bool
     {
-        return in_array($this, [self::Rejected, self::Closed, self::WrittenOff, self::Refinanced], true);
+        return in_array($this, [self::Closed, self::WrittenOff], true);
     }
 }

@@ -15,17 +15,15 @@ enum SyncOpType: string
     case RejectLoan = 'loan.reject';
     case DisburseLoan = 'loan.disburse';
     case RecordGroupContribution = 'group.contribution.record';
-    case ApplyForGroupLoan = 'group_loan.apply';
+    case IssueGroupMemberLoan = 'group_loan.issue';
+    case RecordGroupLoanDeposit = 'group_loan.deposit.record';
+    case ApplyGroupLoanDeposit = 'group_loan.deposit.apply';
+    case ActivateGroupLoan = 'group_loan.activate';
     case RecordGroupLoanRepayment = 'group_loan.repayment.record';
-    case ApproveGroupLoan = 'group_loan.approve';
-    case RejectGroupLoan = 'group_loan.reject';
-    case DisburseGroupLoan = 'group_loan.disburse';
+    case WriteOffGroupLoan = 'group_loan.write_off';
     case RestructureLoan = 'loan.restructure';
     case TopUpLoan = 'loan.top_up';
-    case RestructureGroupLoan = 'group_loan.restructure';
-    case TopUpGroupLoan = 'group_loan.top_up';
     case WriteOffLoan = 'loan.write_off';
-    case WriteOffGroupLoan = 'group_loan.write_off';
 
     /**
      * Op types each role may push through /sync/batch.
@@ -44,12 +42,16 @@ enum SyncOpType: string
                 self::ApplyForLoan,
                 self::RecordLoanRepayment,
                 self::RecordGroupContribution,
-                self::ApplyForGroupLoan,
+                // Group loans have no maker-checker — each member's loan is
+                // issued and activated in the field when their deposit lands.
+                self::IssueGroupMemberLoan,
+                self::RecordGroupLoanDeposit,
+                self::ApplyGroupLoanDeposit,
+                self::ActivateGroupLoan,
                 self::RecordGroupLoanRepayment,
             ],
-            // Loan/group-loan approve/reject/disburse mirror LoanPolicy/
-            // GroupLoanPolicy: agents can apply and record repayments, but
-            // only managers/admins decide loans.
+            // Managers/admins additionally own the individual-loan approve/
+            // reject/disburse decisions and every write-off.
             'branch_manager', 'company_admin' => self::cases(),
             default => [],
         };

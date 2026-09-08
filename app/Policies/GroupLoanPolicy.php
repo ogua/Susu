@@ -22,19 +22,22 @@ class GroupLoanPolicy
         return $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
     }
 
-    public function approve(User $user, GroupLoan $groupLoan): bool
+    public function recordDeposit(User $user, GroupLoan $groupLoan): bool
     {
-        return $user->company_id === $groupLoan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
+        return $user->company_id === $groupLoan->company_id
+            && $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
     }
 
-    public function reject(User $user, GroupLoan $groupLoan): bool
+    public function applyDeposit(User $user, GroupLoan $groupLoan): bool
     {
-        return $user->company_id === $groupLoan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
+        return $user->company_id === $groupLoan->company_id
+            && $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
     }
 
-    public function disburse(User $user, GroupLoan $groupLoan): bool
+    public function activate(User $user, GroupLoan $groupLoan): bool
     {
-        return $user->company_id === $groupLoan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
+        return $user->company_id === $groupLoan->company_id
+            && $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
     }
 
     public function recordRepayment(User $user, GroupLoan $groupLoan): bool
@@ -44,16 +47,6 @@ class GroupLoanPolicy
     }
 
     public function writeOff(User $user, GroupLoan $groupLoan): bool
-    {
-        return $user->company_id === $groupLoan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
-    }
-
-    public function restructure(User $user, GroupLoan $groupLoan): bool
-    {
-        return $user->company_id === $groupLoan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
-    }
-
-    public function topUp(User $user, GroupLoan $groupLoan): bool
     {
         return $user->company_id === $groupLoan->company_id && $user->hasRole(['company_admin', 'branch_manager']);
     }

@@ -6,6 +6,7 @@ use App\Filament\Resources\LoanGroups\Pages\CreateLoanGroup;
 use App\Filament\Resources\LoanGroups\Pages\EditLoanGroup;
 use App\Filament\Resources\LoanGroups\Pages\ListLoanGroups;
 use App\Filament\Resources\LoanGroups\Pages\ViewLoanGroup;
+use App\Filament\Resources\LoanGroups\RelationManagers\MemberLoansRelationManager;
 use App\Filament\Resources\LoanGroups\RelationManagers\MembersRelationManager;
 use App\Filament\Resources\LoanGroups\Schemas\LoanGroupForm;
 use App\Filament\Resources\LoanGroups\Tables\LoanGroupsTable;
@@ -62,6 +63,7 @@ class LoanGroupResource extends Resource
     {
         return [
             MembersRelationManager::class,
+            MemberLoansRelationManager::class,
         ];
     }
 

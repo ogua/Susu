@@ -4,6 +4,11 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * One row of a member's spread repayment schedule. Pure principal — there is
+ * no interest or penalty on a group loan — so a single amount_due/amount_paid
+ * pair, unlike the three-bucket individual loan_installments table.
+ */
 return new class extends Migration
 {
     public function up(): void
@@ -13,12 +18,8 @@ return new class extends Migration
             $table->foreignUuid('group_loan_id')->constrained()->cascadeOnDelete();
             $table->unsignedSmallInteger('sequence');
             $table->date('due_date');
-            $table->unsignedBigInteger('principal_due');
-            $table->unsignedBigInteger('interest_due');
-            $table->unsignedBigInteger('penalty_due')->default(0);
-            $table->unsignedBigInteger('principal_paid')->default(0);
-            $table->unsignedBigInteger('interest_paid')->default(0);
-            $table->unsignedBigInteger('penalty_paid')->default(0);
+            $table->unsignedBigInteger('amount_due');
+            $table->unsignedBigInteger('amount_paid')->default(0);
             $table->string('status', 20)->default('pending'); // pending | partially_paid | paid | overdue
             $table->timestamp('paid_at')->nullable();
             $table->timestamps();

@@ -18,12 +18,8 @@ class GroupLoanInstallment extends Model
         'group_loan_id',
         'sequence',
         'due_date',
-        'principal_due',
-        'interest_due',
-        'penalty_due',
-        'principal_paid',
-        'interest_paid',
-        'penalty_paid',
+        'amount_due',
+        'amount_paid',
         'status',
         'paid_at',
     ];
@@ -36,12 +32,8 @@ class GroupLoanInstallment extends Model
         return [
             'sequence' => 'integer',
             'due_date' => 'date',
-            'principal_due' => 'integer',
-            'interest_due' => 'integer',
-            'penalty_due' => 'integer',
-            'principal_paid' => 'integer',
-            'interest_paid' => 'integer',
-            'penalty_paid' => 'integer',
+            'amount_due' => 'integer',
+            'amount_paid' => 'integer',
             'status' => InstallmentStatus::class,
             'paid_at' => 'datetime',
         ];
@@ -52,33 +44,8 @@ class GroupLoanInstallment extends Model
         return $this->belongsTo(GroupLoan::class);
     }
 
-    public function totalDue(): int
-    {
-        return $this->principal_due + $this->interest_due + $this->penalty_due;
-    }
-
-    public function amountPaid(): int
-    {
-        return $this->principal_paid + $this->interest_paid + $this->penalty_paid;
-    }
-
     public function remaining(): int
     {
-        return max(0, $this->totalDue() - $this->amountPaid());
-    }
-
-    public function remainingPrincipal(): int
-    {
-        return max(0, $this->principal_due - $this->principal_paid);
-    }
-
-    public function remainingInterest(): int
-    {
-        return max(0, $this->interest_due - $this->interest_paid);
-    }
-
-    public function remainingPenalty(): int
-    {
-        return max(0, $this->penalty_due - $this->penalty_paid);
+        return max(0, $this->amount_due - $this->amount_paid);
     }
 }
