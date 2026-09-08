@@ -150,16 +150,28 @@ class CustomerSeeder extends Seeder
             ->merge(self::MALE_FIRST_NAMES)
             ->shuffle();
 
-        $lastSequence = (int) preg_replace(
-            '/\D/', '',
-            (string) Customer::query()
-                ->where('company_id', $company->id)
-                ->orderByRaw('LENGTH(customer_code) DESC')
-                ->orderByDesc('customer_code')
-                ->value('customer_code')
-        );
+        $takenCodes = Customer::query()
+            ->where('company_id', $company->id)
+            ->pluck('customer_code')
+            ->flip();
+
+        $takenPhones = Customer::query()
+            ->pluck('phone')
+            ->merge(User::query()->pluck('phone'))
+            ->filter()
+            ->flip();
+
+        $nextSequence = 0;
 
         for ($i = 0; $i < self::COUNT; $i++) {
+            do {
+                $customerCode = sprintf('CUS-%05d', ++$nextSequence);
+            } while ($takenCodes->has($customerCode));
+            $takenCodes->put($customerCode, true);
+
+            $phone = $this->uniqueGhanaMobile($takenPhones);
+            $nextOfKinPhone = $this->uniqueGhanaMobile($takenPhones);
+
             $branch = $branches[$i % $branches->count()];
             $person = $firstNamePool[$i % $firstNamePool->count()];
             $isMarried = fake()->boolean(55);
@@ -176,11 +188,11 @@ class CustomerSeeder extends Seeder
                 ->for($branch->company)
                 ->individual()
                 ->create([
-                    'customer_code' => sprintf('CUS-%05d', ++$lastSequence),
+                    'customer_code' => $customerCode,
                     'first_name' => $person['name'],
                     'last_name' => fake()->randomElement(self::LAST_NAMES),
                     'other_names' => fake()->boolean(25) ? fake()->randomElement(self::LAST_NAMES) : null,
-                    'phone' => $this->ghanaMobile(),
+                    'phone' => $phone,
                     'gender' => $person['gender'],
                     'date_of_birth' => fake()->dateTimeBetween('-60 years', '-19 years'),
                     'id_type' => 'ghana_card',
@@ -199,7 +211,7 @@ class CustomerSeeder extends Seeder
                     'residency_status' => fake()->randomElement(ResidencyStatus::cases()),
                     'has_past_loan' => fake()->boolean(30),
                     'next_of_kin_name' => $this->fullGhanaianName($firstNamePool),
-                    'next_of_kin_phone' => $this->ghanaMobile(),
+                    'next_of_kin_phone' => $nextOfKinPhone,
                     'next_of_kin_relationship' => fake()->randomElement(['spouse', 'sibling', 'parent', 'child']),
                     'client_type' => ClientType::Individual,
                     'status' => 'active',
@@ -248,9 +260,18 @@ class CustomerSeeder extends Seeder
         return $agents && $agents->isNotEmpty() ? $agents->random()->id : null;
     }
 
-    private function ghanaMobile(): string
+    /**
+     * @param  Collection<string, mixed>  $taken  Phone numbers already in use; the returned number is added to it.
+     */
+    private function uniqueGhanaMobile(Collection $taken): string
     {
-        return '0'.fake()->randomElement(self::MOBILE_PREFIXES).fake()->numerify('#######');
+        do {
+            $number = '0'.fake()->randomElement(self::MOBILE_PREFIXES).fake()->numerify('#######');
+        } while ($taken->has($number));
+
+        $taken->put($number, true);
+
+        return $number;
     }
 
     private function ghanaPostGps(): string
