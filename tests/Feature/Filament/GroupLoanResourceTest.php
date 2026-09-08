@@ -54,6 +54,30 @@ it('lets a branch manager apply for a group loan via the Filament create page', 
         ->and($groupLoan->status)->toBe(GroupLoanStatus::Applied);
 });
 
+it('surfaces a form error (instead of silently doing nothing) when the group has fewer than 2 active members', function (): void {
+    $thinGroup = LoanGroup::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'branch_id' => $this->branch->id,
+    ]);
+    app(AddLoanGroupMemberAction::class)->execute($thinGroup, Customer::factory()->forBranch($this->branch)->create());
+
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    livewire(CreateGroupLoan::class)
+        ->fillForm([
+            'loan_group_id' => $thinGroup->id,
+            'loan_product_id' => $this->loanProduct->id,
+            'amount' => '1000.00',
+        ])
+        ->call('create')
+        ->assertHasFormErrors(['loan_group_id']);
+
+    expect(GroupLoan::where('loan_group_id', $thinGroup->id)->exists())->toBeFalse();
+});
+
 it('renders the group loans list scoped to the tenant branch', function (): void {
     $ownLoan = app(ApplyForGroupLoanAction::class)->execute($this->agent, $this->loanGroup->fresh(), $this->loanProduct, 1000_00);
 

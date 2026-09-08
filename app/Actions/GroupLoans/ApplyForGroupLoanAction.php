@@ -49,7 +49,7 @@ class ApplyForGroupLoanAction
 
         $activeMemberCount = $loanGroup->members()->where('status', 'active')->count();
         if ($activeMemberCount < 2) {
-            throw ValidationException::withMessages(['loan_group' => 'A loan group needs at least 2 active members to apply for a group loan.']);
+            throw ValidationException::withMessages(['loan_group_id' => 'A loan group needs at least 2 active members to apply for a group loan.']);
         }
 
         $branch = $loanGroup->branch;

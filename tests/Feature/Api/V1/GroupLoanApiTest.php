@@ -57,6 +57,20 @@ it('rejects an amount outside the product min/max', function (): void {
     ])->assertUnprocessable();
 });
 
+it('rejects an application when the group has fewer than 2 active members, keyed on loan_group_id', function (): void {
+    $thinGroup = LoanGroup::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'branch_id' => $this->branch->id,
+    ]);
+    app(AddLoanGroupMemberAction::class)->execute($thinGroup, Customer::factory()->forBranch($this->branch)->create());
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/group-loans', [
+        'loan_group_id' => $thinGroup->id,
+        'loan_product_id' => $this->product->id,
+        'amount' => 1000_00,
+    ])->assertUnprocessable()->assertJsonValidationErrors('loan_group_id');
+});
+
 it('denies a customer role from viewing group loans (staff-only)', function (): void {
     $customerUser = User::factory()->customerUser()->create(['company_id' => $this->branch->company_id]);
 
