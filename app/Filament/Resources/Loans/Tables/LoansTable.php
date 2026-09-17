@@ -9,12 +9,15 @@ use App\Actions\Loans\RejectLoanAction;
 use App\Actions\Loans\RestructureLoanAction;
 use App\Actions\Loans\TopUpLoanAction;
 use App\Actions\Loans\WriteOffLoanAction;
+use App\Enums\AccountStatus;
 use App\Models\Loan;
 use App\Models\LoanProduct;
+use App\Models\SavingsAccount;
 use App\Services\Loans\EligibilityService;
 use App\Support\Money;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -164,11 +167,34 @@ class LoansTable
                     ->authorize('writeOff')
                     ->requiresConfirmation()
                     ->modalDescription('This permanently closes the loan and recognizes the remaining balance as a loss. This cannot be undone.')
-                    ->schema([
+                    ->schema(fn (Loan $record): array => [
+                        Placeholder::make('total_savings')
+                            ->label('Total savings balance')
+                            ->content(Money::format($record->customer->savingsAccounts()->where('status', AccountStatus::Active)->sum('balance'))),
+                        Select::make('savings_account_id')
+                            ->label('Apply from savings account')
+                            ->options($record->customer->savingsAccounts()
+                                ->where('status', AccountStatus::Active)
+                                ->get()
+                                ->mapWithKeys(fn (SavingsAccount $account): array => [
+                                    $account->id => $account->account_number.' — '.Money::format($account->balance),
+                                ])
+                                ->all()),
+                        TextInput::make('savings_amount_applied')
+                            ->label('Amount to apply (GHS)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0),
                         Textarea::make('reason')->required(),
                     ])
                     ->action(function (array $data, Loan $record): void {
-                        app(WriteOffLoanAction::class)->execute($record, Filament::auth()->user(), $data['reason']);
+                        app(WriteOffLoanAction::class)->execute(
+                            $record,
+                            Filament::auth()->user(),
+                            $data['reason'],
+                            savingsAccount: filled($data['savings_account_id'] ?? null) ? SavingsAccount::find($data['savings_account_id']) : null,
+                            savingsAmountApplied: Money::toMinorUnits($data['savings_amount_applied'] ?? 0),
+                        );
                         Notification::make()->title('Loan written off')->success()->send();
                     }),
             ])

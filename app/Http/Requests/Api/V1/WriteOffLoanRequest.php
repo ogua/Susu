@@ -30,6 +30,8 @@ class WriteOffLoanRequest extends FormRequest
         return [
             'loan_id' => ['required', 'uuid'],
             'reason' => ['required', 'string', 'max:500'],
+            'savings_account_id' => ['nullable', 'uuid'],
+            'savings_amount_applied' => ['nullable', 'integer', 'min:0', 'required_with:savings_account_id'],
         ];
     }
 }

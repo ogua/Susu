@@ -11,6 +11,7 @@ use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\LoanGroup;
+use App\Models\SavingsAccount;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -96,11 +97,18 @@ it('renders the group loans list scoped to the tenant branch', function (): void
 
 it('walks deposit -> activate -> repayment from the table row actions', function (): void {
     $loan = draftLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+    ]);
     bootAdmin($this->manager, $this->branch);
 
     livewire(ListGroupLoans::class)
-        ->callAction(TestAction::make('recordDeposit')->table($loan), data: ['amount' => '100.00'])
+        ->callAction(TestAction::make('recordDeposit')->table($loan), data: ['savings_account_id' => $savingsAccount->id, 'amount' => '100.00'])
         ->assertHasNoActionErrors();
+
+    expect($savingsAccount->fresh()->balance)->toBe(100_00);
 
     expect($loan->fresh()->deposit_status->value)->toBe('held');
 
@@ -119,7 +127,12 @@ it('walks deposit -> activate -> repayment from the table row actions', function
 
 it('denies a field agent the write-off action but allows a branch manager', function (): void {
     $loan = draftLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
-    app(RecordGroupLoanDepositAction::class)->execute($loan, 100_00, $this->agent);
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+    ]);
+    app(RecordGroupLoanDepositAction::class)->execute($loan, $savingsAccount, 100_00, $this->agent);
     app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $this->agent);
 
     bootAdmin($this->agent, $this->branch);

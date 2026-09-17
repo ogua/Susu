@@ -104,7 +104,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::get('/{groupLoan}', [GroupLoanController::class, 'show'])->name('show');
             Route::post('/', [GroupLoanController::class, 'store'])->name('store');
             Route::post('/{groupLoan}/deposit', [GroupLoanController::class, 'recordDeposit'])->name('deposit.store');
-            Route::post('/{groupLoan}/apply-deposit', [GroupLoanController::class, 'applyDeposit'])->name('deposit.apply');
             Route::post('/{groupLoan}/activate', [GroupLoanController::class, 'activate'])->name('activate');
             Route::post('/{groupLoan}/repayments', [GroupLoanController::class, 'recordRepayment'])->name('repayments.store');
 

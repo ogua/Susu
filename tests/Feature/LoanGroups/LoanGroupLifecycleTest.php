@@ -10,6 +10,7 @@ use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\LoanGroup;
+use App\Models\SavingsAccount;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -39,7 +40,13 @@ function activateLoanFor(User $agent, LoanGroup $group, Customer $customer): Gro
         startDate: Carbon::now(),
     );
 
-    app(RecordGroupLoanDepositAction::class)->execute($loan, 100_00, $agent);
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $customer->branch_id,
+        'company_id' => $customer->company_id,
+        'customer_id' => $customer->id,
+    ]);
+
+    app(RecordGroupLoanDepositAction::class)->execute($loan, $savingsAccount, 100_00, $agent);
 
     return app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $agent);
 }

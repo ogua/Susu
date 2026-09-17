@@ -52,6 +52,8 @@ class Loan extends Model
         'written_off_at',
         'write_off_reason',
         'write_off_amount',
+        'write_off_savings_account_id',
+        'write_off_savings_applied',
         'previous_loan_id',
         'rolled_over_amount',
         'refinanced_at',
@@ -84,6 +86,7 @@ class Loan extends Model
             'closed_at' => 'datetime',
             'written_off_at' => 'datetime',
             'write_off_amount' => 'integer',
+            'write_off_savings_applied' => 'integer',
             'rolled_over_amount' => 'integer',
             'refinanced_at' => 'datetime',
             'refinance_amount' => 'integer',
@@ -143,5 +146,10 @@ class Loan extends Model
     public function nextLoan(): HasOne
     {
         return $this->hasOne(Loan::class, 'previous_loan_id');
+    }
+
+    public function writeOffSavingsAccount(): BelongsTo
+    {
+        return $this->belongsTo(SavingsAccount::class, 'write_off_savings_account_id');
     }
 }

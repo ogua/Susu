@@ -6,14 +6,13 @@ namespace App\Enums;
  * The state of a group loan member's security deposit.
  *
  * - Pending: agreed at issue time, not yet paid in.
- * - Held:    paid in and sitting on the books as a per-loan liability.
- * - Settled: no longer held — refunded in cash, applied against the loan
- *            balance, seized during a write-off, or some combination. The
- *            group_loan_deposits rows carry which.
+ * - Held:    paid in — credited straight into the member's chosen savings
+ *            account. There is no further transition: once paid in it stays
+ *            Held for the life of the loan, purely informational (it only
+ *            gates whether the "record deposit" action is still offered).
  */
 enum DepositStatus: string
 {
     case Pending = 'pending';
     case Held = 'held';
-    case Settled = 'settled';
 }

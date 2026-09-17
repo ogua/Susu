@@ -9,6 +9,7 @@ use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\LoanGroup;
+use App\Models\SavingsAccount;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -26,6 +27,11 @@ beforeEach(function (): void {
     ]);
 
     $this->customer = Customer::factory()->forBranch($this->branch)->create();
+    $this->savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+    ]);
 });
 
 function issuePayload(Customer $customer, LoanGroup $group, array $overrides = []): array
@@ -76,13 +82,18 @@ it('rejects bad issue amounts', function (): void {
         ->assertUnprocessable();
 });
 
-it('records a deposit, activates, and records a repayment', function (): void {
+it('records a deposit into the chosen savings account, activates, and records a repayment', function (): void {
     $loan = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
 
     $this->actingAs($this->agent, 'sanctum')
-        ->postJson("/api/v1/group-loans/{$loan->id}/deposit", ['amount' => 100_00])
+        ->postJson("/api/v1/group-loans/{$loan->id}/deposit", [
+            'savings_account_id' => $this->savingsAccount->id,
+            'amount' => 100_00,
+        ])
         ->assertCreated()
         ->assertJsonPath('group_loan.deposit_status', 'held');
+
+    expect($this->savingsAccount->fresh()->balance)->toBe(100_00);
 
     $this->actingAs($this->agent, 'sanctum')
         ->postJson("/api/v1/group-loans/{$loan->id}/activate")
@@ -96,17 +107,29 @@ it('records a deposit, activates, and records a repayment', function (): void {
         ->assertJsonPath('group_loan.outstanding_balance', 700_00);
 });
 
-it('applies the deposit to the balance via the endpoint', function (): void {
+it('rejects a deposit request missing the savings account', function (): void {
     $loan = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
-    app(RecordGroupLoanDepositAction::class)->execute($loan, 100_00, $this->agent);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson("/api/v1/group-loans/{$loan->id}/deposit", ['amount' => 100_00])
+        ->assertUnprocessable();
+});
+
+it('writes off with savings applied via the endpoint', function (): void {
+    $loan = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
+    app(RecordGroupLoanDepositAction::class)->execute($loan, $this->savingsAccount, 100_00, $this->agent);
     $active = app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $this->agent);
     app(RecordGroupLoanRepaymentAction::class)->execute($active, 200_00, $this->agent);
 
-    $this->actingAs($this->agent, 'sanctum')
-        ->postJson("/api/v1/group-loans/{$loan->id}/apply-deposit")
+    $this->actingAs($this->manager, 'sanctum')
+        ->postJson("/api/v1/group-loans/{$loan->id}/write-off", [
+            'reason' => 'uncollectible',
+            'savings_account_id' => $this->savingsAccount->id,
+            'savings_amount_applied' => 100_00,
+        ])
         ->assertOk()
-        ->assertJsonPath('group_loan.outstanding_balance', 700_00)
-        ->assertJsonPath('group_loan.deposit_status', 'settled');
+        ->assertJsonPath('data.status', 'written_off')
+        ->assertJsonPath('data.write_off_savings_applied', 100_00);
 });
 
 it('denies a customer role from group loan endpoints (staff-only)', function (): void {
@@ -117,7 +140,7 @@ it('denies a customer role from group loan endpoints (staff-only)', function ():
 
 it('exposes the group outstanding and member active-loan summary on loan-groups', function (): void {
     $loan = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
-    app(RecordGroupLoanDepositAction::class)->execute($loan, 100_00, $this->agent);
+    app(RecordGroupLoanDepositAction::class)->execute($loan, $this->savingsAccount, 100_00, $this->agent);
     app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $this->agent);
 
     $this->actingAs($this->agent, 'sanctum')
@@ -127,7 +150,7 @@ it('exposes the group outstanding and member active-loan summary on loan-groups'
         ->assertJsonPath('data.members.0.active_loan.outstanding_balance', 1000_00);
 });
 
-it('replays an offline issue -> deposit -> activate -> repayment -> apply-deposit through /sync/batch', function (): void {
+it('replays an offline issue -> deposit -> activate -> repayment through /sync/batch', function (): void {
     $loanId = (string) Str::uuid();
     $now = Carbon::now()->toISOString();
 
@@ -137,16 +160,13 @@ it('replays an offline issue -> deposit -> activate -> repayment -> apply-deposi
             'security_deposit_amount' => 200_00,
         ])],
         ['op_id' => (string) Str::uuid(), 'op_type' => 'group_loan.deposit.record', 'recorded_at' => $now, 'payload' => [
-            'group_loan_id' => $loanId, 'amount' => 200_00, 'client_reference' => (string) Str::uuid(),
+            'group_loan_id' => $loanId, 'savings_account_id' => $this->savingsAccount->id, 'amount' => 200_00, 'client_reference' => (string) Str::uuid(),
         ]],
         ['op_id' => (string) Str::uuid(), 'op_type' => 'group_loan.activate', 'recorded_at' => $now, 'payload' => [
             'group_loan_id' => $loanId,
         ]],
         ['op_id' => (string) Str::uuid(), 'op_type' => 'group_loan.repayment.record', 'recorded_at' => $now, 'payload' => [
             'group_loan_id' => $loanId, 'amount' => 300_00, 'client_reference' => (string) Str::uuid(),
-        ]],
-        ['op_id' => (string) Str::uuid(), 'op_type' => 'group_loan.deposit.apply', 'recorded_at' => $now, 'payload' => [
-            'group_loan_id' => $loanId, 'client_reference' => (string) Str::uuid(),
         ]],
     ];
 
@@ -159,14 +179,15 @@ it('replays an offline issue -> deposit -> activate -> repayment -> apply-deposi
 
     $loan = GroupLoan::findOrFail($loanId);
     expect($loan->status->value)->toBe('active')
-        ->and($loan->deposit_status->value)->toBe('settled')
-        // 1000 principal - 300 cash - 200 deposit applied = 500
-        ->and($loan->outstanding_balance)->toBe(500_00);
+        ->and($loan->deposit_status->value)->toBe('held')
+        // 1000 principal - 300 cash repaid = 700
+        ->and($loan->outstanding_balance)->toBe(700_00)
+        ->and($this->savingsAccount->fresh()->balance)->toBe(200_00);
 });
 
 it('lets a field agent issue/deposit/repay via sync but denies write-off', function (): void {
     $loan = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
-    app(RecordGroupLoanDepositAction::class)->execute($loan, 100_00, $this->agent);
+    app(RecordGroupLoanDepositAction::class)->execute($loan, $this->savingsAccount, 100_00, $this->agent);
     app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $this->agent);
 
     $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
@@ -184,7 +205,7 @@ it('lets a field agent issue/deposit/repay via sync but denies write-off', funct
 
 it('lets a branch manager write off a group loan via sync', function (): void {
     $loan = apiIssuedLoan($this->manager, $this->customer, $this->loanGroup);
-    app(RecordGroupLoanDepositAction::class)->execute($loan, 100_00, $this->manager);
+    app(RecordGroupLoanDepositAction::class)->execute($loan, $this->savingsAccount, 100_00, $this->manager);
     app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $this->manager);
 
     $response = $this->actingAs($this->manager, 'sanctum')->postJson('/api/v1/sync/batch', [

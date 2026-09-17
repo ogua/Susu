@@ -87,7 +87,7 @@ class GroupLoanFactory extends Factory
     {
         return $this->state(fn (): array => [
             'status' => 'closed',
-            'deposit_status' => 'settled',
+            'deposit_status' => 'held',
             'outstanding_balance' => 0,
             'closed_at' => now(),
         ]);
@@ -97,7 +97,7 @@ class GroupLoanFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'status' => 'written_off',
-            'deposit_status' => 'settled',
+            'deposit_status' => 'held',
             'outstanding_balance' => 0,
             'written_off_at' => now(),
             'write_off_reason' => 'Uncollectible',

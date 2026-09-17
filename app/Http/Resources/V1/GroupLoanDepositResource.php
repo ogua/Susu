@@ -19,6 +19,7 @@ class GroupLoanDepositResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'savings_account_id' => $this->savings_account_id,
             'amount' => $this->amount,
             'amount_formatted' => Money::format($this->amount),
             'type' => $this->type,

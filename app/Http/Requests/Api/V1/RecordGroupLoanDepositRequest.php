@@ -20,6 +20,7 @@ class RecordGroupLoanDepositRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'savings_account_id' => ['required', 'uuid'],
             'amount' => ['required', 'integer', 'min:1'],
             'recorded_at' => ['nullable', 'date'],
             'client_reference' => ['nullable', 'uuid'],
@@ -33,6 +34,7 @@ class RecordGroupLoanDepositRequest extends FormRequest
     {
         return [
             'group_loan_id' => ['required', 'uuid'],
+            'savings_account_id' => ['required', 'uuid'],
             'amount' => ['required', 'integer', 'min:1'],
             'recorded_at' => ['nullable', 'date'],
             'client_reference' => ['nullable', 'uuid'],

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
-use App\Actions\GroupLoans\ApplyGroupLoanDepositAction;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
@@ -12,7 +11,6 @@ use App\Enums\ClientOrigin;
 use App\Enums\LoanFrequency;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
-use App\Http\Requests\Api\V1\ApplyGroupLoanDepositRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanDepositRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanRepaymentRequest;
@@ -21,6 +19,7 @@ use App\Http\Resources\V1\GroupLoanResource;
 use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\LoanGroup;
+use App\Models\SavingsAccount;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -75,9 +74,12 @@ class GroupLoanController extends Controller
     public function recordDeposit(RecordGroupLoanDepositRequest $request, string $groupLoan, RecordGroupLoanDepositAction $action): JsonResponse
     {
         $model = $this->findScoped($request, $groupLoan);
+        $savingsAccount = SavingsAccount::where('company_id', $request->user()->company_id)
+            ->findOrFail($request->validated('savings_account_id'));
 
         $result = $action->execute(
             groupLoan: $model,
+            savingsAccount: $savingsAccount,
             amount: (int) $request->validated('amount'),
             recordedBy: $request->user(),
             clientReference: $request->validated('client_reference'),
@@ -90,22 +92,6 @@ class GroupLoanController extends Controller
             'group_loan' => GroupLoanResource::make($result->groupLoan->load('loanGroup', 'customer')),
             'duplicate' => $result->duplicate,
         ], $result->duplicate ? 200 : 201);
-    }
-
-    public function applyDeposit(ApplyGroupLoanDepositRequest $request, string $groupLoan, ApplyGroupLoanDepositAction $action): JsonResponse
-    {
-        $model = $this->findScoped($request, $groupLoan);
-
-        $groupLoan = $action->execute(
-            groupLoan: $model,
-            appliedBy: $request->user(),
-            clientReference: $request->validated('client_reference'),
-            origin: ClientOrigin::Mobile,
-        );
-
-        return response()->json([
-            'group_loan' => GroupLoanResource::make($groupLoan->load('loanGroup', 'customer', 'installments')),
-        ]);
     }
 
     public function activate(ActivateGroupLoanRequest $request, string $groupLoan, ActivateGroupLoanAction $action): GroupLoanResource
@@ -140,8 +126,18 @@ class GroupLoanController extends Controller
     public function writeOff(WriteOffGroupLoanRequest $request, string $groupLoan, WriteOffGroupLoanAction $action): GroupLoanResource
     {
         $model = $this->findScoped($request, $groupLoan);
+        $savingsAccount = $request->filled('savings_account_id')
+            ? SavingsAccount::where('company_id', $request->user()->company_id)->findOrFail($request->validated('savings_account_id'))
+            : null;
 
-        $groupLoan = $action->execute($model, $request->user(), $request->validated('reason'), ClientOrigin::Mobile);
+        $groupLoan = $action->execute(
+            $model,
+            $request->user(),
+            $request->validated('reason'),
+            savingsAccount: $savingsAccount,
+            savingsAmountApplied: (int) $request->validated('savings_amount_applied', 0),
+            origin: ClientOrigin::Mobile,
+        );
 
         return GroupLoanResource::make($groupLoan->load('loanGroup', 'customer'));
     }

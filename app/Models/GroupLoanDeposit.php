@@ -8,7 +8,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** One event in a group loan's security-deposit lifecycle: held | applied | refunded | seized. */
+/**
+ * A record of a member's security deposit being paid into one of their
+ * savings accounts. `type` is `held` going forward; `applied`/`refunded`/
+ * `seized` are legacy values from the pre-savings-account escrow model and
+ * may still appear on historical rows.
+ */
 class GroupLoanDeposit extends Model
 {
     /** @use HasFactory<GroupLoanDepositFactory> */
@@ -16,6 +21,7 @@ class GroupLoanDeposit extends Model
 
     protected $fillable = [
         'group_loan_id',
+        'savings_account_id',
         'journal_entry_id',
         'recorded_by',
         'amount',
@@ -38,6 +44,11 @@ class GroupLoanDeposit extends Model
     public function groupLoan(): BelongsTo
     {
         return $this->belongsTo(GroupLoan::class);
+    }
+
+    public function savingsAccount(): BelongsTo
+    {
+        return $this->belongsTo(SavingsAccount::class);
     }
 
     public function journalEntry(): BelongsTo

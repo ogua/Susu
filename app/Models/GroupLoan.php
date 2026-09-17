@@ -32,7 +32,6 @@ class GroupLoan extends Model
         'agent_id',
         'activated_by',
         'receivable_account_id',
-        'deposit_liability_account_id',
         'loan_number',
         'principal_amount',
         'security_deposit_amount',
@@ -51,6 +50,8 @@ class GroupLoan extends Model
         'written_off_at',
         'write_off_reason',
         'write_off_amount',
+        'write_off_savings_account_id',
+        'write_off_savings_applied',
     ];
 
     /**
@@ -69,6 +70,7 @@ class GroupLoan extends Model
             'deposit_status' => DepositStatus::class,
             'status' => GroupLoanStatus::class,
             'write_off_amount' => 'integer',
+            'write_off_savings_applied' => 'integer',
             'issued_at' => 'datetime',
             'activated_at' => 'datetime',
             'closed_at' => 'datetime',
@@ -116,9 +118,9 @@ class GroupLoan extends Model
         return $this->belongsTo(LedgerAccount::class, 'receivable_account_id');
     }
 
-    public function depositLiabilityAccount(): BelongsTo
+    public function writeOffSavingsAccount(): BelongsTo
     {
-        return $this->belongsTo(LedgerAccount::class, 'deposit_liability_account_id');
+        return $this->belongsTo(SavingsAccount::class, 'write_off_savings_account_id');
     }
 
     public function installments(): HasMany

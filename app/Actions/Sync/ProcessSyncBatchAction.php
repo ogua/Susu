@@ -6,7 +6,6 @@ use App\Actions\Agents\RecordLocationPingsAction;
 use App\Actions\Agents\SubmitAgentDailySummaryAction;
 use App\Actions\Customers\CreateCustomerAction;
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
-use App\Actions\GroupLoans\ApplyGroupLoanDepositAction;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
@@ -26,7 +25,6 @@ use App\Enums\ClientOrigin;
 use App\Enums\LoanFrequency;
 use App\Enums\SyncOpType;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
-use App\Http\Requests\Api\V1\ApplyGroupLoanDepositRequest;
 use App\Http\Requests\Api\V1\ApproveLoanRequest;
 use App\Http\Requests\Api\V1\DisburseLoanRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
@@ -82,7 +80,6 @@ class ProcessSyncBatchAction
         private RecordGroupContributionAction $recordGroupContribution,
         private IssueGroupMemberLoanAction $issueGroupMemberLoan,
         private RecordGroupLoanDepositAction $recordGroupLoanDeposit,
-        private ApplyGroupLoanDepositAction $applyGroupLoanDeposit,
         private ActivateGroupLoanAction $activateGroupLoan,
         private RecordGroupLoanRepaymentAction $recordGroupLoanRepayment,
         private RestructureLoanAction $restructureLoan,
@@ -169,7 +166,6 @@ class ProcessSyncBatchAction
             SyncOpType::RecordGroupContribution => $this->applyGroupContribution($actor, $origin, $payload, $op['op_id'], $recordedAt),
             SyncOpType::IssueGroupMemberLoan => $this->applyIssueGroupMemberLoan($actor, $payload, $op['op_id']),
             SyncOpType::RecordGroupLoanDeposit => $this->applyGroupLoanDeposit($actor, $origin, $payload, $op['op_id'], $recordedAt),
-            SyncOpType::ApplyGroupLoanDeposit => $this->applyGroupLoanDepositOffset($actor, $origin, $payload, $op['op_id']),
             SyncOpType::ActivateGroupLoan => $this->applyActivateGroupLoan($actor, $origin, $payload),
             SyncOpType::RecordGroupLoanRepayment => $this->applyGroupLoanRepayment($actor, $origin, $payload, $op['op_id'], $recordedAt),
             SyncOpType::RestructureLoan => $this->applyRestructureLoan($actor, $payload, $op['op_id']),
@@ -199,7 +195,6 @@ class ProcessSyncBatchAction
             SyncOpType::RecordGroupContribution => StoreGroupContributionRequest::payloadRules(),
             SyncOpType::IssueGroupMemberLoan => IssueGroupMemberLoanRequest::payloadRules(),
             SyncOpType::RecordGroupLoanDeposit => RecordGroupLoanDepositRequest::payloadRules(),
-            SyncOpType::ApplyGroupLoanDeposit => ApplyGroupLoanDepositRequest::payloadRules(),
             SyncOpType::ActivateGroupLoan => ActivateGroupLoanRequest::payloadRules(),
             SyncOpType::RecordGroupLoanRepayment => RecordGroupLoanRepaymentRequest::payloadRules(),
             SyncOpType::RestructureLoan => RestructureLoanRequest::payloadRules(),
@@ -445,9 +440,11 @@ class ProcessSyncBatchAction
     private function applyGroupLoanDeposit(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
     {
         $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $savingsAccount = SavingsAccount::where('company_id', $actor->company_id)->findOrFail($payload['savings_account_id']);
 
         $result = $this->recordGroupLoanDeposit->execute(
             groupLoan: $groupLoan,
+            savingsAccount: $savingsAccount,
             amount: (int) $payload['amount'],
             recordedBy: $actor,
             clientReference: $payload['client_reference'] ?? $opId,
@@ -459,29 +456,6 @@ class ProcessSyncBatchAction
             'entry_id' => $result->entry?->id,
             'deposit_status' => $result->groupLoan->deposit_status->value,
             'was_duplicate' => $result->duplicate,
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     * @return array<string, mixed>
-     */
-    private function applyGroupLoanDepositOffset(User $actor, ClientOrigin $origin, array $payload, string $opId): array
-    {
-        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
-
-        $groupLoan = $this->applyGroupLoanDeposit->execute(
-            groupLoan: $groupLoan,
-            appliedBy: $actor,
-            clientReference: $payload['client_reference'] ?? $opId,
-            origin: $origin,
-        );
-
-        return [
-            'group_loan_id' => $groupLoan->id,
-            'deposit_status' => $groupLoan->deposit_status->value,
-            'outstanding_balance' => $groupLoan->outstanding_balance,
-            'group_loan_status' => $groupLoan->status->value,
         ];
     }
 
@@ -572,7 +546,17 @@ class ProcessSyncBatchAction
     private function applyWriteOffLoan(User $actor, array $payload): array
     {
         $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
-        $loan = $this->writeOffLoan->execute($loan, $actor, $payload['reason']);
+        $savingsAccount = isset($payload['savings_account_id'])
+            ? SavingsAccount::where('company_id', $actor->company_id)->findOrFail($payload['savings_account_id'])
+            : null;
+
+        $loan = $this->writeOffLoan->execute(
+            $loan,
+            $actor,
+            $payload['reason'],
+            savingsAccount: $savingsAccount,
+            savingsAmountApplied: (int) ($payload['savings_amount_applied'] ?? 0),
+        );
 
         return ['loan_id' => $loan->id, 'status' => $loan->status->value];
     }
@@ -584,7 +568,18 @@ class ProcessSyncBatchAction
     private function applyWriteOffGroupLoan(User $actor, ClientOrigin $origin, array $payload): array
     {
         $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
-        $groupLoan = $this->writeOffGroupLoan->execute($groupLoan, $actor, $payload['reason'], $origin);
+        $savingsAccount = isset($payload['savings_account_id'])
+            ? SavingsAccount::where('company_id', $actor->company_id)->findOrFail($payload['savings_account_id'])
+            : null;
+
+        $groupLoan = $this->writeOffGroupLoan->execute(
+            $groupLoan,
+            $actor,
+            $payload['reason'],
+            savingsAccount: $savingsAccount,
+            savingsAmountApplied: (int) ($payload['savings_amount_applied'] ?? 0),
+            origin: $origin,
+        );
 
         return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value];
     }

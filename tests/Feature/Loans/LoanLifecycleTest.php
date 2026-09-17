@@ -14,6 +14,7 @@ use App\Models\Customer;
 use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\NotificationLog;
+use App\Models\SavingsAccount;
 use App\Models\User;
 use App\Services\Ledger\ChartOfAccounts;
 use Illuminate\Support\Facades\Notification;
@@ -256,6 +257,106 @@ it('refuses to write off a loan with no outstanding balance', function (): void 
 
     expect(fn () => app(WriteOffLoanAction::class)->execute($disbursed->fresh(), $this->manager, 'no'))
         ->toThrow(ValidationException::class);
+});
+
+it('write-off applies chosen savings then bad-debts only the residual principal', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+    $outstandingBeforeWriteOff = $disbursed->outstanding_balance;
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+        'balance' => 200_00,
+    ]);
+
+    $writtenOff = app(WriteOffLoanAction::class)->execute(
+        $disbursed->fresh(),
+        $this->manager,
+        'Borrower absconded',
+        savingsAccount: $savingsAccount,
+        savingsAmountApplied: 200_00,
+    );
+
+    expect($writtenOff->status)->toBe(LoanStatus::WrittenOff)
+        ->and($writtenOff->outstanding_balance)->toBe(0)
+        ->and($writtenOff->write_off_amount)->toBe($outstandingBeforeWriteOff)
+        ->and($writtenOff->write_off_savings_account_id)->toBe($savingsAccount->id)
+        ->and($writtenOff->write_off_savings_applied)->toBe(200_00);
+
+    expect($savingsAccount->fresh()->balance)->toBe(0);
+
+    $badDebtExpense = app(ChartOfAccounts::class)->badDebtExpense($this->branch->company);
+    expect($badDebtExpense->refresh()->balance)->toBe($principalOutstanding - 200_00);
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('write-off caps savings applied at the account balance', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+        'balance' => 50_00,
+    ]);
+
+    expect(fn () => app(WriteOffLoanAction::class)->execute(
+        $disbursed->fresh(),
+        $this->manager,
+        'Borrower absconded',
+        savingsAccount: $savingsAccount,
+        savingsAmountApplied: 60_00,
+    ))->toThrow(ValidationException::class);
+});
+
+it('write-off caps savings applied at the loan outstanding balance', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+        'balance' => 10_000_00,
+    ]);
+
+    expect(fn () => app(WriteOffLoanAction::class)->execute(
+        $disbursed->fresh(),
+        $this->manager,
+        'Borrower absconded',
+        savingsAccount: $savingsAccount,
+        savingsAmountApplied: $disbursed->outstanding_balance + 1,
+    ))->toThrow(ValidationException::class);
+});
+
+it('write-off rejects a savings account that does not belong to the borrower', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+
+    $otherCustomer = Customer::factory()->forBranch($this->branch)->create();
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $otherCustomer->id,
+        'balance' => 200_00,
+    ]);
+
+    expect(fn () => app(WriteOffLoanAction::class)->execute(
+        $disbursed->fresh(),
+        $this->manager,
+        'Borrower absconded',
+        savingsAccount: $savingsAccount,
+        savingsAmountApplied: 100_00,
+    ))->toThrow(ValidationException::class);
 });
 
 it('restructures a disbursed loan onto a new product, closing the old loan and opening a fresh linked one', function (): void {

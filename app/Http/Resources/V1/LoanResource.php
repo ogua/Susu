@@ -45,6 +45,11 @@ class LoanResource extends JsonResource
             'approved_at' => $this->approved_at?->toISOString(),
             'disbursed_at' => $this->disbursed_at?->toISOString(),
             'closed_at' => $this->closed_at?->toISOString(),
+            'written_off_at' => $this->written_off_at?->toISOString(),
+            'write_off_reason' => $this->write_off_reason,
+            'write_off_amount' => $this->write_off_amount,
+            'write_off_savings_account_id' => $this->write_off_savings_account_id,
+            'write_off_savings_applied' => $this->write_off_savings_applied,
         ];
     }
 }

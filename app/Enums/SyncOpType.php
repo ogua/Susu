@@ -17,7 +17,6 @@ enum SyncOpType: string
     case RecordGroupContribution = 'group.contribution.record';
     case IssueGroupMemberLoan = 'group_loan.issue';
     case RecordGroupLoanDeposit = 'group_loan.deposit.record';
-    case ApplyGroupLoanDeposit = 'group_loan.deposit.apply';
     case ActivateGroupLoan = 'group_loan.activate';
     case RecordGroupLoanRepayment = 'group_loan.repayment.record';
     case WriteOffGroupLoan = 'group_loan.write_off';
@@ -46,7 +45,6 @@ enum SyncOpType: string
                 // issued and activated in the field when their deposit lands.
                 self::IssueGroupMemberLoan,
                 self::RecordGroupLoanDeposit,
-                self::ApplyGroupLoanDeposit,
                 self::ActivateGroupLoan,
                 self::RecordGroupLoanRepayment,
             ],

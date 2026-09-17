@@ -100,7 +100,7 @@ class RecordGroupLoanRepaymentAction
             ])->save();
 
             if ($locked->outstanding_balance <= 0) {
-                $this->close->execute($locked->fresh(), $recordedBy, $origin);
+                $this->close->execute($locked->fresh(), $recordedBy);
             }
 
             return new GroupLoanRepaymentResult($entry, $locked->fresh(), $repayment, duplicate: false);

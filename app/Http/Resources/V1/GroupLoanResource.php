@@ -50,6 +50,10 @@ class GroupLoanResource extends JsonResource
             'activated_at' => $this->activated_at?->toISOString(),
             'closed_at' => $this->closed_at?->toISOString(),
             'written_off_at' => $this->written_off_at?->toISOString(),
+            'write_off_reason' => $this->write_off_reason,
+            'write_off_amount' => $this->write_off_amount,
+            'write_off_savings_account_id' => $this->write_off_savings_account_id,
+            'write_off_savings_applied' => $this->write_off_savings_applied,
         ];
     }
 }

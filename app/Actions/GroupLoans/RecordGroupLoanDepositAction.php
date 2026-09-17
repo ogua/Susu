@@ -2,6 +2,7 @@
 
 namespace App\Actions\GroupLoans;
 
+use App\Enums\AccountStatus;
 use App\Enums\ClientOrigin;
 use App\Enums\DepositStatus;
 use App\Enums\GroupLoanStatus;
@@ -10,6 +11,7 @@ use App\Enums\TransactionType;
 use App\Models\GroupLoan;
 use App\Models\GroupLoanDeposit;
 use App\Models\LedgerAccount;
+use App\Models\SavingsAccount;
 use App\Models\User;
 use App\Services\Ledger\ChartOfAccounts;
 use App\Services\Ledger\EntryData;
@@ -19,10 +21,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Records a member paying in their agreed security deposit. The cash comes in
- * and is parked as a per-loan liability (money owed back to the member) — it
- * is not income and not a loan repayment. The loan can be activated once the
- * deposit is held. Idempotent on client_reference.
+ * Records a member paying in their agreed security deposit, crediting it
+ * straight into a savings account the member already holds — it becomes
+ * ordinary savings, indistinguishable from any other deposit once posted.
+ * The loan can be activated once the deposit is held. Idempotent on
+ * client_reference.
  */
 class RecordGroupLoanDepositAction
 {
@@ -33,6 +36,7 @@ class RecordGroupLoanDepositAction
 
     public function execute(
         GroupLoan $groupLoan,
+        SavingsAccount $savingsAccount,
         int $amount,
         User $recordedBy,
         ?string $clientReference = null,
@@ -58,16 +62,23 @@ class RecordGroupLoanDepositAction
                 'amount' => 'The deposit must be paid in full ('.$groupLoan->security_deposit_amount.' pesewas).',
             ]);
         }
+        if ($savingsAccount->customer_id !== $groupLoan->customer_id) {
+            throw ValidationException::withMessages(['savings_account_id' => 'This savings account does not belong to the borrower.']);
+        }
+        if ($savingsAccount->status === AccountStatus::Closed) {
+            throw ValidationException::withMessages(['savings_account_id' => 'This savings account is closed.']);
+        }
 
-        return DB::transaction(function () use ($groupLoan, $amount, $recordedBy, $clientReference, $recordedAt, $origin, $paymentMethod): GroupLoanDepositResult {
-            $depositAccount = $this->chart->groupLoanDepositLiability($groupLoan);
+        return DB::transaction(function () use ($groupLoan, $savingsAccount, $amount, $recordedBy, $clientReference, $recordedAt, $origin, $paymentMethod): GroupLoanDepositResult {
+            /** @var SavingsAccount $lockedAccount */
+            $lockedAccount = SavingsAccount::whereKey($savingsAccount->id)->lockForUpdate()->firstOrFail();
 
             $entry = $this->ledger->post(new EntryData(
                 company: $groupLoan->company,
                 type: TransactionType::GroupLoanDepositHeld,
                 lines: [
                     ['account' => $this->cashAccount($groupLoan, $paymentMethod), 'debit' => $amount],
-                    ['account' => $depositAccount, 'credit' => $amount],
+                    ['account' => $lockedAccount->ledgerAccount, 'credit' => $amount],
                 ],
                 branch: $groupLoan->branch,
                 paymentMethod: $paymentMethod,
@@ -79,12 +90,16 @@ class RecordGroupLoanDepositAction
                 meta: [
                     'customer_id' => $groupLoan->customer_id,
                     'group_loan_id' => $groupLoan->id,
+                    'savings_account_id' => $lockedAccount->id,
                     'amount' => $amount,
                 ],
             ));
 
+            $lockedAccount->forceFill(['balance' => $lockedAccount->balance + $amount])->save();
+
             $deposit = GroupLoanDeposit::create([
                 'group_loan_id' => $groupLoan->id,
+                'savings_account_id' => $lockedAccount->id,
                 'journal_entry_id' => $entry->id,
                 'recorded_by' => $recordedBy->id,
                 'amount' => $amount,
@@ -95,7 +110,6 @@ class RecordGroupLoanDepositAction
 
             $groupLoan->forceFill([
                 'deposit_status' => DepositStatus::Held,
-                'deposit_liability_account_id' => $depositAccount->id,
             ])->save();
 
             return new GroupLoanDepositResult($entry, $groupLoan->fresh(), $deposit, duplicate: false);
