@@ -25,6 +25,7 @@ class LoanGroupResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'code' => $this->code,
+            'branch_id' => $this->branch_id,
             'is_active' => $this->is_active,
             'member_count' => $this->members_count ?? $this->whenLoaded('members', fn (): int => $this->members->count()),
             'group_outstanding' => $groupOutstanding,

@@ -10,11 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class LoanGroup extends Model
 {
     /** @use HasFactory<LoanGroupFactory> */
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, HasUuids, LogsActivity, SoftDeletes;
 
     protected $fillable = [
         'company_id',
@@ -69,5 +71,14 @@ class LoanGroup extends Model
     public function outstandingBalance(): int
     {
         return (int) $this->activeGroupLoans()->sum('outstanding_balance');
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['name', 'code', 'is_active'])
+            ->logOnlyDirty()
+            ->useLogName('loan_group')
+            ->dontSubmitEmptyLogs();
     }
 }

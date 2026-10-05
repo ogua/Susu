@@ -9,6 +9,7 @@ use App\Filament\Resources\LoanGroups\Pages\ViewLoanGroup;
 use App\Filament\Resources\LoanGroups\RelationManagers\MemberLoansRelationManager;
 use App\Filament\Resources\LoanGroups\RelationManagers\MembersRelationManager;
 use App\Filament\Resources\LoanGroups\Schemas\LoanGroupForm;
+use App\Filament\Resources\LoanGroups\Schemas\LoanGroupInfolist;
 use App\Filament\Resources\LoanGroups\Tables\LoanGroupsTable;
 use App\Models\LoanGroup;
 use BackedEnum;
@@ -20,14 +21,24 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
-/** A persistent roster of customers that can take out group loans repeatedly over time. */
+/**
+ * "Customer Groups": a persistent branch roster of customers. Loans can be
+ * issued to the whole group, savings opened for every member, and the group's
+ * collection sheet records everyone's repayments and deposits at once.
+ */
 class LoanGroupResource extends Resource
 {
     protected static ?string $model = LoanGroup::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Loans';
+    protected static string|UnitEnum|null $navigationGroup = 'Customers';
+
+    protected static ?string $navigationLabel = 'Customer Groups';
+
+    protected static ?string $modelLabel = 'customer group';
+
+    protected static ?int $navigationSort = 2;
 
     protected static ?string $recordTitleAttribute = 'name';
 
@@ -52,6 +63,11 @@ class LoanGroupResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return LoanGroupForm::configure($schema);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return LoanGroupInfolist::configure($schema);
     }
 
     public static function table(Table $table): Table

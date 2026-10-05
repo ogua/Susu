@@ -20,6 +20,12 @@ class LoanGroupMemberResource extends JsonResource
             'id' => $this->id,
             'customer_id' => $this->customer_id,
             'customer_name' => $this->whenLoaded('customer', fn (): string => $this->customer->fullName()),
+            'customer_code' => $this->whenLoaded('customer', fn (): ?string => $this->customer->customer_code),
+            'customer_phone' => $this->whenLoaded('customer', fn (): ?string => $this->customer->phone),
+            'savings_accounts' => $this->when(
+                $this->relationLoaded('customer') && $this->customer->relationLoaded('savingsAccounts'),
+                fn () => SavingsAccountResource::collection($this->customer->savingsAccounts),
+            ),
             'status' => $this->status,
             'joined_at' => $this->joined_at?->toISOString(),
             'active_loan' => $this->whenLoaded('activeLoan', fn () => $this->activeLoan

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\LoanGroups\RelationManagers;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\LoanGroups\AddLoanGroupMemberAction;
 use App\Actions\LoanGroups\RemoveLoanGroupMemberAction;
+use App\Enums\AccountStatus;
 use App\Enums\DepositStatus;
 use App\Enums\GroupLoanStatus;
 use App\Enums\LoanFrequency;
@@ -42,9 +43,20 @@ class MembersRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('id')
             ->columns([
+                TextColumn::make('customer.customer_code')->label('Client #')->searchable(),
                 TextColumn::make('customer.first_name')
                     ->label('Members name')
-                    ->formatStateUsing(fn ($record) => $record->customer->fullName()),
+                    ->formatStateUsing(fn ($record) => $record->customer->fullName())
+                    ->description(fn (LoanGroupMember $record): ?string => $record->customer->phone),
+                TextColumn::make('savings_account')
+                    ->label('Savings account')
+                    ->state(fn (LoanGroupMember $record): string => $record->customer->savingsAccounts
+                        ->map(fn ($account): string => $account->account_number.' ('.Money::format($account->balance).')')
+                        ->implode(', ') ?: '—')
+                    ->wrap(),
+                TextColumn::make('loan_account')
+                    ->label('Loan account #')
+                    ->state(fn (LoanGroupMember $record): string => $record->openLoan?->loan_number ?? '—'),
                 TextColumn::make('security_deposit')
                     ->label('Security deposit')
                     ->state(fn (LoanGroupMember $record): string => $record->openLoan
@@ -80,7 +92,8 @@ class MembersRelationManager extends RelationManager
                     ->schema([
                         Select::make('customer_id')
                             ->label('Customer')
-                            ->options(fn (): array => Customer::where('branch_id', Filament::getTenant()?->id)
+                            ->options(fn (): array => Customer::where('branch_id', $this->getOwnerRecord()->branch_id)
+                                ->whereDoesntHave('loanGroupMemberships', fn ($memberships) => $memberships->where('loan_group_id', $this->getOwnerRecord()->id)->where('status', 'active'))
                                 ->get()
                                 ->mapWithKeys(fn ($customer) => [$customer->id => $customer->fullName().' ('.$customer->customer_code.')'])
                                 ->all())
@@ -166,7 +179,10 @@ class MembersRelationManager extends RelationManager
                         Notification::make()->title('Member removed')->success()->send();
                     }),
             ])
-            ->modifyQueryUsing(fn ($query) => $query->with(['customer', 'openLoan.customer']))
+            ->modifyQueryUsing(fn ($query) => $query->with([
+                'customer.savingsAccounts' => fn ($accounts) => $accounts->where('status', AccountStatus::Active),
+                'openLoan.customer',
+            ]))
             ->defaultSort('joined_at');
     }
 
