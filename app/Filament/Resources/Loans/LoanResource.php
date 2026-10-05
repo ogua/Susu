@@ -15,6 +15,7 @@ use App\Filament\Resources\Loans\Schemas\LoanForm;
 use App\Filament\Resources\Loans\Schemas\LoanInfolist;
 use App\Filament\Resources\Loans\Tables\LoansTable;
 use App\Models\Loan;
+use App\Support\AgentAssignment;
 use BackedEnum;
 use Filament\Facades\Filament;
 use Filament\Resources\Resource;
@@ -45,7 +46,10 @@ class LoanResource extends Resource
             return $query->where('company_id', $user->company_id);
         }
 
-        return $query->where('branch_id', Filament::getTenant()?->id);
+        $query->where('branch_id', Filament::getTenant()?->id);
+
+        // Field agents only see the customers they're responsible for.
+        return AgentAssignment::restricts($user) ? AgentAssignment::scopeLoans($query, $user) : $query;
     }
 
     public static function isScopedToTenant(): bool

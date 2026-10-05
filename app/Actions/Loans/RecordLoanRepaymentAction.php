@@ -13,6 +13,7 @@ use App\Services\Ledger\ChartOfAccounts;
 use App\Services\Ledger\EntryData;
 use App\Services\Ledger\LedgerService;
 use App\Services\Loans\LoanInstallmentAllocator;
+use App\Support\AgentAssignment;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -47,6 +48,8 @@ class RecordLoanRepaymentAction
                 return new LoanRepaymentResult($existing, $loan, duplicate: true);
             }
         }
+
+        AgentAssignment::assertMayCollectLoan($recordedBy, $loan);
 
         if ($loan->status !== LoanStatus::Disbursed) {
             throw ValidationException::withMessages(['status' => 'Only disbursed loans can receive repayments.']);

@@ -20,6 +20,7 @@ use App\Models\Customer;
 use App\Models\LoanGroup;
 use App\Models\LoanGroupMember;
 use App\Models\SavingsProduct;
+use App\Support\AgentAssignment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -38,7 +39,8 @@ class LoanGroupController extends Controller
             ->withCount('members')
             ->withSum('activeGroupLoans as group_outstanding_sum', 'outstanding_balance')
             ->where('company_id', $user->company_id)
-            ->where('branch_id', $user->branch_id);
+            ->where('branch_id', $user->branch_id)
+            ->when(AgentAssignment::restricts($user), fn ($q) => AgentAssignment::scopeGroups($q, $user));
 
         return LoanGroupResource::collection($query->latest()->paginate($request->integer('per_page', 30)));
     }
@@ -49,6 +51,7 @@ class LoanGroupController extends Controller
             ->withSum('activeGroupLoans as group_outstanding_sum', 'outstanding_balance')
             ->where('company_id', $request->user()->company_id)
             ->whereIn('branch_id', $request->user()->accessibleBranchIds())
+            ->when(AgentAssignment::restricts($request->user()), fn ($q) => AgentAssignment::scopeGroups($q, $request->user()))
             ->findOrFail($loanGroup);
 
         return LoanGroupResource::make($model->load('members.customer.savingsAccounts', 'members.activeLoan', 'members.openLoan'))
@@ -57,7 +60,9 @@ class LoanGroupController extends Controller
 
     public function history(Request $request, string $loanGroup, BuildLoanGroupHistoryAction $action): JsonResponse
     {
-        $model = $this->scopeToBranches(LoanGroup::where('company_id', $request->user()->company_id), $request->user())->findOrFail($loanGroup);
+        $model = $this->scopeToBranches(LoanGroup::where('company_id', $request->user()->company_id), $request->user())
+            ->when(AgentAssignment::restricts($request->user()), fn ($q) => AgentAssignment::scopeGroups($q, $request->user()))
+            ->findOrFail($loanGroup);
 
         return response()->json(['data' => $action->execute($model, min($request->integer('limit', 200), 500))]);
     }

@@ -14,6 +14,7 @@ use App\Services\Ledger\ChartOfAccounts;
 use App\Services\Ledger\EntryData;
 use App\Services\Ledger\LedgerService;
 use App\Services\Loans\GroupLoanInstallmentAllocator;
+use App\Support\AgentAssignment;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -49,6 +50,8 @@ class RecordGroupLoanRepaymentAction
                 return new GroupLoanRepaymentResult($existing->journalEntry, $existing->groupLoan, $existing, duplicate: true);
             }
         }
+
+        AgentAssignment::assertMayCollectLoan($recordedBy, $groupLoan);
 
         if ($groupLoan->status !== GroupLoanStatus::Active) {
             throw ValidationException::withMessages(['status' => 'Only an active group loan can receive repayments.']);

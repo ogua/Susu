@@ -8,6 +8,7 @@ use App\Enums\PaymentMethod;
 use App\Models\Branch;
 use App\Models\LoanGroup;
 use App\Models\User;
+use App\Support\AgentAssignment;
 use App\Support\Money;
 use BackedEnum;
 use Filament\Facades\Filament;
@@ -67,7 +68,7 @@ class CollectionSheet extends Page
         $this->branchId = Filament::getTenant()?->id;
         $this->date = now()->toDateString();
 
-        if (Filament::auth()->user()->hasRole('field_agent') && $this->loanGroupId === null) {
+        if (AgentAssignment::restricts(Filament::auth()->user())) {
             $this->officerId = Filament::auth()->id();
         }
 
@@ -86,6 +87,11 @@ class CollectionSheet extends Page
     public function loadSheet(): void
     {
         $branch = $this->branch();
+        // A field agent only ever sees their own customers, whatever the filters say.
+        if (AgentAssignment::restricts(Filament::auth()->user())) {
+            $this->officerId = Filament::auth()->id();
+        }
+
         $group = $this->loanGroupId ? LoanGroup::where('branch_id', $branch->id)->find($this->loanGroupId) : null;
         $officer = $this->officerId ? User::where('company_id', $branch->company_id)->find($this->officerId) : null;
 
@@ -182,7 +188,14 @@ class CollectionSheet extends Page
      */
     public function groupOptions(): array
     {
-        return LoanGroup::where('branch_id', $this->branchId)->where('is_active', true)->orderBy('name')->pluck('name', 'id')->all();
+        $user = Filament::auth()->user();
+
+        return LoanGroup::where('branch_id', $this->branchId)
+            ->where('is_active', true)
+            ->when(AgentAssignment::restricts($user), fn ($query) => AgentAssignment::scopeGroups($query, $user))
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 
     /**
@@ -190,7 +203,15 @@ class CollectionSheet extends Page
      */
     public function officerOptions(): array
     {
-        return User::role('field_agent')->where('branch_id', $this->branchId)->where('is_active', true)->orderBy('name')->pluck('name', 'id')->all();
+        $user = Filament::auth()->user();
+
+        return User::role('field_agent')
+            ->where('branch_id', $this->branchId)
+            ->where('is_active', true)
+            ->when(AgentAssignment::restricts($user), fn ($query) => $query->whereKey($user->id))
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 
     private function branch(): Branch

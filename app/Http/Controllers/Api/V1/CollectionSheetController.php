@@ -11,14 +11,15 @@ use App\Http\Requests\Api\V1\PostCollectionSheetRequest;
 use App\Models\Branch;
 use App\Models\LoanGroup;
 use App\Models\User;
+use App\Support\AgentAssignment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 /**
  * "Enter Transaction" for the mobile/desktop clients. Field agents only see
- * their own sheet (officer forced to themselves unless a group is chosen);
- * company admins may pass branch_id.
+ * their own customers (officer forced to themselves, with or without a
+ * group); company admins may pass branch_id.
  */
 class CollectionSheetController extends Controller
 {
@@ -41,7 +42,7 @@ class CollectionSheetController extends Controller
             : null;
 
         $officer = match (true) {
-            $user->hasRole('field_agent') && $group === null => $user,
+            AgentAssignment::restricts($user) => $user,
             $request->filled('officer_id') => User::where('company_id', $user->company_id)->findOrFail($request->query('officer_id')),
             default => null,
         };

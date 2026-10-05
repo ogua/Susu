@@ -13,6 +13,7 @@ use App\Models\Loan;
 use App\Models\LoanGroup;
 use App\Models\SavingsAccount;
 use App\Models\User;
+use App\Support\AgentAssignment;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -24,7 +25,12 @@ use Illuminate\Support\Collection;
  *   their active loan in the group (if any) and their savings account — so
  *   members who only save still get a row.
  * - Without a group: every loan in the branch with something due on or before
- *   the date, optionally narrowed to one loan officer.
+ *   the date.
+ *
+ * With an officer (always the case for field agents), both modes narrow to
+ * that officer's customers (AgentAssignment): their loans and the savings
+ * accounts they collect, so the sheet never offers an entry the server would
+ * then refuse.
  *
  * "Due" is everything scheduled up to and including the date that hasn't been
  * paid (arrears + today), capped at the loan's outstanding balance — the
@@ -38,7 +44,7 @@ class BuildCollectionSheetAction
     public function execute(Branch $branch, CarbonInterface $date, ?LoanGroup $loanGroup = null, ?User $officer = null): array
     {
         $rows = $loanGroup !== null
-            ? $this->groupRows($loanGroup, $date)
+            ? $this->groupRows($loanGroup, $date, $officer)
             : $this->dueLoanRows($branch, $date, $officer);
 
         return $rows->sortBy('customer_name')->values()->all();
@@ -47,15 +53,20 @@ class BuildCollectionSheetAction
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function groupRows(LoanGroup $loanGroup, CarbonInterface $date): Collection
+    private function groupRows(LoanGroup $loanGroup, CarbonInterface $date, ?User $officer): Collection
     {
-        $members = $loanGroup->members()->where('status', 'active')->with('customer')->get();
+        $members = $loanGroup->members()
+            ->where('status', 'active')
+            ->when($officer, fn (Builder $query) => $query->whereHas('customer', fn (Builder $customer) => AgentAssignment::scopeCustomers($customer, $officer)))
+            ->with('customer')
+            ->get();
         $loans = $loanGroup->groupLoans()
             ->where('status', GroupLoanStatus::Active)
+            ->when($officer, fn (Builder $query) => AgentAssignment::scopeLoans($query, $officer))
             ->with('installments')
             ->get()
             ->keyBy('loan_group_member_id');
-        $savings = $this->savingsAccountsFor($members->pluck('customer_id'));
+        $savings = $this->savingsAccountsFor($members->pluck('customer_id'), $officer);
 
         return $members->map(fn ($member): array => $this->row(
             $member->customer,
@@ -70,9 +81,7 @@ class BuildCollectionSheetAction
      */
     private function dueLoanRows(Branch $branch, CarbonInterface $date, ?User $officer): Collection
     {
-        $officerScope = fn (Builder $query) => $query->where(fn (Builder $either) => $either
-            ->where('agent_id', $officer?->id)
-            ->orWhereHas('customer', fn (Builder $customer) => $customer->where('assigned_agent_id', $officer?->id)));
+        $officerScope = fn (Builder $query) => AgentAssignment::scopeLoans($query, $officer);
 
         $groupLoans = GroupLoan::where('branch_id', $branch->id)
             ->where('status', GroupLoanStatus::Active)
@@ -92,7 +101,7 @@ class BuildCollectionSheetAction
             ->with(['customer', 'installments', 'loanProduct'])
             ->get();
 
-        $savings = $this->savingsAccountsFor($groupLoans->pluck('customer_id')->merge($loans->pluck('customer_id')));
+        $savings = $this->savingsAccountsFor($groupLoans->pluck('customer_id')->merge($loans->pluck('customer_id')), $officer);
 
         return $groupLoans->map(fn (GroupLoan $loan): array => $this->row($loan->customer, $loan, $savings->get($loan->customer_id), $date))
             ->merge($loans->map(fn (Loan $loan): array => $this->row($loan->customer, $loan, $savings->get($loan->customer_id), $date)));
@@ -163,15 +172,17 @@ class BuildCollectionSheetAction
 
     /**
      * One account per customer to take sheet deposits: their oldest active
-     * daily-susu account, else their oldest active target account.
+     * daily-susu account, else their oldest active target account. With an
+     * officer, only accounts that officer collects (RecordCollectionAction).
      *
      * @param  Collection<int, string>  $customerIds
      * @return Collection<string, SavingsAccount>
      */
-    private function savingsAccountsFor(Collection $customerIds): Collection
+    private function savingsAccountsFor(Collection $customerIds, ?User $officer = null): Collection
     {
         return SavingsAccount::whereIn('customer_id', $customerIds->unique()->values())
             ->where('status', AccountStatus::Active)
+            ->when($officer, fn (Builder $query) => $query->where('agent_id', $officer->id))
             ->whereHas('product', fn (Builder $product) => $product->whereIn('type', [SavingsProductType::DailySusu, SavingsProductType::Target]))
             ->with('product')
             ->orderBy('opened_at')

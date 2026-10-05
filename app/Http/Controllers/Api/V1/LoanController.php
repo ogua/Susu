@@ -23,6 +23,7 @@ use App\Models\SavingsAccount;
 use App\Models\User;
 use App\Services\Loans\EligibilityService;
 use App\Services\Loans\LoanCalculator;
+use App\Support\AgentAssignment;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -70,7 +71,9 @@ class LoanController extends Controller
         $query = Loan::with('loanProduct')->where('company_id', $user->company_id);
         $query = $user->hasRole('customer')
             ? $query->where('customer_id', $this->customerFor($user)->id)
-            : $this->scopeToBranches($query, $user)->latest();
+            : $this->scopeToBranches($query, $user)
+                ->when(AgentAssignment::restricts($user), fn ($q) => AgentAssignment::scopeLoans($q, $user))
+                ->latest();
 
         return LoanResource::collection($query->paginate($request->integer('per_page', 30)));
     }
@@ -179,6 +182,8 @@ class LoanController extends Controller
 
         if ($user->hasRole('customer')) {
             $query->where('customer_id', $this->customerFor($user)->id);
+        } elseif (AgentAssignment::restricts($user)) {
+            AgentAssignment::scopeLoans($query, $user);
         }
 
         return $query->findOrFail($id);
