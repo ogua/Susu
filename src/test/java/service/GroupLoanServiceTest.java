@@ -315,6 +315,29 @@ class GroupLoanServiceTest {
     }
 
     @Test
+    void cancelsADraftAndLetsTheMemberBeIssuedAgain() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-191");
+        Customer customer = newCustomer("Kojo", "Annan");
+        GroupLoan draft = issue(group, customer, 1000_00, 100_00, 100_00);
+
+        GroupLoan cancelled = groupLoans.cancel(draft.getId(), MANAGER_ID, "Wrong member");
+
+        assertEquals(GroupLoanStatus.CANCELLED, cancelled.getStatus());
+        assertEquals("Wrong member", cancelled.getCancellationReason());
+        assertNotNull(cancelled.getCancelledAt());
+        assertEquals(GroupLoanStatus.DRAFT, issue(group, customer, 500_00, 50_00, 50_00).getStatus());
+    }
+
+    @Test
+    void refusesToCancelAnActiveLoan() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-192");
+        Customer customer = newCustomer("Esi", "Bonsu");
+        GroupLoan active = activate(issue(group, customer, 1000_00, 100_00, 100_00));
+
+        assertThrows(IllegalStateException.class, () -> groupLoans.cancel(active.getId(), MANAGER_ID, null));
+    }
+
+    @Test
     void usesTheClientReferenceAsTheGroupLoanId() throws Exception {
         LoanGroup group = newLoanGroup("LGRP-114");
         String ref = UUID.randomUUID().toString();

@@ -47,6 +47,9 @@ public class GroupLoan {
     private Long writeOffAmount;
     private String writeOffSavingsAccountId;
     private Long writeOffSavingsApplied;
+    private Instant cancelledAt;
+    private String cancelledBy;
+    private String cancellationReason;
 
     /** Populated by list/detail queries via a join; not always present. */
     private LoanGroup loanGroup;
@@ -124,6 +127,15 @@ public class GroupLoan {
 
     public Instant getWrittenOffAt() { return writtenOffAt; }
     public void setWrittenOffAt(Instant writtenOffAt) { this.writtenOffAt = writtenOffAt; }
+
+    public Instant getCancelledAt() { return cancelledAt; }
+    public void setCancelledAt(Instant cancelledAt) { this.cancelledAt = cancelledAt; }
+
+    public String getCancelledBy() { return cancelledBy; }
+    public void setCancelledBy(String cancelledBy) { this.cancelledBy = cancelledBy; }
+
+    public String getCancellationReason() { return cancellationReason; }
+    public void setCancellationReason(String cancellationReason) { this.cancellationReason = cancellationReason; }
 
     public String getWriteOffReason() { return writeOffReason; }
     public void setWriteOffReason(String writeOffReason) { this.writeOffReason = writeOffReason; }

@@ -465,6 +465,55 @@ public class GroupLoanService {
         return findById(groupLoanId);
     }
 
+    // ------------------------------------------------------------------ cancel
+
+    /**
+     * Cancels a loan that was issued but never activated (mirrors the server's
+     * CancelGroupLoanAction). Nothing was disbursed and any deposit paid already
+     * sits in the member's savings, so no ledger entry is posted. Re-cancelling
+     * is a no-op.
+     */
+    public GroupLoan cancel(String groupLoanId, String cancelledBy, String reason) throws SQLException {
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null) {
+            throw new IllegalArgumentException("Group loan not found.");
+        }
+        if (groupLoan.getStatus() == GroupLoanStatus.CANCELLED) {
+            return groupLoan;
+        }
+        if (groupLoan.getStatus() != GroupLoanStatus.DRAFT) {
+            throw new IllegalStateException(
+                    "Only a loan that has not been activated can be cancelled. Use write-off for an active loan.");
+        }
+
+        String cleanReason = reason == null || reason.isBlank() ? null : reason.trim();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE group_loans SET status = ?, cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?,"
+                     + " updated_at = ? WHERE id = ? AND status = ?")) {
+            String now = Instant.now().toString();
+            ps.setString(1, GroupLoanStatus.CANCELLED.value());
+            ps.setString(2, now);
+            ps.setString(3, cancelledBy);
+            ps.setString(4, cleanReason);
+            ps.setString(5, now);
+            ps.setString(6, groupLoanId);
+            ps.setString(7, GroupLoanStatus.DRAFT.value());
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalStateException("This loan is no longer a draft.");
+            }
+        }
+
+        JSONObject payload = new JSONObject().put("group_loan_id", groupLoanId);
+        if (cleanReason != null) {
+            payload.put("reason", cleanReason);
+        }
+        outbox.enqueueIfHybrid("group_loan.cancel", payload);
+
+        return findById(groupLoanId);
+    }
+
     // --------------------------------------------------------------- helpers
 
     private LoanGroupMember resolveMember(String loanGroupId, String customerId) throws SQLException {
@@ -772,6 +821,10 @@ public class GroupLoanService {
         groupLoan.setWriteOffSavingsAccountId(rs.getString("write_off_savings_account_id"));
         long writeOffSavingsApplied = rs.getLong("write_off_savings_applied");
         groupLoan.setWriteOffSavingsApplied(rs.wasNull() ? null : writeOffSavingsApplied);
+        String cancelledAt = rs.getString("cancelled_at");
+        groupLoan.setCancelledAt(cancelledAt != null ? Instant.parse(cancelledAt) : null);
+        groupLoan.setCancelledBy(rs.getString("cancelled_by"));
+        groupLoan.setCancellationReason(rs.getString("cancellation_reason"));
         return groupLoan;
     }
 

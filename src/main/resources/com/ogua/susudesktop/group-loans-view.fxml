@@ -54,6 +54,7 @@
             <Button fx:id="activateButton" onAction="#onActivate" styleClass="button-secondary" text="Activate"/>
             <Button fx:id="repayButton" onAction="#onRecordRepayment" styleClass="button-secondary" text="Record Repayment"/>
             <Button fx:id="writeOffButton" onAction="#onWriteOff" styleClass="button-secondary" text="Write Off"/>
+            <Button fx:id="cancelButton" onAction="#onCancelLoan" styleClass="button-secondary" text="Cancel Loan"/>
         </HBox>
         <TableView fx:id="table" prefHeight="300" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>

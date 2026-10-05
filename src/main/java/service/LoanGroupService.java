@@ -69,9 +69,14 @@ public class LoanGroupService {
     }
 
     public LoanGroupMember removeMember(String memberId) throws SQLException {
-        if (hasActiveLoan(memberId)) {
+        String openLoanStatus = openLoanStatus(memberId);
+        if (GroupLoanStatus.ACTIVE.value().equals(openLoanStatus)) {
             throw new IllegalStateException(
                     "This member cannot be removed while they have an active loan in the group.");
+        }
+        if (GroupLoanStatus.DRAFT.value().equals(openLoanStatus)) {
+            throw new IllegalStateException(
+                    "This member has a loan awaiting activation. Cancel it before removing the member.");
         }
 
         String now = Instant.now().toString();
@@ -102,14 +107,16 @@ public class LoanGroupService {
         return findMemberById(memberId);
     }
 
-    private boolean hasActiveLoan(String memberId) throws SQLException {
+    /** Status of the member's draft or active loan, or null when they have none (mirrors the server). */
+    private String openLoanStatus(String memberId) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT 1 FROM group_loans WHERE loan_group_member_id = ? AND status = ?")) {
+                     "SELECT status FROM group_loans WHERE loan_group_member_id = ? AND status IN (?, ?) LIMIT 1")) {
             ps.setString(1, memberId);
-            ps.setString(2, GroupLoanStatus.ACTIVE.value());
+            ps.setString(2, GroupLoanStatus.DRAFT.value());
+            ps.setString(3, GroupLoanStatus.ACTIVE.value());
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+                return rs.next() ? rs.getString("status") : null;
             }
         }
     }

@@ -68,6 +68,7 @@ public class GroupLoansController {
     @FXML private Button activateButton;
     @FXML private Button repayButton;
     @FXML private Button writeOffButton;
+    @FXML private Button cancelButton;
 
     @FXML private TableView<GroupLoanInstallment> installmentsTable;
     @FXML private TableColumn<GroupLoanInstallment, String> seqColumn;
@@ -161,6 +162,7 @@ public class GroupLoansController {
         activateButton.setDisable(!readyToActivate);
         repayButton.setDisable(!active);
         writeOffButton.setDisable(!canWriteOff() || !active);
+        cancelButton.setDisable(selected == null || selected.getStatus() != enums.GroupLoanStatus.DRAFT);
     }
 
     private void updatePreview() {
@@ -313,6 +315,30 @@ public class GroupLoansController {
         String activatedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
         runAction("Activating…", () -> groupLoanService.activate(selected.getId(), activatedBy),
                 "Could not activate loan");
+    }
+
+    @FXML
+    private void onCancelLoan() {
+        GroupLoan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Cancel Loan");
+        dialog.setHeaderText(selected.getLoanNumber() + " was never disbursed, so no money moves."
+                + (selected.getDepositStatus() == enums.DepositStatus.HELD
+                        ? " The deposit already paid stays in the member's savings account."
+                        : ""));
+        dialog.setContentText("Reason (optional):");
+        Optional<String> input = dialog.showAndWait();
+        if (input.isEmpty()) {
+            return;
+        }
+
+        String cancelledBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        runAction("Cancelling…", () -> groupLoanService.cancel(selected.getId(), cancelledBy, input.get()),
+                "Could not cancel loan");
     }
 
     @FXML

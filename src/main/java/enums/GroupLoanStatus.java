@@ -4,7 +4,8 @@ public enum GroupLoanStatus {
     DRAFT("draft"),
     ACTIVE("active"),
     CLOSED("closed"),
-    WRITTEN_OFF("written_off");
+    WRITTEN_OFF("written_off"),
+    CANCELLED("cancelled");
 
     private final String value;
 

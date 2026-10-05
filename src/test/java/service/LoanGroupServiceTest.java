@@ -108,6 +108,20 @@ class LoanGroupServiceTest {
     }
 
     @Test
+    void blocksRemovingAMemberWithADraftLoanUntilItIsCancelled() throws Exception {
+        LoanGroup group = loanGroups.create("Market Traders", "LGRP-090", "setup");
+        Customer customer = newCustomer("Kwesi", "Arthur");
+        GroupLoan draft = groupLoans.issue(AGENT_ID, group.getId(), customer.getId(),
+                1000_00, 100_00, 100_00, LoanFrequency.WEEKLY, LocalDate.now(), null, null);
+
+        assertThrows(IllegalStateException.class, () -> loanGroups.removeMember(draft.getLoanGroupMemberId()));
+
+        groupLoans.cancel(draft.getId(), AGENT_ID, null);
+
+        assertEquals("left", loanGroups.removeMember(draft.getLoanGroupMemberId()).getStatus());
+    }
+
+    @Test
     void reportsGroupOutstandingAsTheSumOfActiveMemberLoans() throws Exception {
         LoanGroup group = loanGroups.create("Market Traders", "LGRP-005", "setup");
         activateLoanFor(group, newCustomer("Adjoa", "Mensah"));
