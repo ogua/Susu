@@ -278,7 +278,7 @@ export interface LoanEligibility {
  * repayment amount, and their own outstanding balance. No product, no
  * interest, no equal-split-across-members.
  */
-export type GroupLoanStatus = 'draft' | 'active' | 'closed' | 'written_off';
+export type GroupLoanStatus = 'draft' | 'active' | 'closed' | 'written_off' | 'cancelled';
 
 export type GroupLoanDepositStatus = 'pending' | 'held';
 
@@ -330,6 +330,8 @@ export interface GroupLoan {
   write_off_amount: number | null;
   write_off_savings_account_id: string | null;
   write_off_savings_applied: number | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
 }
 
 export interface LoanGroupMember {

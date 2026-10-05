@@ -31,6 +31,7 @@ const STATUS_TONES: Record<string, Tone> = {
   left: 'neutral',
   rejected: 'danger',
   written_off: 'danger',
+  cancelled: 'neutral',
   overdue: 'danger',
   failed: 'danger',
   flagged: 'danger',

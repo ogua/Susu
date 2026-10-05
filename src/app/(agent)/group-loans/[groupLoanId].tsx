@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiErrorMessage } from '@/api/client';
 import {
   activateGroupLoan,
+  cancelGroupLoan,
   getGroupLoan,
   recordGroupLoanDeposit,
   recordGroupLoanRepayment,
@@ -43,7 +44,7 @@ const PER = { daily: 'day', weekly: 'week', monthly: 'month' } as const;
 
 /**
  * Per-member group loan: draft -> record deposit (into a chosen savings
- * account) -> activate -> repayments, with a manager-tier write-off option
+ * account) -> activate -> repayments (a draft can be cancelled instead), with a manager-tier write-off option
  * that can optionally draw down the member's savings first. No approve/
  * reject step — the group loan feature has no maker-checker.
  */
@@ -60,6 +61,7 @@ export default function GroupLoanDetailScreen() {
   const [writeOffReason, setWriteOffReason] = useState('');
   const [writeOffAccountId, setWriteOffAccountId] = useState<string | null>(null);
   const [writeOffAmount, setWriteOffAmount] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -86,6 +88,7 @@ export default function GroupLoanDetailScreen() {
       setWriteOffReason('');
       setWriteOffAccountId(null);
       setWriteOffAmount('');
+      setCancelReason('');
       setSuccess(successMessage);
       await queryClient.invalidateQueries({ queryKey: ['groupLoan', groupLoanId] });
     } catch (err) {
@@ -133,6 +136,28 @@ export default function GroupLoanDetailScreen() {
       message: `This disburses ${displayFormatted(data.principal_amount_formatted)} to ${memberName} and starts the repayment schedule.`,
       confirmLabel: `Disburse ${displayFormatted(data.principal_amount_formatted)}`,
       onConfirm: () => void run('activate', () => activateGroupLoan(data.id), 'Loan activated and disbursed.'),
+    });
+  }
+
+  function handleCancel() {
+    const reason = cancelReason.trim();
+    confirmAction({
+      title: 'Cancel this loan?',
+      message:
+        data.deposit_status === 'held'
+          ? `Loan ${data.loan_number} was never disbursed. The deposit ${memberName} paid stays in their savings account.`
+          : `Loan ${data.loan_number} was never disbursed, so nothing needs to be reversed.`,
+      confirmLabel: 'Cancel loan',
+      destructive: true,
+      onConfirm: () =>
+        void run(
+          'cancel',
+          async () => {
+            await cancelGroupLoan(data.id, reason);
+            void queryClient.invalidateQueries({ queryKey: ['loan-group', data.loan_group_id] });
+          },
+          `Loan cancelled. ${memberName} can now be issued a new loan or removed from the group.`,
+        ),
     });
   }
 
@@ -268,6 +293,24 @@ export default function GroupLoanDetailScreen() {
               </ThemedText>
               <Button title="Activate & disburse" icon="checkCircle" loading={busy === 'activate'} disabled={!!busy} onPress={handleActivate} />
             </Card>
+          ) : null}
+
+          {data.status === 'draft' ? (
+            <Card style={styles.section}>
+              <ThemedText type="heading">Cancel loan</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Issued by mistake or the member pulled out? Cancelling moves no money.
+              </ThemedText>
+              <Input label="Reason" value={cancelReason} onChangeText={setCancelReason} multiline placeholder="Optional" />
+              <Button title="Cancel loan" variant="destructive" icon="error" loading={busy === 'cancel'} disabled={!!busy} onPress={handleCancel} />
+            </Card>
+          ) : null}
+
+          {data.status === 'cancelled' ? (
+            <Notice
+              tone="info"
+              message={`This loan was cancelled before it was disbursed${data.cancellation_reason ? `: ${data.cancellation_reason}` : '.'}`}
+            />
           ) : null}
 
           {data.status === 'active' ? (

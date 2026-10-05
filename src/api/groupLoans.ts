@@ -56,6 +56,16 @@ export async function activateGroupLoan(groupLoanId: string): Promise<GroupLoan>
   return data.data;
 }
 
+/**
+ * Cancel a loan that was issued but never activated. Nothing was disbursed and
+ * any deposit already paid stays in the member's savings, so no money moves.
+ */
+export async function cancelGroupLoan(groupLoanId: string, reason?: string): Promise<GroupLoan> {
+  const { data } = await api.post<{ data: GroupLoan }>(`/group-loans/${groupLoanId}/cancel`, { reason: reason || undefined });
+
+  return data.data;
+}
+
 /** Record a cash repayment against the member's loan (in minor units). */
 export async function recordGroupLoanRepayment(
   groupLoanId: string,
