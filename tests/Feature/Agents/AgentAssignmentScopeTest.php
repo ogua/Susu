@@ -107,3 +107,31 @@ it('lists only the groups and group loans a field agent works with', function ()
 
     $this->getJson('/api/v1/group-loans/'.$this->kofi->groupLoans()->first()->id)->assertNotFound();
 });
+
+it('lists all of an agent\'s customers, including savers with nothing due', function (): void {
+    $efua = Customer::factory()->forBranch($this->branch)->create(['first_name' => 'Efua', 'assigned_agent_id' => $this->agent->id]);
+
+    $this->actingAs($this->agent, 'sanctum');
+
+    $due = collect($this->getJson('/api/v1/collection-sheet')->assertOk()->json('data'))->pluck('customer_id');
+    expect($due->all())->toBe([$this->ama->id]);
+
+    $all = collect($this->getJson('/api/v1/collection-sheet?all_customers=1')->assertOk()->json('data'));
+    expect($all->pluck('customer_id')->all())->toEqualCanonicalizing([$this->ama->id, $efua->id])
+        ->and($all->firstWhere('customer_id', $this->ama->id)['group_name'])->toBe($this->group->name)
+        ->and($all->firstWhere('customer_id', $efua->id)['loan_id'])->toBeNull();
+});
+
+it('searches the sheet by name, phone or group in any mode', function (): void {
+    $this->ama->update(['phone' => '0244000111']);
+    $efua = Customer::factory()->forBranch($this->branch)->create(['first_name' => 'Efua', 'assigned_agent_id' => $this->agent->id]);
+    $this->actingAs($this->agent, 'sanctum');
+
+    expect(collect($this->getJson('/api/v1/collection-sheet?all_customers=1&search=efua')->json('data'))->pluck('customer_id')->all())
+        ->toBe([$efua->id]);
+    expect(collect($this->getJson('/api/v1/collection-sheet?all_customers=1&search=0244000')->json('data'))->pluck('customer_id')->all())
+        ->toBe([$this->ama->id]);
+    expect(collect($this->getJson('/api/v1/collection-sheet?search='.urlencode($this->group->name))->json('data'))->pluck('customer_id')->all())
+        ->toBe([$this->ama->id]);
+    expect($this->getJson("/api/v1/collection-sheet?loan_group_id={$this->group->id}&search=nobody")->json('data'))->toBe([]);
+});

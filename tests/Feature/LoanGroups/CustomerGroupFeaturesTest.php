@@ -225,3 +225,39 @@ it('posts nothing from an untouched collection sheet', function (): void {
     expect($this->ama->groupLoans()->first()->outstanding_balance)->toBe(1_000_00)
         ->and($this->kofi->groupLoans()->first()->outstanding_balance)->toBe(1_000_00);
 });
+
+it('filters the web sheet by search without dropping entered amounts', function (): void {
+    issueAndActivateGroupLoans($this->manager, $this->group);
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    livewire(CollectionSheet::class)
+        ->set('loanGroupId', $this->group->id)
+        ->call('loadSheet')
+        ->assertSee($this->group->name)
+        ->call('fillDue', 0)
+        ->set('search', 'Kofi')
+        ->assertDontSee('Ama')
+        ->assertSee('1 entered row(s) hidden by the search will also be posted.')
+        ->call('submit')
+        ->assertNotified('Collection sheet posted');
+
+    expect($this->ama->groupLoans()->first()->outstanding_balance)->toBe(900_00);
+});
+
+it('loads every customer on the web sheet, not just who is due', function (): void {
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    // No loans issued: nobody is due, but "all customers" still lists both members.
+    livewire(CollectionSheet::class)
+        ->call('loadSheet')
+        ->assertSet('rows', [])
+        ->set('allCustomers', true)
+        ->call('loadSheet')
+        ->assertCount('rows', 2);
+});

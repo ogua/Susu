@@ -53,6 +53,12 @@ class CollectionSheet extends Page
 
     public string $paymentMethod = 'cash';
 
+    /** Every customer (savers and loans not yet due too), not just who is due. */
+    public bool $allCustomers = false;
+
+    /** Filters the rows shown; entries in hidden rows are kept and still posted. */
+    public string $search = '';
+
     public bool $loaded = false;
 
     /** @var list<array<string, mixed>> */
@@ -100,7 +106,7 @@ class CollectionSheet extends Page
         $this->rows = array_map(fn (array $row): array => $row + [
             'repayment' => '',
             'deposit' => '',
-        ], app(BuildCollectionSheetAction::class)->execute($branch, Carbon::parse($this->date), $group, $officer));
+        ], app(BuildCollectionSheetAction::class)->execute($branch, Carbon::parse($this->date), $group, $officer, $this->allCustomers));
 
         $this->loaded = true;
     }
@@ -113,6 +119,19 @@ class CollectionSheet extends Page
         if ($row !== null && $row['loan_id'] && $row['amount_due'] > 0) {
             $this->rows[$index]['repayment'] = number_format($row['amount_due'] / 100, 2, '.', '');
         }
+    }
+
+    /** @param  array<string, mixed>  $row */
+    public function rowVisible(array $row): bool
+    {
+        return BuildCollectionSheetAction::matches($row, BuildCollectionSheetAction::searchTerms($this->search));
+    }
+
+    /** Rows with an amount entered that the current search hides — they are still posted. */
+    public function hiddenEntryCount(): int
+    {
+        return count(array_filter($this->rows, fn (array $row): bool => ! $this->rowVisible($row)
+            && ((float) ($row['repayment'] ?: 0) > 0 || (float) ($row['deposit'] ?: 0) > 0)));
     }
 
     public function payingCount(): int

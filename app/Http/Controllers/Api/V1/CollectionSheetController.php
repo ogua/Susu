@@ -30,6 +30,8 @@ class CollectionSheetController extends Controller
             'branch_id' => ['nullable', 'uuid'],
             'loan_group_id' => ['nullable', 'uuid'],
             'officer_id' => ['nullable', 'uuid'],
+            'all_customers' => ['nullable', 'boolean'],
+            'search' => ['nullable', 'string', 'max:100'],
         ]);
 
         $user = $request->user();
@@ -50,12 +52,13 @@ class CollectionSheetController extends Controller
         $date = Carbon::parse($request->query('date', now()->toDateString()));
 
         return response()->json([
-            'data' => $action->execute($branch, $date, $group, $officer),
+            'data' => $action->execute($branch, $date, $group, $officer, $request->boolean('all_customers'), $request->query('search')),
             'meta' => [
                 'branch_id' => $branch->id,
                 'date' => $date->toDateString(),
                 'loan_group_id' => $group?->id,
                 'officer_id' => $officer?->id,
+                'customer_limit' => BuildCollectionSheetAction::CUSTOMER_LIMIT,
             ],
         ]);
     }

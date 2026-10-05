@@ -47,9 +47,15 @@
                 </x-filament::input.wrapper>
             </label>
 
-            <x-filament::button wire:click="loadSheet" icon="heroicon-o-magnifying-glass">
-                Load sheet
-            </x-filament::button>
+            <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                    <x-filament::input.checkbox wire:model="allCustomers" />
+                    All customers, not just who is due
+                </label>
+                <x-filament::button wire:click="loadSheet" icon="heroicon-o-magnifying-glass">
+                    Load sheet
+                </x-filament::button>
+            </div>
         </div>
     </x-filament::section>
 
@@ -63,8 +69,21 @@
             </x-slot>
 
             @if ($rows === [])
-                <p class="text-sm text-gray-500 dark:text-gray-400">Nobody is due on this date for the selected filters.</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ $allCustomers ? 'No customers for the selected filters.' : 'Nobody is due on this date for the selected filters. Tick "All customers" to take a payment from someone not due.' }}
+                </p>
             @else
+                <div class="mb-3 flex flex-wrap items-center gap-3">
+                    <x-filament::input.wrapper prefix-icon="heroicon-o-magnifying-glass" class="w-full max-w-md">
+                        <x-filament::input type="search" wire:model.live.debounce.300ms="search" placeholder="Search name, phone, code, loan/account number or group" />
+                    </x-filament::input.wrapper>
+                    @if ($allCustomers && count(array_unique(array_column($rows, 'customer_id'))) >= \App\Actions\Collections\BuildCollectionSheetAction::CUSTOMER_LIMIT)
+                        <span class="text-sm text-gray-500">Showing the first {{ \App\Actions\Collections\BuildCollectionSheetAction::CUSTOMER_LIMIT }} customers; narrow with a group or officer.</span>
+                    @endif
+                    @if ($this->hiddenEntryCount() > 0)
+                        <span class="text-sm font-medium text-warning-600">{{ $this->hiddenEntryCount() }} entered row(s) hidden by the search will also be posted.</span>
+                    @endif
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
@@ -72,6 +91,7 @@
                                 <th class="px-2 py-2 font-semibold">Loan #</th>
                                 <th class="px-2 py-2 font-semibold">Product</th>
                                 <th class="px-2 py-2 font-semibold">Client</th>
+                                <th class="px-2 py-2 font-semibold">Group</th>
                                 <th class="px-2 py-2 text-right font-semibold">Balance</th>
                                 <th class="px-2 py-2 text-right font-semibold">Due</th>
                                 <th class="px-2 py-2 text-right font-semibold">Overdue</th>
@@ -83,6 +103,7 @@
                         </thead>
                         <tbody>
                             @foreach ($rows as $index => $row)
+                                @continue(! $this->rowVisible($row))
                                 <tr wire:key="sheet-row-{{ $row['key'] }}" class="border-b border-gray-100 dark:border-white/5">
                                     <td class="px-2 py-2 font-mono">{{ $row['loan_number'] ?? '—' }}</td>
                                     <td class="px-2 py-2">{{ $row['product'] ?? '—' }}</td>
@@ -90,6 +111,7 @@
                                         <div class="font-medium text-gray-950 dark:text-white">{{ $row['customer_name'] }}</div>
                                         <div class="text-xs text-gray-500">{{ $row['phone'] }}</div>
                                     </td>
+                                    <td class="px-2 py-2">{{ $row['group_name'] ?? '—' }}</td>
                                     <td class="px-2 py-2 text-right">{{ $row['loan_id'] ? Money::format($row['outstanding']) : '—' }}</td>
                                     <td class="px-2 py-2 text-right">{{ $row['loan_id'] ? Money::format($row['amount_due']) : '—' }}</td>
                                     <td class="px-2 py-2 text-right {{ $row['overdue'] > 0 ? 'font-semibold text-danger-600' : '' }}">
@@ -126,7 +148,7 @@
                         </tbody>
                         <tfoot>
                             <tr class="font-semibold text-gray-950 dark:text-white">
-                                <td colspan="6" class="px-2 py-3 text-right">Totals ({{ count($rows) }} clients)</td>
+                                <td colspan="7" class="px-2 py-3 text-right">Totals ({{ count($rows) }} rows)</td>
                                 <td class="px-2 py-3">{{ Money::format($this->totalRepayment()) }}</td>
                                 <td colspan="2"></td>
                                 <td class="px-2 py-3">{{ Money::format($this->totalDeposit()) }}</td>
