@@ -148,9 +148,10 @@ class MembersRelationManager extends RelationManager
                     }),
                 MemberLoansRelationManager::recordDepositAction(fn (LoanGroupMember $record): ?GroupLoan => $record->openLoan),
                 MemberLoansRelationManager::activateAction(fn (LoanGroupMember $record): ?GroupLoan => $record->openLoan),
+                MemberLoansRelationManager::cancelAction(fn (LoanGroupMember $record): ?GroupLoan => $record->openLoan),
                 Action::make('removeMember')
                     ->color('danger')
-                    ->visible(fn (LoanGroupMember $record): bool => $record->status === 'active' && $record->activeLoan === null)
+                    ->visible(fn (LoanGroupMember $record): bool => $record->status === 'active' && $record->openLoan === null)
                     ->authorize(fn (): bool => Filament::auth()->user()->can('update', $this->getOwnerRecord()))
                     ->requiresConfirmation()
                     ->action(function (LoanGroupMember $record): void {

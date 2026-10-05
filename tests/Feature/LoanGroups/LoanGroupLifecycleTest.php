@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
+use App\Actions\GroupLoans\CancelGroupLoanAction;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\LoanGroups\AddLoanGroupMemberAction;
@@ -85,6 +86,28 @@ it('blocks removing a member who has an active loan', function (): void {
 
     expect(fn () => app(RemoveLoanGroupMemberAction::class)->execute($member))
         ->toThrow(ValidationException::class);
+});
+
+it('blocks removing a member whose loan is still a draft until it is cancelled', function (): void {
+    $customer = Customer::factory()->forBranch($this->branch)->create();
+    $draft = app(IssueGroupMemberLoanAction::class)->execute(
+        issuedBy: $this->agent,
+        loanGroup: $this->loanGroup->fresh(),
+        customer: $customer,
+        principal: 1000_00,
+        securityDeposit: 100_00,
+        periodicAmount: 100_00,
+        frequency: LoanFrequency::Weekly,
+        startDate: Carbon::now(),
+    );
+    $member = $draft->loanGroupMember;
+
+    expect(fn () => app(RemoveLoanGroupMemberAction::class)->execute($member))
+        ->toThrow(ValidationException::class, "This member has loan {$draft->loan_number} awaiting activation. Cancel it before removing the member.");
+
+    app(CancelGroupLoanAction::class)->execute($draft, $this->agent);
+
+    expect(app(RemoveLoanGroupMemberAction::class)->execute($member->fresh())->status)->toBe('left');
 });
 
 it('reports the group outstanding as the sum of active member loans', function (): void {

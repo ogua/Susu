@@ -20,6 +20,7 @@ enum SyncOpType: string
     case ActivateGroupLoan = 'group_loan.activate';
     case RecordGroupLoanRepayment = 'group_loan.repayment.record';
     case WriteOffGroupLoan = 'group_loan.write_off';
+    case CancelGroupLoan = 'group_loan.cancel';
     case RestructureLoan = 'loan.restructure';
     case TopUpLoan = 'loan.top_up';
     case WriteOffLoan = 'loan.write_off';
@@ -47,6 +48,7 @@ enum SyncOpType: string
                 self::RecordGroupLoanDeposit,
                 self::ActivateGroupLoan,
                 self::RecordGroupLoanRepayment,
+                self::CancelGroupLoan,
             ],
             // Managers/admins additionally own the individual-loan approve/
             // reject/disburse decisions and every write-off.

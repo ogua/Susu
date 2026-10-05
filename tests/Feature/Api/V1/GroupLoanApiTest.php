@@ -161,6 +161,42 @@ it('exposes a draft loan as open_loan so clients stop offering issue loan', func
         ->assertJsonPath('data.members.0.open_loan.status', 'draft');
 });
 
+it('lets an agent cancel a draft loan directly and through /sync/batch', function (): void {
+    $direct = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson("/api/v1/group-loans/{$direct->id}/cancel", ['reason' => 'Wrong amount'])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cancelled')
+        ->assertJsonPath('data.cancellation_reason', 'Wrong amount');
+
+    $synced = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup->fresh());
+
+    $response = $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'group_loan.cancel',
+            'recorded_at' => Carbon::now()->toISOString(),
+            'payload' => ['group_loan_id' => $synced->id],
+        ]],
+    ]);
+
+    $response->assertOk();
+    expect($response->json('results.0.status'))->toBe('applied')
+        ->and($synced->fresh()->status->value)->toBe('cancelled');
+});
+
+it('refuses to cancel an active loan through the API', function (): void {
+    $loan = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
+    app(RecordGroupLoanDepositAction::class)->execute($loan, $this->savingsAccount, 100_00, $this->agent);
+    app(ActivateGroupLoanAction::class)->execute($loan->fresh(), $this->agent);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson("/api/v1/group-loans/{$loan->id}/cancel")
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('status');
+});
+
 it('replays an offline issue -> deposit -> activate -> repayment through /sync/batch', function (): void {
     $loanId = (string) Str::uuid();
     $now = Carbon::now()->toISOString();

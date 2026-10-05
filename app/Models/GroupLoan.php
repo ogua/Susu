@@ -47,6 +47,9 @@ class GroupLoan extends Model
         'issued_at',
         'activated_at',
         'closed_at',
+        'cancelled_at',
+        'cancelled_by',
+        'cancellation_reason',
         'written_off_at',
         'write_off_reason',
         'write_off_amount',
@@ -73,6 +76,7 @@ class GroupLoan extends Model
             'write_off_savings_applied' => 'integer',
             'issued_at' => 'datetime',
             'activated_at' => 'datetime',
+            'cancelled_at' => 'datetime',
             'closed_at' => 'datetime',
             'written_off_at' => 'datetime',
         ];

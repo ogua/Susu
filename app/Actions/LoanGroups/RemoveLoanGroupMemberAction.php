@@ -8,19 +8,25 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * A LoanGroup roster has no activation freeze — members can be removed
- * anytime, except while they still have an active (unclosed) group loan.
+ * anytime, except while they still have an open group loan: an active one, or a
+ * draft awaiting activation (cancel the draft first).
  */
 class RemoveLoanGroupMemberAction
 {
     public function execute(LoanGroupMember $member): LoanGroupMember
     {
-        $hasActiveLoan = $member->groupLoans()
-            ->where('status', GroupLoanStatus::Active)
-            ->exists();
+        $openLoan = $member->groupLoans()
+            ->whereIn('status', [GroupLoanStatus::Draft, GroupLoanStatus::Active])
+            ->first();
 
-        if ($hasActiveLoan) {
+        if ($openLoan?->status === GroupLoanStatus::Active) {
             throw ValidationException::withMessages([
                 'member' => 'This member cannot be removed while they have an active loan in the group.',
+            ]);
+        }
+        if ($openLoan?->status === GroupLoanStatus::Draft) {
+            throw ValidationException::withMessages([
+                'member' => "This member has loan {$openLoan->loan_number} awaiting activation. Cancel it before removing the member.",
             ]);
         }
 

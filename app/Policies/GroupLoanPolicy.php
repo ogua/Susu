@@ -34,6 +34,13 @@ class GroupLoanPolicy
             && $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
     }
 
+    /** Cancelling an un-activated draft moves no money, so field agents may undo their own issues. */
+    public function cancel(User $user, GroupLoan $groupLoan): bool
+    {
+        return $user->company_id === $groupLoan->company_id
+            && $user->hasRole(['company_admin', 'branch_manager', 'field_agent']);
+    }
+
     public function recordRepayment(User $user, GroupLoan $groupLoan): bool
     {
         return $user->company_id === $groupLoan->company_id

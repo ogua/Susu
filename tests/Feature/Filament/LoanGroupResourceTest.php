@@ -134,6 +134,39 @@ it('replaces Issue Loan with the next step once a member has a draft loan', func
     expect(GroupLoan::where('loan_group_member_id', $member->id)->sole()->status)->toBe(GroupLoanStatus::Active);
 });
 
+it('cancels a draft loan from the members tab, after which the member can be issued again or removed', function (): void {
+    $loanGroup = LoanGroup::factory()->create(['company_id' => $this->branch->company_id, 'branch_id' => $this->branch->id]);
+    $member = LoanGroupMember::factory()->create(['loan_group_id' => $loanGroup->id]);
+
+    bootAdminPanel($this->manager, $this->branch);
+
+    $members = fn () => livewire(MembersRelationManager::class, ['ownerRecord' => $loanGroup, 'pageClass' => ViewLoanGroup::class]);
+
+    $members()
+        ->assertTableActionHidden('cancelLoan', $member)
+        ->callTableAction('issueLoan', record: $member, data: [
+            'principal_amount' => '1000.00',
+            'security_deposit_amount' => '100.00',
+            'periodic_amount' => '100.00',
+            'repayment_frequency' => 'weekly',
+            'start_date' => Carbon::now()->toDateString(),
+        ])
+        ->assertHasNoTableActionErrors()
+        ->assertTableActionHidden('removeMember', $member)
+        ->assertTableActionVisible('cancelLoan', $member);
+
+    $members()
+        ->callTableAction('cancelLoan', record: $member, data: ['reason' => 'Member pulled out'])
+        ->assertHasNoTableActionErrors()
+        ->assertTableActionHidden('cancelLoan', $member)
+        ->assertTableActionVisible('issueLoan', $member)
+        ->assertTableActionVisible('removeMember', $member);
+
+    $loan = GroupLoan::where('loan_group_member_id', $member->id)->sole();
+    expect($loan->status)->toBe(GroupLoanStatus::Cancelled)
+        ->and($loan->cancellation_reason)->toBe('Member pulled out');
+});
+
 it('denies a field agent from adding a loan group member (no update ability)', function (): void {
     $loanGroup = LoanGroup::factory()->create(['company_id' => $this->branch->company_id, 'branch_id' => $this->branch->id]);
 

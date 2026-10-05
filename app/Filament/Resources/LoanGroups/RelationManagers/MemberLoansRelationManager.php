@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\LoanGroups\RelationManagers;
 
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
+use App\Actions\GroupLoans\CancelGroupLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
@@ -64,6 +65,7 @@ class MemberLoansRelationManager extends RelationManager
             ->recordActions([
                 self::recordDepositAction(fn (GroupLoan $record): GroupLoan => $record),
                 self::activateAction(fn (GroupLoan $record): GroupLoan => $record),
+                self::cancelAction(fn (GroupLoan $record): GroupLoan => $record),
                 Action::make('recordRepayment')
                     ->label('Record repayment')
                     ->color('gray')
@@ -189,6 +191,35 @@ class MemberLoansRelationManager extends RelationManager
             ->action(function (Model $record) use ($loanFor): void {
                 app(ActivateGroupLoanAction::class)->execute($loanFor($record), Filament::auth()->user());
                 Notification::make()->title('Loan activated')->success()->send();
+            });
+    }
+
+    /**
+     * Cancels a loan that was issued but never activated. No money moves: any
+     * deposit already paid stays in the member's savings. Shared with the Members
+     * tab and the Group Loans list.
+     *
+     * @param  Closure(Model): ?GroupLoan  $loanFor
+     */
+    public static function cancelAction(Closure $loanFor): Action
+    {
+        return Action::make('cancelLoan')
+            ->label('Cancel loan')
+            ->color('danger')
+            ->icon(Heroicon::XCircle)
+            ->visible(fn (Model $record): bool => $loanFor($record)?->status === GroupLoanStatus::Draft)
+            ->authorize(fn (Model $record): bool => Filament::auth()->user()->can('cancel', $loanFor($record)))
+            ->requiresConfirmation()
+            ->modalHeading(fn (Model $record): string => 'Cancel loan '.$loanFor($record)->loan_number)
+            ->modalDescription(fn (Model $record): string => $loanFor($record)->deposit_status === DepositStatus::Held
+                ? 'The loan was never disbursed. The security deposit already paid stays in the member\'s savings account.'
+                : 'The loan was never disbursed, so nothing needs to be reversed.')
+            ->schema([
+                Textarea::make('reason')->label('Reason (optional)')->maxLength(500),
+            ])
+            ->action(function (array $data, Model $record) use ($loanFor): void {
+                app(CancelGroupLoanAction::class)->execute($loanFor($record), Filament::auth()->user(), $data['reason'] ?? null);
+                Notification::make()->title('Loan cancelled')->success()->send();
             });
     }
 }

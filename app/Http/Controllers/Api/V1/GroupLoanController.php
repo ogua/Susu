@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
+use App\Actions\GroupLoans\CancelGroupLoanAction;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
@@ -11,6 +12,7 @@ use App\Enums\ClientOrigin;
 use App\Enums\LoanFrequency;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
+use App\Http\Requests\Api\V1\CancelGroupLoanRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanDepositRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanRepaymentRequest;
@@ -121,6 +123,15 @@ class GroupLoanController extends Controller
             'group_loan' => GroupLoanResource::make($result->groupLoan->load('loanGroup', 'customer', 'installments')),
             'duplicate' => $result->duplicate,
         ], $result->duplicate ? 200 : 201);
+    }
+
+    public function cancel(CancelGroupLoanRequest $request, string $groupLoan, CancelGroupLoanAction $action): GroupLoanResource
+    {
+        $model = $this->findScoped($request, $groupLoan);
+
+        $groupLoan = $action->execute($model, $request->user(), $request->validated('reason'));
+
+        return GroupLoanResource::make($groupLoan->load('loanGroup', 'customer'));
     }
 
     public function writeOff(WriteOffGroupLoanRequest $request, string $groupLoan, WriteOffGroupLoanAction $action): GroupLoanResource

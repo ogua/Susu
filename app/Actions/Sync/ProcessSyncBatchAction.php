@@ -6,6 +6,7 @@ use App\Actions\Agents\RecordLocationPingsAction;
 use App\Actions\Agents\SubmitAgentDailySummaryAction;
 use App\Actions\Customers\CreateCustomerAction;
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
+use App\Actions\GroupLoans\CancelGroupLoanAction;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
@@ -26,6 +27,7 @@ use App\Enums\LoanFrequency;
 use App\Enums\SyncOpType;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
 use App\Http\Requests\Api\V1\ApproveLoanRequest;
+use App\Http\Requests\Api\V1\CancelGroupLoanRequest;
 use App\Http\Requests\Api\V1\DisburseLoanRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanDepositRequest;
@@ -86,6 +88,7 @@ class ProcessSyncBatchAction
         private TopUpLoanAction $topUpLoan,
         private WriteOffLoanAction $writeOffLoan,
         private WriteOffGroupLoanAction $writeOffGroupLoan,
+        private CancelGroupLoanAction $cancelGroupLoan,
     ) {}
 
     /**
@@ -172,6 +175,7 @@ class ProcessSyncBatchAction
             SyncOpType::TopUpLoan => $this->applyTopUpLoan($actor, $payload, $op['op_id']),
             SyncOpType::WriteOffLoan => $this->applyWriteOffLoan($actor, $payload),
             SyncOpType::WriteOffGroupLoan => $this->applyWriteOffGroupLoan($actor, $origin, $payload),
+            SyncOpType::CancelGroupLoan => $this->applyCancelGroupLoan($actor, $payload),
         };
     }
 
@@ -201,6 +205,7 @@ class ProcessSyncBatchAction
             SyncOpType::TopUpLoan => TopUpLoanRequest::payloadRules(),
             SyncOpType::WriteOffLoan => WriteOffLoanRequest::payloadRules(),
             SyncOpType::WriteOffGroupLoan => WriteOffGroupLoanRequest::payloadRules(),
+            SyncOpType::CancelGroupLoan => CancelGroupLoanRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -580,6 +585,19 @@ class ProcessSyncBatchAction
             savingsAmountApplied: (int) ($payload['savings_amount_applied'] ?? 0),
             origin: $origin,
         );
+
+        return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyCancelGroupLoan(User $actor, array $payload): array
+    {
+        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+
+        $groupLoan = $this->cancelGroupLoan->execute($groupLoan, $actor, $payload['reason'] ?? null);
 
         return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value];
     }

@@ -110,6 +110,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/{groupLoan}/deposit', [GroupLoanController::class, 'recordDeposit'])->name('deposit.store');
             Route::post('/{groupLoan}/activate', [GroupLoanController::class, 'activate'])->name('activate');
             Route::post('/{groupLoan}/repayments', [GroupLoanController::class, 'recordRepayment'])->name('repayments.store');
+            Route::post('/{groupLoan}/cancel', [GroupLoanController::class, 'cancel'])->name('cancel');
 
             // Write-off is manager-tier only (enforced in WriteOffGroupLoanRequest).
             Route::post('/{groupLoan}/write-off', [GroupLoanController::class, 'writeOff'])->name('write-off');

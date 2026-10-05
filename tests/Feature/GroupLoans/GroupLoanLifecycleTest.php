@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
+use App\Actions\GroupLoans\CancelGroupLoanAction;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
@@ -315,6 +316,39 @@ it('refuses a second loan while the first is still a draft awaiting deposit or a
     expect(fn () => issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer))
         ->toThrow(ValidationException::class)
         ->and(GroupLoan::where('customer_id', $this->customer->id)->count())->toBe(1);
+});
+
+it('cancels a draft loan, leaves any paid deposit in savings, and frees the member for a new loan', function (): void {
+    $draft = issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
+    app(RecordGroupLoanDepositAction::class)->execute($draft, $this->savingsAccount, $draft->security_deposit_amount, $this->agent);
+
+    $cancelled = app(CancelGroupLoanAction::class)->execute($draft->fresh(), $this->agent, 'Issued to the wrong member');
+
+    expect($cancelled->status)->toBe(GroupLoanStatus::Cancelled)
+        ->and($cancelled->cancelled_at)->not->toBeNull()
+        ->and($cancelled->cancelled_by)->toBe($this->agent->id)
+        ->and($cancelled->cancellation_reason)->toBe('Issued to the wrong member')
+        ->and($this->savingsAccount->fresh()->balance)->toBe(100_00)
+        ->and($cancelled->loanGroupMember->openLoan)->toBeNull();
+
+    expect(issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer)->status)->toBe(GroupLoanStatus::Draft);
+});
+
+it('treats re-cancelling a cancelled loan as a no-op', function (): void {
+    $draft = issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
+    $first = app(CancelGroupLoanAction::class)->execute($draft, $this->agent);
+
+    $again = app(CancelGroupLoanAction::class)->execute($first, $this->manager, 'replay');
+
+    expect($again->cancelled_by)->toBe($this->agent->id)
+        ->and($again->cancellation_reason)->toBeNull();
+});
+
+it('refuses to cancel an active loan', function (): void {
+    $loan = activateMemberLoan(issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer), $this->agent, $this->savingsAccount);
+
+    expect(fn () => app(CancelGroupLoanAction::class)->execute($loan, $this->agent))
+        ->toThrow(ValidationException::class);
 });
 
 it('uses the client_reference as the group loan id', function (): void {

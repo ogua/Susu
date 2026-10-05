@@ -7,6 +7,7 @@ use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Enums\AccountStatus;
+use App\Filament\Resources\LoanGroups\RelationManagers\MemberLoansRelationManager;
 use App\Models\GroupLoan;
 use App\Models\SavingsAccount;
 use App\Support\Money;
@@ -47,6 +48,7 @@ class GroupLoansTable
                     'active' => 'Active',
                     'closed' => 'Closed',
                     'written_off' => 'Written off',
+                    'cancelled' => 'Cancelled',
                 ]),
                 SelectFilter::make('loan_group')->relationship('loanGroup', 'name'),
             ])
@@ -97,6 +99,7 @@ class GroupLoansTable
                         app(ActivateGroupLoanAction::class)->execute($record, Filament::auth()->user());
                         Notification::make()->title('Group loan activated')->success()->send();
                     }),
+                MemberLoansRelationManager::cancelAction(fn (GroupLoan $record): GroupLoan => $record),
                 Action::make('recordRepayment')
                     ->label('Record repayment')
                     ->color('gray')
