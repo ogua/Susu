@@ -28,7 +28,7 @@ import {
 } from '@/components/ui';
 import { Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '@/location/backgroundTracking';
+import { startBackgroundLocationTracking, stopBackgroundLocationTracking, type TrackingStartResult } from '@/location/backgroundTracking';
 import { useAuthStore } from '@/stores/authStore';
 import { useDashboardCache } from '@/stores/dashboardCache';
 import { useDutyStore } from '@/stores/dutyStore';
@@ -91,11 +91,14 @@ export default function AgentDashboard() {
     if (!cacheHydrated) {
       void hydrateCache();
     }
-    // Reconciles native tracking with the "on duty" default after a fresh
-    // app launch, where this JS state resets but the OS-level task may not
-    // be running yet. Best-effort — never blocks the dashboard on this.
+    // Reconciles native tracking and the server's duty flag with the "on
+    // duty" default after a fresh app launch, where this JS state resets but
+    // the OS-level task may not be running and the server may still have the
+    // agent off duty (which greys them out on the managers' map). Best-effort
+    // — never blocks the dashboard on this.
     if (onDuty) {
-      void startBackgroundLocationTracking();
+      void startBackgroundLocationTracking().then(reportTrackingResult);
+      void setDuty(true).catch(() => undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -110,6 +113,14 @@ export default function AgentDashboard() {
     setRefreshing(false);
   }
 
+  function reportTrackingResult(result: TrackingStartResult) {
+    if (result === 'no-permission') {
+      setDutyError('Location permission is off, so your branch cannot see you on the map. Allow location for SusuApp in your phone settings.');
+    } else if (result === 'failed') {
+      setDutyError('Location sharing could not start. Check that location (GPS) is turned on, then switch duty off and on again.');
+    }
+  }
+
   async function handleToggleDuty(value: boolean) {
     setTogglingDuty(true);
     setDutyError(null);
@@ -117,7 +128,7 @@ export default function AgentDashboard() {
       const confirmed = await setDuty(value);
       setOnDuty(confirmed);
       if (confirmed) {
-        await startBackgroundLocationTracking();
+        reportTrackingResult(await startBackgroundLocationTracking());
       } else {
         await stopBackgroundLocationTracking();
       }

@@ -38,27 +38,36 @@ TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }) => {
   }
 });
 
-/** ~60s / 100m fixes, matching AD-11. Requires "always" location permission. */
-export async function startBackgroundLocationTracking(): Promise<boolean> {
+export type TrackingStartResult = 'started' | 'no-permission' | 'failed';
+
+/**
+ * ~60s fixes (AD-11). Only foreground ("while using the app") permission is
+ * required: on Android the task runs as a user-visible foreground service,
+ * which does not need "Allow all the time". Background permission is still
+ * requested so iOS keeps tracking when the app is minimised, but refusing it
+ * must not stop tracking — Android 11+ refuses it unless the agent goes to
+ * Settings, which previously left every such agent off the map.
+ */
+export async function startBackgroundLocationTracking(): Promise<TrackingStartResult> {
   try {
     const foreground = await Location.requestForegroundPermissionsAsync();
     if (foreground.status !== 'granted') {
-      return false;
+      return 'no-permission';
     }
 
-    const background = await Location.requestBackgroundPermissionsAsync();
-    if (background.status !== 'granted') {
-      return false;
-    }
+    await Location.requestBackgroundPermissionsAsync().catch(() => undefined);
 
     if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK)) {
-      return true;
+      return 'started';
     }
 
     await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
       accuracy: Location.Accuracy.Balanced,
       timeInterval: 60_000,
-      distanceInterval: 100,
+      // No distance filter: an agent standing at one market stall must keep
+      // pinging, or the map marks them "no recent signal" after 15 minutes
+      // and the route view can't detect stops.
+      distanceInterval: 0,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'SusuApp — on duty',
@@ -66,9 +75,9 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
       },
     });
 
-    return true;
+    return 'started';
   } catch {
-    return false;
+    return 'failed';
   }
 }
 

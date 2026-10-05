@@ -55,7 +55,8 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "SusuApp records your route while you are on duty so your branch can verify field collections.",
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       "expo-image",
