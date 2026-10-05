@@ -10,7 +10,6 @@ import {
   getGroupLoan,
   recordGroupLoanDeposit,
   recordGroupLoanRepayment,
-  writeOffGroupLoan,
 } from '@/api/groupLoans';
 import { InstallmentRow } from '@/components/installment-row';
 import { SavingsAccountPicker } from '@/components/savings-account-picker';
@@ -36,6 +35,8 @@ import { Spacing } from '@/constants/theme';
 import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/stores/authStore';
+import { drainOutbox } from '@/sync/engine';
+import { enqueueGroupLoanWriteOff } from '@/sync/ops';
 import { displayFormatted, formatMoney, parseAmountToMinor } from '@/utils/money';
 
 const PER = { daily: 'day', weekly: 'week', monthly: 'month' } as const;
@@ -179,7 +180,21 @@ export default function GroupLoanDetailScreen() {
       confirmLabel: 'Write off loan',
       destructive: true,
       onConfirm: () =>
-        void run('writeOff', () => writeOffGroupLoan(data.id, reason, accountId, savingsApplied), 'Loan written off.'),
+        void run(
+          'writeOff',
+          async () => {
+            // Through the outbox: the sync batch dedupes on op_id, so this
+            // can't be applied twice even if the request is retried.
+            await enqueueGroupLoanWriteOff({
+              group_loan_id: data.id,
+              reason,
+              savings_account_id: accountId,
+              savings_amount_applied: accountId ? savingsApplied : undefined,
+            });
+            void drainOutbox().then(() => queryClient.invalidateQueries({ queryKey: ['groupLoan', groupLoanId] }));
+          },
+          'Write-off saved and sent for processing. The loan status updates once the server confirms it.',
+        ),
     });
   }
 

@@ -21,6 +21,7 @@ const OP_LABELS: Record<string, { label: string; icon: IconName }> = {
   'account.open': { label: 'Savings account opening', icon: 'wallet' },
   'summary.submit': { label: 'Day summary', icon: 'dayClose' },
   'loan.write_off': { label: 'Loan write-off', icon: 'loan' },
+  'group_loan.write_off': { label: 'Group loan write-off', icon: 'savings' },
   'locations.record': { label: 'Route location update', icon: 'location' },
 };
 

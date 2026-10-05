@@ -116,15 +116,34 @@ export interface SavingsAccount {
   updated_at: string;
 }
 
+export type TransactionType =
+  | 'collection'
+  | 'commission'
+  | 'withdrawal'
+  | 'remittance'
+  | 'reversal'
+  | 'adjustment'
+  | 'penalty'
+  | 'savings_interest'
+  | 'shares_purchase'
+  | 'group_loan_deposit_held'
+  | 'group_loan_deposit_refunded'
+  | 'group_loan_deposit_applied'
+  | 'savings_applied_to_loan_write_off'
+  | 'savings_applied_to_group_loan_write_off';
+
 export interface Transaction {
   id: string;
   reference: string;
-  type: 'collection' | 'commission' | 'withdrawal' | 'remittance' | 'reversal' | 'adjustment';
+  /** Known types are labelled; anything newer falls back to a humanized name. */
+  type: TransactionType | (string & {});
   status: 'pending' | 'completed' | 'failed' | 'reversed';
   payment_method: 'cash' | 'mobile_money' | 'internal';
   amount: number;
   amount_formatted: string;
   balance_after: number | null;
+  /** Money into ('credit') or out of ('debit') this account; null if unknown. */
+  direction?: 'credit' | 'debit' | null;
   description: string | null;
   recorded_at: string;
   posted_at: string;

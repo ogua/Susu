@@ -10,7 +10,7 @@ import * as SQLite from 'expo-sqlite';
  */
 
 const DB_NAME = 'susuapp.db';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -47,6 +47,12 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
         value TEXT NOT NULL
       );
     `);
+  }
+
+  if (current < 2) {
+    // Server's per-op result (e.g. a collection's ledger reference and the
+    // account balance after it), shown on the receipt once synced.
+    await db.execAsync(`ALTER TABLE outbox ADD COLUMN result TEXT;`);
   }
 
   if (current !== SCHEMA_VERSION) {

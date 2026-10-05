@@ -326,6 +326,7 @@ function CollectionResult({
 }) {
   const [status, setStatus] = useState<OutboxStatus>('pending');
   const [rejection, setRejection] = useState<string | null>(null);
+  const [server, setServer] = useState<ServerCollectionResult | null>(null);
   const pendingCount = useOutboxStatus((state) => state.pending);
   const syncing = useOutboxStatus((state) => state.syncing);
 
@@ -336,6 +337,7 @@ function CollectionResult({
       if (active && item) {
         setStatus(item.status);
         setRejection(item.last_error);
+        setServer(parseServerResult(item.result));
       }
     });
 
@@ -344,7 +346,8 @@ function CollectionResult({
     };
   }, [saved.opId, pendingCount, syncing]);
 
-  const reference = saved.opId.slice(0, 8).toUpperCase();
+  const deviceReference = saved.opId.slice(0, 8).toUpperCase();
+  const reference = server?.reference ?? deviceReference;
 
   async function shareReceipt() {
     // Plain text so it works in WhatsApp, SMS and email alike. States the
@@ -357,6 +360,8 @@ function CollectionResult({
       `Date: ${formatDateTime(saved.recordedAt)}`,
       collector ? `Collected by: ${collector}` : null,
       `Reference: ${reference}`,
+      server?.commission ? `Commission: ${formatMoney(server.commission)}` : null,
+      server?.balance !== undefined ? `New savings balance: ${formatMoney(server.balance)}` : null,
       status === 'synced' ? 'Status: Confirmed' : 'Status: Pending confirmation',
     ];
     try {
@@ -402,7 +407,7 @@ function CollectionResult({
           business={business}
           footnote={
             status === 'synced'
-              ? 'Confirmed by the server. The updated balance appears on the customer’s statement.'
+              ? 'Confirmed by the server.'
               : 'Pending server confirmation. Keep this reference until it syncs.'
           }
         >
@@ -412,7 +417,15 @@ function CollectionResult({
           <KeyValueRow label="Payment method" value="Cash" />
           <KeyValueRow label="Date & time" value={formatDateTime(saved.recordedAt)} />
           {collector ? <KeyValueRow label="Collected by" value={collector} /> : null}
-          <KeyValueRow label="Device reference" value={reference} />
+          {server?.reference ? (
+            <KeyValueRow label="Receipt number" value={server.reference} />
+          ) : (
+            <KeyValueRow label="Device reference" value={deviceReference} />
+          )}
+          {server?.commission ? <KeyValueRow label="Commission charged" value={formatMoney(server.commission)} /> : null}
+          {server?.balance !== undefined ? (
+            <KeyValueRow label="New savings balance" value={formatMoney(server.balance)} emphasis />
+          ) : null}
           <View style={styles.statusRow}>
             <ThemedText type="small" themeColor="textSecondary">
               Status
@@ -427,6 +440,30 @@ function CollectionResult({
       </ResultView>
     </Screen>
   );
+}
+
+interface ServerCollectionResult {
+  reference?: string;
+  balance?: number;
+  commission?: number;
+}
+
+/** The sync batch's result for collection.record: { reference, balance, commission, … }. */
+function parseServerResult(raw: string | null): ServerCollectionResult | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    return {
+      reference: typeof parsed.reference === 'string' ? parsed.reference : undefined,
+      balance: typeof parsed.balance === 'number' ? parsed.balance : undefined,
+      commission: typeof parsed.commission === 'number' ? parsed.commission : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Server rejection reasons are validation messages; hide anything technical. */

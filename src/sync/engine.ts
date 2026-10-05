@@ -33,7 +33,8 @@ export interface SyncSummary {
 interface SyncOpResult {
   op_id: string;
   status: 'applied' | 'duplicate' | 'rejected';
-  errors?: string[];
+  /** Op-specific outcome, e.g. { reference, balance } for a collection. */
+  result?: Record<string, unknown> & { errors?: string[] };
 }
 
 let inFlight = false;
@@ -85,13 +86,13 @@ export async function drainOutbox(): Promise<SyncSummary> {
     for (const result of data.results) {
       if (result.status === 'applied') {
         summary.applied += 1;
-        await markSynced(result.op_id);
+        await markSynced(result.op_id, result.result);
       } else if (result.status === 'duplicate') {
         summary.duplicates += 1;
-        await markSynced(result.op_id);
+        await markSynced(result.op_id, result.result);
       } else {
         summary.rejected += 1;
-        await markRejected(result.op_id, result.errors?.join(' ') ?? 'Rejected by server.');
+        await markRejected(result.op_id, result.result?.errors?.join(' ') ?? 'Rejected by server.');
       }
     }
   } catch (error) {

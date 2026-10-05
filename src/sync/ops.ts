@@ -79,6 +79,20 @@ export async function enqueueLocationPings(pings: LocationPingPayload[]): Promis
 }
 
 /**
+ * Group-loan write-off through the outbox rather than the direct route: the
+ * sync batch dedupes on op_id, so a retry after a timeout can't write the
+ * loan off twice, and it also works offline. Manager-tier on the server.
+ */
+export async function enqueueGroupLoanWriteOff(payload: {
+  group_loan_id: string;
+  reason: string;
+  savings_account_id?: string;
+  savings_amount_applied?: number;
+}): Promise<string> {
+  return enqueue('group_loan.write_off', payload);
+}
+
+/**
  * Individual loan write-off has no direct HTTP route on the backend — it's
  * sync-only. Optionally draws a chosen amount down from one of the
  * customer's savings accounts first; only the residual is booked as a loss.

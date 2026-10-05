@@ -12,6 +12,8 @@ export interface OutboxItem {
   status: OutboxStatus;
   attempts: number;
   last_error: string | null;
+  /** JSON of the server's per-op result once synced (schema v2). */
+  result: string | null;
 }
 
 /**
@@ -67,9 +69,13 @@ export async function getOutboxItem(opId: string): Promise<OutboxItem | null> {
   return db.getFirstAsync<OutboxItem>(`SELECT * FROM outbox WHERE op_id = ?`, opId);
 }
 
-export async function markSynced(opId: string): Promise<void> {
+export async function markSynced(opId: string, result?: Record<string, unknown> | null): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`UPDATE outbox SET status = 'synced' WHERE op_id = ?`, opId);
+  await db.runAsync(
+    `UPDATE outbox SET status = 'synced', result = ? WHERE op_id = ?`,
+    result ? JSON.stringify(result) : null,
+    opId,
+  );
 }
 
 export async function markRejected(opId: string, error: string): Promise<void> {

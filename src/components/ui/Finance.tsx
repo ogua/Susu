@@ -5,8 +5,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { Transaction } from '@/types/api';
-import { formatDateTime } from '@/utils/format';
+import type { Transaction, TransactionType } from '@/types/api';
+import { formatDateTime, humanize } from '@/utils/format';
 import { displayFormatted, formatMoney } from '@/utils/money';
 
 /**
@@ -71,18 +71,26 @@ export function HeroStat({ label, value }: { label: string; value: string }) {
 type Direction = 'credit' | 'debit' | 'neutral';
 
 /**
- * Transaction amounts arrive unsigned; direction comes from the type as it
- * affects the customer's savings account. Reversals and adjustments can go
- * either way and the API doesn't say which, so they are shown unsigned
- * rather than guessed.
+ * Transaction amounts arrive unsigned. The server's `direction` (derived from
+ * the entry's lines on this savings account) is authoritative; the per-type
+ * default below is only a fallback for older servers. Types whose effect
+ * can't be known from the type alone stay unsigned rather than guessed.
  */
-const TRANSACTION_META: Record<Transaction['type'], { label: string; icon: IconName; direction: Direction }> = {
+const TRANSACTION_META: Record<TransactionType, { label: string; icon: IconName; direction: Direction }> = {
   collection: { label: 'Deposit', icon: 'arrowDown', direction: 'credit' },
   withdrawal: { label: 'Withdrawal', icon: 'arrowUp', direction: 'debit' },
   commission: { label: 'Commission charged', icon: 'percent', direction: 'debit' },
   remittance: { label: 'Remittance', icon: 'bank', direction: 'neutral' },
   reversal: { label: 'Correction (reversal)', icon: 'reverse', direction: 'neutral' },
   adjustment: { label: 'Adjustment', icon: 'adjust', direction: 'neutral' },
+  penalty: { label: 'Penalty charged', icon: 'warning', direction: 'debit' },
+  savings_interest: { label: 'Interest earned', icon: 'savings', direction: 'credit' },
+  shares_purchase: { label: 'Shares purchased', icon: 'chart', direction: 'credit' },
+  group_loan_deposit_held: { label: 'Loan security deposit', icon: 'lock', direction: 'credit' },
+  group_loan_deposit_refunded: { label: 'Security deposit refunded', icon: 'reverse', direction: 'neutral' },
+  group_loan_deposit_applied: { label: 'Deposit applied to loan', icon: 'loan', direction: 'debit' },
+  savings_applied_to_loan_write_off: { label: 'Savings applied to loan', icon: 'loan', direction: 'debit' },
+  savings_applied_to_group_loan_write_off: { label: 'Savings applied to group loan', icon: 'loan', direction: 'debit' },
 };
 
 const METHOD_LABELS: Record<Transaction['payment_method'], string> = {
@@ -93,7 +101,12 @@ const METHOD_LABELS: Record<Transaction['payment_method'], string> = {
 
 export function TransactionRow({ transaction }: { transaction: Transaction }) {
   const theme = useTheme();
-  const meta = TRANSACTION_META[transaction.type] ?? { label: transaction.type, icon: 'info', direction: 'neutral' };
+  const known = TRANSACTION_META[transaction.type as TransactionType];
+  const meta = {
+    label: known?.label ?? humanize(transaction.type),
+    icon: known?.icon ?? ('info' as IconName),
+    direction: (transaction.direction ?? known?.direction ?? 'neutral') as Direction,
+  };
   const sign = meta.direction === 'credit' ? '+' : meta.direction === 'debit' ? '−' : '';
   const amountColor =
     transaction.status === 'reversed' || transaction.status === 'failed'

@@ -70,10 +70,12 @@ See the audit doc.
 `tsc` ✅ · `lint` ✅ (0/0) · `expo export --platform android` ✅. Still to do: device pass on a small Android (keyboard + gesture bar), a notched iPhone, dark mode, offline → online sync of a collection, MoMo happy and timeout paths.
 
 ## Backend / parity backlog
-1. 🔧 `client_reference` on `POST /customer/withdrawal-requests` and `POST /group-loans/{id}/write-off` (mobile currently relies on UI guards only).
-2. 🔧 `/sync/batch` → return `reference` + `balance_after` for `collection.record` so receipts can show the server reference and new balance.
-3. 🔧 Transaction resource: add a `direction` (credit/debit) so reversals/adjustments can be signed correctly.
-4. 🔧 Outbox ops should carry the recording user. Today an unsynced op drains under whoever signs in next (mobile now warns on sign-out).
-5. 🔧🔁 Schedules/routes, missed-collection tracking, notifications, PIN unlock, password reset.
-6. 🔧🔁 Shareable receipt URL (like `statement-url`) for WhatsApp/SMS/print.
-7. 🔁 Parity: this pass is visual/UX only and adds no new user-facing features, so web and desktop need no feature work. The **safety fixes** (confirmations on write-off and payout, double-submit guards) are worth mirroring in Filament and JavaFX.
+1. ✅ `client_reference` on `POST /customer/withdrawal-requests` (backend `3957c9c`: migration + action + 3 Pest tests); mobile sends it.
+2. ✅ Group-loan write-off now goes through the outbox (`group_loan.write_off` sync op, deduped on `op_id`). No backend change needed.
+3. ✅ Receipts show the server receipt number, commission and new savings balance. `/sync/batch` already returned them; the engine now stores each op's `result` (outbox schema v2).
+4. ✅ Transaction `direction` (credit/debit) on customer account history (backend `3957c9c`); mobile prefers it over the type-based fallback and labels interest, penalties, shares, deposit and savings-applied types.
+5. ✅ Rejected sync ops now show the server's real reason. The engine previously read `errors` from the wrong level and always showed a generic message.
+6. 🔧 Outbox ops should carry the recording user. Today an unsynced op drains under whoever signs in next (mobile warns on sign-out).
+7. 🔧🔁 Schedules/routes, missed-collection tracking, notifications, PIN unlock, password reset.
+8. 🔧🔁 Shareable/printable server receipt URL (mobile shares a text receipt today).
+9. 🔁 Parity: web (Filament) and desktop (JavaFX) can adopt `direction` and send `client_reference` on withdrawal requests; both fields are optional, so nothing breaks if they don't.

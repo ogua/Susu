@@ -14,6 +14,7 @@ import {
   ResultView,
   Screen,
 } from '@/components/ui';
+import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
 import { useOnline } from '@/hooks/use-network';
 import type { SavingsProductType } from '@/types/api';
 import { formatDate } from '@/utils/format';
@@ -37,13 +38,13 @@ export default function WithdrawScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submittedAmount, setSubmittedAmount] = useState<number | null>(null);
   const submittingRef = useRef(false);
+  const { key, rotate } = useIdempotencyKey();
 
   const amountMinor = parseAmountToMinor(amount);
 
   async function submit(minor: number) {
-    // Guard against a second tap between confirm and the first request
-    // resolving. The backend has no idempotency key for withdrawal requests
-    // yet, so the client must not send twice.
+    // Ref guard stops a second tap; client_reference makes a retry after a
+    // timeout return the original request instead of creating another.
     if (submittingRef.current || submittedAmount !== null) {
       return;
     }
@@ -54,6 +55,7 @@ export default function WithdrawScreen() {
         savings_account_id: accountId,
         amount: minor,
         reason: reason.trim() || undefined,
+        client_reference: key,
       });
       setSubmittedAmount(minor);
     } catch (err) {
@@ -122,7 +124,10 @@ export default function WithdrawScreen() {
       <AmountInput
         label="Amount to withdraw"
         value={amount}
-        onChangeText={setAmount}
+        onChangeText={(text) => {
+          setAmount(text);
+          rotate();
+        }}
         editable={!isBlockedFd}
         error={error}
       />
