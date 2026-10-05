@@ -59,6 +59,11 @@ use App\Models\SavingsProduct;
 use App\Models\SyncOp;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -101,8 +106,11 @@ class ProcessSyncBatchAction
      */
     public function execute(User $actor, ClientOrigin $origin, array $ops): array
     {
-        $role = $actor->getRoleNames()->first() ?? 'none';
-        $allowed = SyncOpType::allowedFor($role);
+        $allowed = $actor->getRoleNames()
+            ->flatMap(fn (string $role): array => SyncOpType::allowedFor($role))
+            ->unique(fn (SyncOpType $type): string => $type->value)
+            ->values()
+            ->all();
         $results = [];
 
         foreach ($ops as $op) {
@@ -124,7 +132,7 @@ class ProcessSyncBatchAction
 
         $existing = SyncOp::where('op_id', $opId)->first();
         if ($existing !== null) {
-            return ['op_id' => $opId, 'status' => 'duplicate', 'result' => $existing->result];
+            return $this->duplicateOf($actor, $existing);
         }
 
         if (! in_array($opType, $allowed, true)) {
@@ -134,20 +142,82 @@ class ProcessSyncBatchAction
         }
 
         try {
-            $result = $this->dispatch($actor, $origin, $opType, $op);
+            // The sync_ops row is claimed before the op runs, inside the same
+            // transaction: a concurrent submit of the same op_id blocks on the
+            // unique index and then sees this op as a duplicate instead of
+            // applying it a second time. Any failure rolls the claim back.
+            return DB::transaction(function () use ($actor, $origin, $opType, $op): array {
+                $claim = $this->claim($actor, $origin, $op);
+                $result = $this->dispatch($actor, $origin, $opType, $op);
+                $claim->update(['result' => $result]);
 
-            return $this->record($actor, $origin, $op, 'applied', $result);
+                return ['op_id' => $op['op_id'], 'status' => 'applied', 'result' => $result];
+            });
+        } catch (UniqueConstraintViolationException) {
+            $existing = SyncOp::where('op_id', $opId)->first();
+
+            return $existing !== null
+                ? $this->duplicateOf($actor, $existing)
+                : $this->retryable($opId, 'This operation is already being applied. Try again shortly.');
         } catch (ValidationException $e) {
             return $this->record($actor, $origin, $op, 'rejected', [
                 'errors' => collect($e->errors())->flatten()->all(),
             ]);
+        } catch (ModelNotFoundException) {
+            // Usually a record this op depends on (a customer, an account)
+            // has not reached the server yet, so the op stays retryable.
+            return $this->retryable($opId, 'A record this operation refers to was not found.');
         } catch (Throwable $e) {
             report($e);
 
-            return $this->record($actor, $origin, $op, 'rejected', [
-                'errors' => ['The server could not apply this operation.'],
-            ]);
+            // Unexpected/transient failures (deadlocks, timeouts) are not
+            // stored, so the client can resend the same op_id.
+            return $this->retryable($opId, 'The server could not apply this operation.');
         }
+    }
+
+    /**
+     * Company + branch scope for every record an op refers to: staff can only
+     * act on branches they belong to, same as the Filament tenant scope.
+     *
+     * @param  class-string<Model>  $model
+     */
+    private function scoped(string $model, User $actor): Builder
+    {
+        return $model::query()
+            ->where('company_id', $actor->company_id)
+            ->whereIn('branch_id', $actor->accessibleBranchIds());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function duplicateOf(User $actor, SyncOp $existing): array
+    {
+        if ($existing->company_id !== $actor->company_id) {
+            return [
+                'op_id' => $existing->op_id,
+                'status' => 'rejected',
+                'result' => ['errors' => ['This operation id is already in use.']],
+            ];
+        }
+
+        return ['op_id' => $existing->op_id, 'status' => 'duplicate', 'result' => $existing->result];
+    }
+
+    /**
+     * A rejection that is not stored: resending the same op_id re-runs it.
+     *
+     * @return array<string, mixed>
+     */
+    private function retryable(string $opId, string $message): array
+    {
+        return [
+            'op_id' => $opId,
+            'status' => 'rejected',
+            'retryable' => true,
+            'result' => ['errors' => [$message]],
+        ];
     }
 
     /**
@@ -180,8 +250,8 @@ class ProcessSyncBatchAction
             SyncOpType::WriteOffLoan => $this->applyWriteOffLoan($actor, $payload),
             SyncOpType::WriteOffGroupLoan => $this->applyWriteOffGroupLoan($actor, $origin, $payload),
             SyncOpType::CancelGroupLoan => $this->applyCancelGroupLoan($actor, $payload),
-            SyncOpType::RecalculateLoanSchedule => $this->applyRecalculateSchedule($actor, Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']), $payload),
-            SyncOpType::RecalculateGroupLoanSchedule => $this->applyRecalculateSchedule($actor, GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']), $payload),
+            SyncOpType::RecalculateLoanSchedule => $this->applyRecalculateSchedule($actor, $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']), $payload),
+            SyncOpType::RecalculateGroupLoanSchedule => $this->applyRecalculateSchedule($actor, $this->scoped(GroupLoan::class, $actor)->findOrFail($payload['group_loan_id']), $payload),
         };
     }
 
@@ -241,7 +311,7 @@ class ProcessSyncBatchAction
      */
     private function applyOpenAccount(User $actor, array $payload, string $opId): array
     {
-        $customer = Customer::where('company_id', $actor->company_id)->findOrFail($payload['customer_id']);
+        $customer = $this->scoped(Customer::class, $actor)->findOrFail($payload['customer_id']);
         $product = SavingsProduct::where('company_id', $actor->company_id)->findOrFail($payload['savings_product_id']);
 
         $account = $this->openAccount->execute(
@@ -263,7 +333,7 @@ class ProcessSyncBatchAction
      */
     private function applyCollection(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
     {
-        $account = SavingsAccount::where('company_id', $actor->company_id)
+        $account = $this->scoped(SavingsAccount::class, $actor)
             ->findOrFail($payload['savings_account_id']);
 
         $result = $this->recordCollection->execute(
@@ -316,10 +386,10 @@ class ProcessSyncBatchAction
         // Sync ops are staff-only (SyncBatchRequest), so customer_id is always
         // required here even though the direct API lets a customer omit it
         // and apply for themselves instead.
-        $customer = Customer::where('company_id', $actor->company_id)->findOrFail($payload['customer_id']);
+        $customer = $this->scoped(Customer::class, $actor)->findOrFail($payload['customer_id']);
         $product = LoanProduct::where('company_id', $actor->company_id)->findOrFail($payload['loan_product_id']);
         $savingsAccount = isset($payload['savings_account_id'])
-            ? SavingsAccount::where('company_id', $actor->company_id)->find($payload['savings_account_id'])
+            ? $this->scoped(SavingsAccount::class, $actor)->find($payload['savings_account_id'])
             : null;
 
         $loan = $this->applyForLoan->execute(
@@ -344,7 +414,7 @@ class ProcessSyncBatchAction
      */
     private function applyLoanRepayment(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
     {
-        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']);
 
         $result = $this->recordLoanRepayment->execute(
             loan: $loan,
@@ -369,7 +439,7 @@ class ProcessSyncBatchAction
      */
     private function applyApproveLoan(User $actor, array $payload): array
     {
-        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']);
         $loan = $this->approveLoan->execute($loan, $actor);
 
         return ['loan_id' => $loan->id, 'status' => $loan->status->value];
@@ -381,7 +451,7 @@ class ProcessSyncBatchAction
      */
     private function applyRejectLoan(User $actor, array $payload): array
     {
-        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']);
         $loan = $this->rejectLoan->execute($loan, $actor, $payload['reason']);
 
         return ['loan_id' => $loan->id, 'status' => $loan->status->value];
@@ -393,7 +463,7 @@ class ProcessSyncBatchAction
      */
     private function applyDisburseLoan(User $actor, array $payload): array
     {
-        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']);
         $loan = $this->disburseLoan->execute($loan, $actor);
 
         return ['loan_id' => $loan->id, 'status' => $loan->status->value, 'outstanding_balance' => $loan->outstanding_balance];
@@ -405,7 +475,9 @@ class ProcessSyncBatchAction
      */
     private function applyGroupContribution(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
     {
-        $member = GroupMember::whereHas('group', fn ($query) => $query->where('company_id', $actor->company_id))
+        $member = GroupMember::whereHas('group', fn ($query) => $query
+            ->where('company_id', $actor->company_id)
+            ->whereIn('branch_id', $actor->accessibleBranchIds()))
             ->findOrFail($payload['group_member_id']);
 
         $contribution = $this->recordGroupContribution->execute(
@@ -428,8 +500,8 @@ class ProcessSyncBatchAction
      */
     private function applyIssueGroupMemberLoan(User $actor, array $payload, string $opId): array
     {
-        $loanGroup = LoanGroup::where('company_id', $actor->company_id)->findOrFail($payload['loan_group_id']);
-        $customer = Customer::where('company_id', $actor->company_id)->findOrFail($payload['customer_id']);
+        $loanGroup = $this->scoped(LoanGroup::class, $actor)->findOrFail($payload['loan_group_id']);
+        $customer = $this->scoped(Customer::class, $actor)->findOrFail($payload['customer_id']);
 
         $groupLoan = $this->issueGroupMemberLoan->execute(
             issuedBy: $actor,
@@ -453,8 +525,8 @@ class ProcessSyncBatchAction
      */
     private function applyGroupLoanDeposit(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
     {
-        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
-        $savingsAccount = SavingsAccount::where('company_id', $actor->company_id)->findOrFail($payload['savings_account_id']);
+        $groupLoan = $this->scoped(GroupLoan::class, $actor)->findOrFail($payload['group_loan_id']);
+        $savingsAccount = $this->scoped(SavingsAccount::class, $actor)->findOrFail($payload['savings_account_id']);
 
         $result = $this->recordGroupLoanDeposit->execute(
             groupLoan: $groupLoan,
@@ -479,7 +551,7 @@ class ProcessSyncBatchAction
      */
     private function applyActivateGroupLoan(User $actor, ClientOrigin $origin, array $payload): array
     {
-        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->scoped(GroupLoan::class, $actor)->findOrFail($payload['group_loan_id']);
         $groupLoan = $this->activateGroupLoan->execute($groupLoan, $actor, $origin);
 
         return [
@@ -495,7 +567,7 @@ class ProcessSyncBatchAction
      */
     private function applyGroupLoanRepayment(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
     {
-        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->scoped(GroupLoan::class, $actor)->findOrFail($payload['group_loan_id']);
 
         $result = $this->recordGroupLoanRepayment->execute(
             groupLoan: $groupLoan,
@@ -520,7 +592,7 @@ class ProcessSyncBatchAction
      */
     private function applyRestructureLoan(User $actor, array $payload, string $opId): array
     {
-        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']);
         $newProduct = LoanProduct::where('company_id', $actor->company_id)->findOrFail($payload['loan_product_id']);
 
         $newLoan = $this->restructureLoan->execute(
@@ -540,7 +612,7 @@ class ProcessSyncBatchAction
      */
     private function applyTopUpLoan(User $actor, array $payload, string $opId): array
     {
-        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']);
 
         $newLoan = $this->topUpLoan->execute(
             $loan,
@@ -559,9 +631,9 @@ class ProcessSyncBatchAction
      */
     private function applyWriteOffLoan(User $actor, array $payload): array
     {
-        $loan = Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']);
+        $loan = $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']);
         $savingsAccount = isset($payload['savings_account_id'])
-            ? SavingsAccount::where('company_id', $actor->company_id)->findOrFail($payload['savings_account_id'])
+            ? $this->scoped(SavingsAccount::class, $actor)->findOrFail($payload['savings_account_id'])
             : null;
 
         $loan = $this->writeOffLoan->execute(
@@ -581,9 +653,9 @@ class ProcessSyncBatchAction
      */
     private function applyWriteOffGroupLoan(User $actor, ClientOrigin $origin, array $payload): array
     {
-        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->scoped(GroupLoan::class, $actor)->findOrFail($payload['group_loan_id']);
         $savingsAccount = isset($payload['savings_account_id'])
-            ? SavingsAccount::where('company_id', $actor->company_id)->findOrFail($payload['savings_account_id'])
+            ? $this->scoped(SavingsAccount::class, $actor)->findOrFail($payload['savings_account_id'])
             : null;
 
         $groupLoan = $this->writeOffGroupLoan->execute(
@@ -604,7 +676,7 @@ class ProcessSyncBatchAction
      */
     private function applyCancelGroupLoan(User $actor, array $payload): array
     {
-        $groupLoan = GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']);
+        $groupLoan = $this->scoped(GroupLoan::class, $actor)->findOrFail($payload['group_loan_id']);
 
         $groupLoan = $this->cancelGroupLoan->execute($groupLoan, $actor, $payload['reason'] ?? null);
 
@@ -634,7 +706,25 @@ class ProcessSyncBatchAction
      */
     private function record(User $actor, ClientOrigin $origin, array $op, string $status, array $result): array
     {
-        SyncOp::create([
+        try {
+            $this->claim($actor, $origin, $op, $status, $result);
+        } catch (UniqueConstraintViolationException) {
+            $existing = SyncOp::where('op_id', $op['op_id'])->first();
+            if ($existing !== null) {
+                return $this->duplicateOf($actor, $existing);
+            }
+        }
+
+        return ['op_id' => $op['op_id'], 'status' => $status, 'result' => $result];
+    }
+
+    /**
+     * @param  array{op_id: string, op_type: string, payload: array<string, mixed>, recorded_at: string}  $op
+     * @param  array<string, mixed>|null  $result
+     */
+    private function claim(User $actor, ClientOrigin $origin, array $op, string $status = 'applied', ?array $result = null): SyncOp
+    {
+        return SyncOp::create([
             'op_id' => $op['op_id'],
             'company_id' => $actor->company_id,
             'actor_id' => $actor->id,
@@ -644,7 +734,5 @@ class ProcessSyncBatchAction
             'result' => $result,
             'recorded_at' => Carbon::parse($op['recorded_at']),
         ]);
-
-        return ['op_id' => $op['op_id'], 'status' => $status, 'result' => $result];
     }
 }

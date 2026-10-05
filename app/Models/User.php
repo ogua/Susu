@@ -53,6 +53,9 @@ class User extends Authenticatable implements HasAvatar, HasTenants
         'remember_token',
     ];
 
+    /** @var array<int, string>|null */
+    private ?array $accessibleBranchIdsCache = null;
+
     /**
      * Get the attributes that should be cast.
      *
@@ -120,6 +123,28 @@ class User extends Authenticatable implements HasAvatar, HasTenants
     public function canAccessTenant(Model $tenant): bool
     {
         return $this->branches()->whereKey($tenant)->exists();
+    }
+
+    /**
+     * Branches this user may act on outside Filament (API, sync) — the same
+     * branch_users membership Filament tenancy uses, plus the home branch.
+     *
+     * @return array<int, string>
+     */
+    public function accessibleBranchIds(): array
+    {
+        return $this->accessibleBranchIdsCache ??= $this->branches()
+            ->pluck('branches.id')
+            ->push($this->branch_id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function canAccessBranchId(?string $branchId): bool
+    {
+        return $branchId !== null && in_array($branchId, $this->accessibleBranchIds(), true);
     }
 
     public function canAccessPanel(Panel $panel): bool

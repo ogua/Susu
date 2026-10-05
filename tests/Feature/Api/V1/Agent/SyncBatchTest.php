@@ -5,6 +5,8 @@ use App\Actions\Groups\AddGroupMemberAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
+use App\Actions\Savings\RecordCollectionAction;
+use App\Actions\Sync\ProcessSyncBatchAction;
 use App\Enums\LoanStatus;
 use App\Models\Branch;
 use App\Models\Customer;
@@ -486,4 +488,103 @@ it('lets a field agent record a group contribution through the sync batch', func
     $response->assertOk()
         ->assertJsonPath('results.0.status', 'applied')
         ->assertJsonPath('results.0.result.amount', 1000);
+});
+
+it('keeps an op retryable when a record it refers to is not on the server yet', function (): void {
+    $op = collectionOp((string) Str::uuid(), 500);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson('/api/v1/sync/batch', ['ops' => [$op]])
+        ->assertOk()
+        ->assertJsonPath('results.0.status', 'rejected')
+        ->assertJsonPath('results.0.retryable', true);
+
+    expect(SyncOp::where('op_id', $op['op_id'])->exists())->toBeFalse();
+});
+
+it('does not store an unexpected failure, so resending the op applies it', function (): void {
+    $op = collectionOp($this->account->id, 500);
+
+    $this->mock(RecordCollectionAction::class)
+        ->shouldReceive('execute')->once()->andThrow(new RuntimeException('Deadlock found'));
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson('/api/v1/sync/batch', ['ops' => [$op]])
+        ->assertOk()
+        ->assertJsonPath('results.0.status', 'rejected')
+        ->assertJsonPath('results.0.retryable', true);
+
+    expect(SyncOp::where('op_id', $op['op_id'])->exists())->toBeFalse()
+        ->and(JournalEntry::count())->toBe(0);
+
+    $this->forgetMock(RecordCollectionAction::class);
+    app()->forgetInstance(ProcessSyncBatchAction::class);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson('/api/v1/sync/batch', ['ops' => [$op]])
+        ->assertOk()
+        ->assertJsonPath('results.0.status', 'applied');
+});
+
+it('refuses an op_id already used by another company', function (): void {
+    $op = collectionOp($this->account->id, 500);
+
+    $otherBranch = Branch::factory()->create();
+    $otherAgent = User::factory()->fieldAgent($otherBranch)->create();
+    SyncOp::create([
+        'op_id' => $op['op_id'],
+        'company_id' => $otherBranch->company_id,
+        'actor_id' => $otherAgent->id,
+        'origin' => 'mobile',
+        'op_type' => 'collection.record',
+        'status' => 'applied',
+        'result' => ['secret' => 'value'],
+        'recorded_at' => now(),
+    ]);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson('/api/v1/sync/batch', ['ops' => [$op]])
+        ->assertOk()
+        ->assertJsonPath('results.0.status', 'rejected')
+        ->assertJsonMissingPath('results.0.result.secret');
+});
+
+it('refuses ops on records in a branch the agent does not belong to', function (): void {
+    $otherBranch = Branch::factory()->create(['company_id' => $this->branch->company_id]);
+    $otherAccount = SavingsAccount::factory()->create([
+        'branch_id' => $otherBranch->id,
+        'company_id' => $this->branch->company_id,
+        'savings_product_id' => $this->product->id,
+        'agent_id' => $this->agent->id,
+        'contribution_amount' => 500,
+    ]);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson('/api/v1/sync/batch', ['ops' => [collectionOp($otherAccount->id, 500)]])
+        ->assertOk()
+        ->assertJsonPath('results.0.status', 'rejected');
+
+    expect($otherAccount->refresh()->contributions_this_cycle)->toBe(0);
+});
+
+it('allows ops granted by any of the user\'s roles', function (): void {
+    $this->agent->assignRole('branch_manager');
+    $this->agent->unsetRelation('roles');
+
+    $loan = Loan::factory()->create([
+        'company_id' => $this->branch->company_id,
+        'branch_id' => $this->branch->id,
+        'customer_id' => $this->customer->id,
+        'status' => LoanStatus::Applied,
+    ]);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->postJson('/api/v1/sync/batch', ['ops' => [[
+            'op_id' => (string) Str::uuid(),
+            'op_type' => 'loan.reject',
+            'payload' => ['loan_id' => $loan->id, 'reason' => 'Incomplete documents'],
+            'recorded_at' => now()->toISOString(),
+        ]]])
+        ->assertOk()
+        ->assertJsonPath('results.0.status', 'applied');
 });
