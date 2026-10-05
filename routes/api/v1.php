@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Agent;
+use App\Http\Controllers\Api\V1\AgentPositionController;
 use App\Http\Controllers\Api\V1\AgentRouteController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
@@ -130,7 +131,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->name('customer');
     });
 
-    // Manager view of one field agent's movement for a day (Track agent page).
+    // Manager views of agent tracking (web Agent Tracking + Track agent pages).
+    Route::get('/agents/positions', [AgentPositionController::class, 'index'])
+        ->middleware(['role:branch_manager|company_admin', 'throttle:60,1'])
+        ->name('agents.positions');
     Route::get('/agents/{agent}/route', [AgentRouteController::class, 'show'])
         ->middleware(['role:branch_manager|company_admin', 'throttle:60,1'])
         ->name('agents.route');

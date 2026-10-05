@@ -165,3 +165,22 @@ it('links each agent on the tracking page to their track page', function (): voi
         ->assertActionVisible(TestAction::make('track')->table($position))
         ->assertActionHasUrl(TestAction::make('track')->table($position), TrackAgent::getUrl(['agent' => $this->agent->id]));
 });
+
+it('lists the branch agents live positions for a manager over the API', function (): void {
+    recordRoute($this->agent, [[0, 5.6, -0.19], [5, 5.61, -0.19]]);
+    Sanctum::actingAs($this->manager);
+
+    $this->getJson('/api/v1/agents/positions')
+        ->assertOk()
+        ->assertJsonPath('branch.id', $this->branch->id)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $this->agent->id)
+        ->assertJsonPath('data.0.pings_today', 2)
+        ->assertJsonStructure(['data' => [['name', 'initials', 'color', 'photo_url', 'status', 'lat', 'lng', 'collections_total']]]);
+});
+
+it('does not list agent positions to field agents', function (): void {
+    Sanctum::actingAs($this->agent);
+
+    $this->getJson('/api/v1/agents/positions')->assertForbidden();
+});

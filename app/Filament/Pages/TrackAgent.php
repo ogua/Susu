@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Actions\Agents\BuildAgentPositionsAction;
 use App\Actions\Agents\BuildAgentRouteAction;
 use App\Models\AgentLivePosition;
 use App\Models\User;
@@ -27,9 +28,6 @@ class TrackAgent extends Page
     protected static ?string $slug = 'agent-tracking/track';
 
     protected static bool $shouldRegisterNavigation = false;
-
-    /** Live signals older than this read as "no recent signal". */
-    private const STALE_MINUTES = 15;
 
     #[Url]
     public ?string $agent = null;
@@ -109,12 +107,12 @@ class TrackAgent extends Page
         abort_unless($agent && Filament::auth()->user()->can('trackRoute', $agent), 404);
 
         $position = AgentLivePosition::query()->where('agent_id', $agent->id)->first();
-        $isStale = $position?->located_at?->lt(now()->subMinutes(self::STALE_MINUTES)) ?? true;
+        $isStale = $position?->located_at?->lt(now()->subMinutes(BuildAgentPositionsAction::STALE_MINUTES)) ?? true;
 
         $this->agentInfo = [
             'id' => $agent->id,
             'name' => $agent->name,
-            ...AgentTracking::agentIdentity($agent->id, $agent->name),
+            ...BuildAgentPositionsAction::identity($agent->id, $agent->name),
             'phone' => $agent->phone,
             'photo_url' => $agent->photo_url,
             'status' => ! $position?->on_duty ? 'off_duty' : ($isStale ? 'stale' : 'active'),
