@@ -13,6 +13,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Checker Inbox: withdrawal requests awaiting a manager decision. Reuses
@@ -55,7 +56,14 @@ class PendingWithdrawalRequestsWidget extends TableWidget
                     ->authorize('approve')
                     ->requiresConfirmation()
                     ->action(function (WithdrawalRequest $record): void {
-                        app(DecideWithdrawalAction::class)->approve(Filament::auth()->user(), $record);
+                        try {
+                            app(DecideWithdrawalAction::class)->approve(Filament::auth()->user(), $record);
+                        } catch (ValidationException $e) {
+                            Notification::make()->title(collect($e->errors())->flatten()->first())->danger()->send();
+
+                            return;
+                        }
+
                         Notification::make()->title('Withdrawal approved')->success()->send();
                     }),
                 Action::make('reject')

@@ -26,11 +26,14 @@ class PayWithdrawalAction
 
     public function execute(User $paidBy, WithdrawalRequest $request): WithdrawalRequest
     {
-        if ($request->status !== WithdrawalStatus::Approved) {
-            throw ValidationException::withMessages(['request' => 'Only approved requests can be paid.']);
-        }
-
         return DB::transaction(function () use ($paidBy, $request): WithdrawalRequest {
+            // Re-read under lock: two concurrent "pay" clicks must not both post.
+            $locked = WithdrawalRequest::whereKey($request->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== WithdrawalStatus::Approved) {
+                throw ValidationException::withMessages(['request' => 'Only approved requests can be paid.']);
+            }
+            $request->setRawAttributes($locked->getAttributes(), true);
+
             /** @var SavingsAccount $account */
             $account = SavingsAccount::whereKey($request->savings_account_id)->lockForUpdate()->firstOrFail();
 

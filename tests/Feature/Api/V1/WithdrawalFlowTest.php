@@ -153,3 +153,33 @@ it('labels each account transaction with its direction for the customer', functi
         ->and($directions['commission'])->toBe(['debit'])
         ->and($directions['withdrawal'])->toBe(['debit']);
 });
+
+it('pays an approved request only once even when paid twice', function (): void {
+    $request = app(RequestWithdrawalAction::class)->execute($this->agent, $this->account, 500);
+    app(DecideWithdrawalAction::class)->approve($this->manager, $request);
+    $balanceBefore = $this->account->refresh()->balance;
+
+    $stale = WithdrawalRequest::find($request->id);
+    app(PayWithdrawalAction::class)->execute($this->manager, $request->refresh());
+
+    expect(fn () => app(PayWithdrawalAction::class)->execute($this->manager, $stale))
+        ->toThrow(ValidationException::class);
+    expect($this->account->refresh()->balance)->toBe($balanceBefore - 500);
+});
+
+it('stops a manager approving a withdrawal they requested', function (): void {
+    $request = app(RequestWithdrawalAction::class)->execute($this->manager, $this->account, 500);
+
+    expect(fn () => app(DecideWithdrawalAction::class)->approve($this->manager, $request))
+        ->toThrow(ValidationException::class, 'You cannot approve a withdrawal you requested.');
+    expect($request->refresh()->status)->toBe(WithdrawalStatus::Pending);
+});
+
+it('lets a company admin approve a withdrawal they requested', function (): void {
+    $admin = User::factory()->companyAdmin($this->branch->company)->create();
+    $request = app(RequestWithdrawalAction::class)->execute($admin, $this->account, 500);
+
+    app(DecideWithdrawalAction::class)->approve($admin, $request);
+
+    expect($request->refresh()->status)->toBe(WithdrawalStatus::Approved);
+});

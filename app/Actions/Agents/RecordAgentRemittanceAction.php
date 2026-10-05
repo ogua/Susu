@@ -5,10 +5,12 @@ namespace App\Actions\Agents;
 use App\Enums\ClientOrigin;
 use App\Enums\TransactionType;
 use App\Models\JournalEntry;
+use App\Models\LedgerAccount;
 use App\Models\User;
 use App\Services\Ledger\ChartOfAccounts;
 use App\Services\Ledger\EntryData;
 use App\Services\Ledger\LedgerService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -35,27 +37,34 @@ class RecordAgentRemittanceAction
             }
         }
 
-        $agentCash = $this->chart->agentCash($agent)->refresh();
+        $branchCash = $this->chart->branchCash($agent->branch);
+        $agentCashId = $this->chart->agentCash($agent)->id;
 
-        if ($amount <= 0 || $amount > $agentCash->balance) {
-            throw ValidationException::withMessages([
-                'amount' => 'Remittance exceeds the cash this agent is holding ('.$agentCash->balance.').',
-            ]);
-        }
+        return DB::transaction(function () use ($agent, $amount, $receivedBy, $clientReference, $origin, $branchCash, $agentCashId): JournalEntry {
+            // Lock the agent's cash account so concurrent remittances can't
+            // both pass the balance check and drive it negative.
+            $agentCash = LedgerAccount::whereKey($agentCashId)->lockForUpdate()->firstOrFail();
 
-        return $this->ledger->post(new EntryData(
-            company: $agent->company,
-            type: TransactionType::Remittance,
-            lines: [
-                ['account' => $this->chart->branchCash($agent->branch), 'debit' => $amount],
-                ['account' => $agentCash, 'credit' => $amount],
-            ],
-            branch: $agent->branch,
-            origin: $origin,
-            recordedBy: $receivedBy ?? $agent,
-            clientReference: $clientReference,
-            description: "Cash remittance from {$agent->name}",
-            meta: ['agent_id' => $agent->id, 'amount' => $amount],
-        ));
+            if ($amount <= 0 || $amount > $agentCash->balance) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Remittance exceeds the cash this agent is holding ('.$agentCash->balance.').',
+                ]);
+            }
+
+            return $this->ledger->post(new EntryData(
+                company: $agent->company,
+                type: TransactionType::Remittance,
+                lines: [
+                    ['account' => $branchCash, 'debit' => $amount],
+                    ['account' => $agentCash, 'credit' => $amount],
+                ],
+                branch: $agent->branch,
+                origin: $origin,
+                recordedBy: $receivedBy ?? $agent,
+                clientReference: $clientReference,
+                description: "Cash remittance from {$agent->name}",
+                meta: ['agent_id' => $agent->id, 'amount' => $amount],
+            ));
+        });
     }
 }

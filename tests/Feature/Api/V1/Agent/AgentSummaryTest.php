@@ -10,6 +10,7 @@ use App\Models\Customer;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 beforeEach(function (): void {
     seedRoles();
@@ -77,4 +78,9 @@ it('lets a branch manager reconcile a submitted day sheet', function (): void {
     app(ReconcileAgentDayAction::class)->execute($this->manager, $record);
 
     expect($record->refresh()->status)->toBe(AgentSummaryStatus::Reconciled);
+});
+
+it('refuses a remittance larger than the cash the agent is holding', function (): void {
+    expect(fn () => app(RecordAgentRemittanceAction::class)->execute($this->agent, 10_000_000))
+        ->toThrow(ValidationException::class);
 });

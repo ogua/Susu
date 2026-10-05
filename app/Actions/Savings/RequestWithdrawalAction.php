@@ -9,6 +9,7 @@ use App\Models\SavingsAccount;
 use App\Models\User;
 use App\Models\WithdrawalRequest;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class RequestWithdrawalAction
@@ -33,36 +34,42 @@ class RequestWithdrawalAction
             }
         }
 
-        if ($account->status !== AccountStatus::Active) {
-            throw ValidationException::withMessages(['account' => 'Withdrawals are only possible on active accounts.']);
-        }
-        if ($account->product->type === SavingsProductType::FixedDeposit && $account->matured_at === null) {
-            throw ValidationException::withMessages(['account' => 'Fixed deposits cannot be withdrawn before their maturity date.']);
-        }
-
-        $held = (int) $account->withdrawalRequests()
-            ->whereIn('status', [WithdrawalStatus::Pending, WithdrawalStatus::Approved])
-            ->sum('amount');
-
-        if ($amount <= 0 || $amount > $account->balance - $held) {
-            throw ValidationException::withMessages([
-                'amount' => 'Requested amount exceeds the available balance.',
-            ]);
-        }
-
         try {
-            return WithdrawalRequest::create([
-                'company_id' => $account->company_id,
-                'branch_id' => $account->branch_id,
-                'savings_account_id' => $account->id,
-                'customer_id' => $account->customer_id,
-                'amount' => $amount,
-                'penalty_amount' => $this->earlyWithdrawalPenalty($account, $amount),
-                'reason' => $reason,
-                'status' => WithdrawalStatus::Pending,
-                'requested_by' => $requestedBy->id,
-                'client_reference' => $clientReference,
-            ]);
+            return DB::transaction(function () use ($requestedBy, $account, $amount, $reason, $clientReference): WithdrawalRequest {
+                // Lock the account so two concurrent requests can't both pass
+                // the available-balance check.
+                $account = SavingsAccount::whereKey($account->id)->lockForUpdate()->firstOrFail();
+
+                if ($account->status !== AccountStatus::Active) {
+                    throw ValidationException::withMessages(['account' => 'Withdrawals are only possible on active accounts.']);
+                }
+                if ($account->product->type === SavingsProductType::FixedDeposit && $account->matured_at === null) {
+                    throw ValidationException::withMessages(['account' => 'Fixed deposits cannot be withdrawn before their maturity date.']);
+                }
+
+                $held = (int) $account->withdrawalRequests()
+                    ->whereIn('status', [WithdrawalStatus::Pending, WithdrawalStatus::Approved])
+                    ->sum('amount');
+
+                if ($amount <= 0 || $amount > $account->balance - $held) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Requested amount exceeds the available balance.',
+                    ]);
+                }
+
+                return WithdrawalRequest::create([
+                    'company_id' => $account->company_id,
+                    'branch_id' => $account->branch_id,
+                    'savings_account_id' => $account->id,
+                    'customer_id' => $account->customer_id,
+                    'amount' => $amount,
+                    'penalty_amount' => $this->earlyWithdrawalPenalty($account, $amount),
+                    'reason' => $reason,
+                    'status' => WithdrawalStatus::Pending,
+                    'requested_by' => $requestedBy->id,
+                    'client_reference' => $clientReference,
+                ]);
+            });
         } catch (UniqueConstraintViolationException $e) {
             // A concurrent retry with the same reference won the race.
             if ($clientReference === null) {

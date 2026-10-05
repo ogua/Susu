@@ -13,6 +13,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Validation\ValidationException;
 
 class WithdrawalRequestsTable
 {
@@ -44,7 +45,14 @@ class WithdrawalRequestsTable
                     ->authorize('approve')
                     ->requiresConfirmation()
                     ->action(function (WithdrawalRequest $record): void {
-                        app(DecideWithdrawalAction::class)->approve(Filament::auth()->user(), $record);
+                        try {
+                            app(DecideWithdrawalAction::class)->approve(Filament::auth()->user(), $record);
+                        } catch (ValidationException $e) {
+                            Notification::make()->title(collect($e->errors())->flatten()->first())->danger()->send();
+
+                            return;
+                        }
+
                         Notification::make()->title('Withdrawal approved')->success()->send();
                     }),
                 Action::make('reject')
@@ -64,7 +72,14 @@ class WithdrawalRequestsTable
                     ->authorize('pay')
                     ->requiresConfirmation()
                     ->action(function (WithdrawalRequest $record): void {
-                        app(PayWithdrawalAction::class)->execute(Filament::auth()->user(), $record);
+                        try {
+                            app(PayWithdrawalAction::class)->execute(Filament::auth()->user(), $record);
+                        } catch (ValidationException $e) {
+                            Notification::make()->title(collect($e->errors())->flatten()->first())->danger()->send();
+
+                            return;
+                        }
+
                         Notification::make()->title('Withdrawal paid')->success()->send();
                     }),
             ])

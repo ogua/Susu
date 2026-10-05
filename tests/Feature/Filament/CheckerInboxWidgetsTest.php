@@ -64,7 +64,7 @@ it('shows a pending withdrawal request and lets a manager approve it from the wi
         'contribution_amount' => 500,
         'balance' => 1000,
     ]);
-    $request = app(RequestWithdrawalAction::class)->execute($this->manager, $account, 500);
+    $request = app(RequestWithdrawalAction::class)->execute($this->agent, $account, 500);
 
     $this->actingAs($this->manager);
     bootAdminPanelWithTenant($this->branch);
