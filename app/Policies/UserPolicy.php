@@ -34,6 +34,15 @@ class UserPolicy
     }
 
     /**
+     * Movement history is duty-scoped tracking data (Act 843): only the
+     * field agent's own managers may replay it.
+     */
+    public function trackRoute(User $user, User $target): bool
+    {
+        return $target->hasRole('field_agent') && $this->canManage($user, $target);
+    }
+
+    /**
      * Roles $user may assign to staff they manage, most-senior first.
      *
      * @return list<string>

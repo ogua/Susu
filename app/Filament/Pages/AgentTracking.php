@@ -2,10 +2,12 @@
 
 namespace App\Filament\Pages;
 
+use App\Actions\Agents\BuildAgentRouteAction;
 use App\Models\AgentDailySummary;
 use App\Models\AgentLivePosition;
 use App\Models\AgentLocationPing;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -110,9 +112,8 @@ class AgentTracking extends Page implements HasTable
             return [
                 'id' => $position->agent_id,
                 'name' => $name,
-                'first_name' => Str::before($name, ' '),
-                'initials' => Str::of($name)->explode(' ')->filter()->take(2)->map(fn (string $part): string => Str::upper(Str::substr($part, 0, 1)))->implode(''),
-                'color' => self::AGENT_COLORS[crc32($position->agent_id) % count(self::AGENT_COLORS)],
+                ...self::agentIdentity($position->agent_id, $name),
+                'track_url' => TrackAgent::getUrl(['agent' => $position->agent_id]),
                 'phone' => $position->agent?->phone,
                 'email' => $position->agent?->email,
                 'photo_url' => $position->agent?->photo_url,
@@ -134,41 +135,41 @@ class AgentTracking extends Page implements HasTable
     /** Loads today's ping trail for one agent, called from the map's detail panel. */
     public function selectAgent(string $agentId): void
     {
-        $this->selectedAgentId = $agentId;
-
-        $this->trail = AgentLocationPing::query()
+        $agent = AgentLivePosition::query()
+            ->where('branch_id', Filament::getTenant()?->id)
             ->where('agent_id', $agentId)
-            ->whereDate('recorded_at', now()->toDateString())
-            ->orderBy('recorded_at')
-            ->get(['latitude', 'longitude', 'recorded_at'])
-            ->map(fn (AgentLocationPing $ping): array => [
-                'lat' => (float) $ping->latitude,
-                'lng' => (float) $ping->longitude,
-                'at' => $ping->recorded_at->format('g:i A'),
-            ])
-            ->all();
+            ->with('agent')
+            ->first()
+            ?->agent;
 
-        $this->trailDistanceKm = round($this->distanceAlong($this->trail), 2);
+        if (! $agent) {
+            return;
+        }
+
+        $this->selectedAgentId = $agentId;
+        $route = app(BuildAgentRouteAction::class)->execute($agent, now());
+
+        $this->trail = array_map(fn (array $point): array => [
+            'lat' => $point['lat'],
+            'lng' => $point['lng'],
+            'at' => $point['time'],
+        ], $route['points']);
+        $this->trailDistanceKm = $route['summary']['distance_km'];
     }
 
     /**
-     * Sum of great-circle (haversine) distances between consecutive points, in km.
+     * Initials, short name and a stable per-agent colour, shared by the
+     * tracking map and the single-agent Track page.
      *
-     * @param  array<int, array{lat: float, lng: float}>  $points
+     * @return array{first_name: string, initials: string, color: string}
      */
-    private function distanceAlong(array $points): float
+    public static function agentIdentity(string $agentId, string $name): array
     {
-        $totalKm = 0.0;
-
-        for ($i = 1; $i < count($points); $i++) {
-            $latDelta = deg2rad($points[$i]['lat'] - $points[$i - 1]['lat']);
-            $lngDelta = deg2rad($points[$i]['lng'] - $points[$i - 1]['lng']);
-            $a = sin($latDelta / 2) ** 2
-                + cos(deg2rad($points[$i - 1]['lat'])) * cos(deg2rad($points[$i]['lat'])) * sin($lngDelta / 2) ** 2;
-            $totalKm += 6371 * 2 * atan2(sqrt($a), sqrt(1 - $a));
-        }
-
-        return $totalKm;
+        return [
+            'first_name' => Str::before($name, ' '),
+            'initials' => Str::of($name)->explode(' ')->filter()->take(2)->map(fn (string $part): string => Str::upper(Str::substr($part, 0, 1)))->implode(''),
+            'color' => self::AGENT_COLORS[crc32($agentId) % count(self::AGENT_COLORS)],
+        ];
     }
 
     public function clearSelection(): void
@@ -193,6 +194,14 @@ class AgentTracking extends Page implements HasTable
                 TextColumn::make('latitude')->label('Lat'),
                 TextColumn::make('longitude')->label('Lng'),
                 TextColumn::make('located_at')->label('Last seen')->since()->sortable(),
+            ])
+            ->recordActions([
+                Action::make('track')
+                    ->label('Track agent')
+                    ->icon(Heroicon::OutlinedMap)
+                    ->url(fn (AgentLivePosition $record): string => TrackAgent::getUrl(['agent' => $record->agent_id]))
+                    ->visible(fn (AgentLivePosition $record): bool => $record->agent !== null
+                        && (Filament::auth()->user()?->can('trackRoute', $record->agent) ?? false)),
             ])
             ->poll('10s')
             ->defaultSort('on_duty', 'desc');

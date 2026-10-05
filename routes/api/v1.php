@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Agent;
+use App\Http\Controllers\Api\V1\AgentRouteController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
 use App\Http\Controllers\Api\V1\Customer;
@@ -128,6 +129,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->middleware('role:customer')
             ->name('customer');
     });
+
+    // Manager view of one field agent's movement for a day (Track agent page).
+    Route::get('/agents/{agent}/route', [AgentRouteController::class, 'show'])
+        ->middleware(['role:branch_manager|company_admin', 'throttle:60,1'])
+        ->name('agents.route');
 
     // Back-office reports: JSON data plus short-lived signed download URLs
     // onto the web PDF/Excel routes.

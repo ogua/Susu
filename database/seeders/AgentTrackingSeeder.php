@@ -15,13 +15,16 @@ use Illuminate\Support\Facades\Storage;
 
 /**
  * Seeds 10 field agents on the first company's first branch, each with a
- * live position and today's GPS trail around Accra, so the Agent Tracking
- * map has something to show. Mixes fresh, stale and off-duty agents.
- * Re-runnable: agents are matched by email and today's trail is replaced.
+ * live position and GPS trails for today and yesterday around Accra (with
+ * stops along the way), so the Agent Tracking map and Track agent replay
+ * have something to show. Mixes fresh, stale and off-duty agents.
+ * Re-runnable: agents are matched by email and both days' trails are replaced.
  */
 class AgentTrackingSeeder extends Seeder
 {
-    private const PINGS_PER_TRAIL = 12;
+    private const PINGS_TODAY = 40;
+
+    private const PINGS_YESTERDAY = 72;
 
     /** @var list<array{name: string, portrait: string, area: string, lat: float, lng: float, state: string}> */
     private const AGENTS = [
@@ -61,16 +64,24 @@ class AgentTrackingSeeder extends Seeder
 
             AgentLocationPing::query()
                 ->where('agent_id', $agent->id)
-                ->whereDate('recorded_at', now()->toDateString())
+                ->where('recorded_at', '>=', now()->subDay()->startOfDay())
                 ->delete();
 
             $setDutyStatus->execute($agent, true);
+
+            // Yesterday first so today's last ping ends up as the live position.
+            $recordPings->execute($agent, $this->trailFor(
+                $profile['lat'] + fake()->randomFloat(4, 0.002, 0.012),
+                $profile['lng'] + fake()->randomFloat(4, -0.01, 0.01),
+                now()->subDay()->setTime(16, fake()->numberBetween(0, 59)),
+                self::PINGS_YESTERDAY,
+            ));
 
             $lastPingAt = $profile['state'] === 'fresh'
                 ? now()->subMinutes(fake()->numberBetween(0, 4))
                 : now()->subMinutes(fake()->numberBetween(30, 90));
 
-            $recordPings->execute($agent, $this->trailFor($profile['lat'], $profile['lng'], $lastPingAt));
+            $recordPings->execute($agent, $this->trailFor($profile['lat'], $profile['lng'], $lastPingAt, self::PINGS_TODAY));
 
             AgentDailySummary::query()
                 ->where('agent_id', $agent->id)
@@ -114,17 +125,22 @@ class AgentTrackingSeeder extends Seeder
     }
 
     /**
-     * A meandering walk ending at the given point, one ping every ~5 minutes.
+     * A field round ending at the given point, one ping every 5 minutes:
+     * walking legs with a gently drifting heading, broken up by 15–25 minute
+     * stops (tiny GPS jitter in place) like visits to customers' stalls.
      *
      * @return list<array{latitude: float, longitude: float, accuracy: float, recorded_at: string}>
      */
-    private function trailFor(float $endLat, float $endLng, \DateTimeInterface $endAt): array
+    private function trailFor(float $endLat, float $endLng, \DateTimeInterface $endAt, int $count): array
     {
         $pings = [];
         $lat = $endLat;
         $lng = $endLng;
+        $heading = fake()->randomFloat(2, 0, 2 * M_PI);
+        $stopPingsLeft = 0;
+        $walkPingsLeft = fake()->numberBetween(3, 7);
 
-        for ($step = 0; $step < self::PINGS_PER_TRAIL; $step++) {
+        for ($step = 0; $step < $count; $step++) {
             $pings[] = [
                 'latitude' => round($lat, 7),
                 'longitude' => round($lng, 7),
@@ -132,8 +148,28 @@ class AgentTrackingSeeder extends Seeder
                 'recorded_at' => now()->setTimestamp($endAt->getTimestamp())->subMinutes($step * 5)->toISOString(),
             ];
 
-            $lat += fake()->randomFloat(5, -0.0015, 0.0015);
-            $lng += fake()->randomFloat(5, -0.0015, 0.0015);
+            if ($stopPingsLeft > 0) {
+                $stopPingsLeft--;
+                $lat += fake()->randomFloat(5, -0.00008, 0.00008);
+                $lng += fake()->randomFloat(5, -0.00008, 0.00008);
+
+                continue;
+            }
+
+            if (--$walkPingsLeft <= 0) {
+                $stopPingsLeft = fake()->numberBetween(3, 5);
+                $walkPingsLeft = fake()->numberBetween(3, 7);
+            }
+
+            $heading += fake()->randomFloat(2, -0.6, 0.6);
+
+            // Accra's coast is to the south: turn inland rather than walk into the sea.
+            if ($lat < $endLat - 0.003) {
+                $heading = M_PI / 2;
+            }
+            $legDegrees = fake()->randomFloat(5, 0.0008, 0.0018);
+            $lat += sin($heading) * $legDegrees;
+            $lng += cos($heading) * $legDegrees;
         }
 
         return array_reverse($pings);
