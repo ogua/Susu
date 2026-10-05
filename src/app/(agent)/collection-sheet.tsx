@@ -25,7 +25,7 @@ import { Spacing } from '@/constants/theme';
 import { drainOutbox } from '@/sync/engine';
 import { enqueueCollection, enqueueGroupLoanRepayment, enqueueLoanRepayment } from '@/sync/ops';
 import type { CollectionSheetRow } from '@/types/api';
-import { formatMoney, minorToInput, parseAmountToMinor } from '@/utils/money';
+import { formatMoney, parseAmountToMinor } from '@/utils/money';
 
 type Entry = { repayment: string; deposit: string };
 
@@ -33,8 +33,9 @@ const MY_SHEET = 'mine';
 
 /**
  * "Enter Transaction" — the day's collection sheet. Pick a customer group (or
- * "My sheet" for everything due to me today); each row is pre-filled with
- * what the member owes, plus an optional savings deposit. Submitting queues
+ * "My sheet" for everything due to me today); each row shows what the member
+ * owes (one tap fills it in) plus an optional savings deposit. Rows start
+ * empty so only customers who actually paid are posted. Submitting queues
  * one outbox op per amount, so a sheet can be worked without signal and
  * syncs later — each op is idempotent on its op_id.
  */
@@ -57,7 +58,9 @@ export default function CollectionSheetScreen() {
 
   function entryFor(row: CollectionSheetRow): Entry {
     return {
-      repayment: edits[row.key]?.repayment ?? (row.loan_id && row.amount_due > 0 ? minorToInput(row.amount_due) : ''),
+      // Never pre-filled: an untouched row must post nothing, or customers who
+      // didn't pay would be credited. The "due" chip fills it in one tap.
+      repayment: edits[row.key]?.repayment ?? '',
       deposit: edits[row.key]?.deposit ?? '',
     };
   }
@@ -79,10 +82,14 @@ export default function CollectionSheetScreen() {
   const rows = sheet.data ?? [];
   let totalRepayments = 0;
   let totalDeposits = 0;
+  let payers = 0;
   for (const row of rows) {
     const entry = entryFor(row);
-    totalRepayments += parseAmountToMinor(entry.repayment) ?? 0;
-    totalDeposits += parseAmountToMinor(entry.deposit) ?? 0;
+    const repayment = parseAmountToMinor(entry.repayment) ?? 0;
+    const deposit = parseAmountToMinor(entry.deposit) ?? 0;
+    totalRepayments += repayment;
+    totalDeposits += deposit;
+    if (repayment > 0 || deposit > 0) payers++;
   }
   const totals = { repayments: totalRepayments, deposits: totalDeposits };
 
@@ -153,7 +160,7 @@ export default function CollectionSheetScreen() {
 
     confirmAction({
       title: 'Post collection sheet?',
-      message: `${formatMoney(totals.repayments)} in repayments and ${formatMoney(totals.deposits)} in deposits.`,
+      message: `${formatMoney(totals.repayments)} in repayments and ${formatMoney(totals.deposits)} in deposits from ${payers} of ${rows.length} customer(s). Only post money you have actually collected.`,
       confirmLabel: 'Post',
       onConfirm: () => void post(rows),
     });
@@ -181,7 +188,7 @@ export default function CollectionSheetScreen() {
           <View style={styles.footer}>
             <View style={styles.totals}>
               <ThemedText type="caption" themeColor="textMuted">
-                Repayments {formatMoney(totals.repayments)} · Deposits {formatMoney(totals.deposits)}
+                {payers} of {rows.length} paying · Repayments {formatMoney(totals.repayments)} · Deposits {formatMoney(totals.deposits)}
               </ThemedText>
             </View>
             <Button title="Submit sheet" icon="checkCircle" loading={submitting} onPress={handleSubmit} />
@@ -231,7 +238,8 @@ export default function CollectionSheetScreen() {
                 size="md"
                 value={entryFor(row).repayment}
                 onChangeText={(value) => update(row.key, 'repayment', value)}
-                hint={`Balance ${formatMoney(row.outstanding)}`}
+                hint={`Balance ${formatMoney(row.outstanding)} · tap the amount due if paid in full`}
+                quickAmounts={row.amount_due > 0 ? [row.amount_due] : undefined}
               />
             ) : null}
             {row.savings_account_id ? (
