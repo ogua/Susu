@@ -10,8 +10,7 @@ use InvalidArgumentException;
 /**
  * Company-scoped SMS sending. Each company configures its own provider and
  * registered sender ID (company_sms_settings); the log driver is the default
- * so development needs no provider account. Arkesel/Hubtel drivers are added
- * when the production provider is chosen.
+ * so development needs no provider account. Arkesel is the production driver.
  */
 class SmsService
 {
@@ -38,7 +37,7 @@ class SmsService
     {
         $settings = $this->settingsFor($company);
 
-        return $this->driver($settings->provider)->send($to, $body, $settings->sender_id);
+        return $this->driver($settings->provider, $settings->api_key)->send($to, $body, $settings->sender_id);
     }
 
     /**
@@ -50,7 +49,10 @@ class SmsService
     {
         $senderId = config('services.platform_sms.sender_id');
 
-        return $this->driver(config('services.platform_sms.provider', 'log'))->send($to, $body, $senderId);
+        return $this->driver(
+            config('services.platform_sms.provider', 'log'),
+            config('services.platform_sms.api_key'),
+        )->send($to, $body, $senderId);
     }
 
     /**
@@ -77,10 +79,11 @@ class SmsService
         return $inWindow ? max(0, $now->diffInSeconds($release, false)) : 0;
     }
 
-    protected function driver(string $provider): SmsDriver
+    protected function driver(string $provider, ?string $apiKey = null): SmsDriver
     {
         return match ($provider) {
             'log' => new LogSmsDriver,
+            'arkesel' => new ArkeselSmsDriver((string) $apiKey, (string) config('services.arkesel.base_url', 'https://sms.arkesel.com')),
             default => throw new InvalidArgumentException(
                 "SMS provider '{$provider}' is not implemented yet."
             ),

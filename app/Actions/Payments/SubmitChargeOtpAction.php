@@ -21,7 +21,7 @@ class SubmitChargeOtpAction
             throw ValidationException::withMessages(['otp' => 'This payment is not waiting for an OTP.']);
         }
 
-        $response = $this->paystack->submitOtp($intent->provider_reference ?? $intent->client_reference, $otp);
+        $response = $this->paystack->forIntent($intent)->submitOtp($intent->provider_reference ?? $intent->client_reference, $otp);
         $data = $response['data'] ?? [];
 
         // Routed through complete() so an OTP that immediately confirms the

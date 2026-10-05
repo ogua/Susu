@@ -10,6 +10,7 @@ use App\Models\SavingsAccount;
 use App\Models\User;
 use App\Services\Payments\PaystackClient;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Hosted-checkout fallback (AD-13's "flexible" second flow): returns an
@@ -42,6 +43,15 @@ class InitializeCheckoutAction
             return ['intent' => $existing, 'authorization_url' => $authorizationUrl];
         }
 
+        $account->loadMissing('company.paymentSetting');
+        $paystack = $this->paystack->forCompany($account->company);
+
+        if (! $paystack->isConfigured()) {
+            throw ValidationException::withMessages([
+                'amount' => 'Mobile money payments are not set up for this company yet.',
+            ]);
+        }
+
         $intent = PaymentIntent::create([
             'company_id' => $account->company_id,
             'branch_id' => $account->branch_id,
@@ -49,6 +59,7 @@ class InitializeCheckoutAction
             'payable_id' => $account->id,
             'initiated_by' => $initiatedBy->id,
             'flow' => PaymentFlow::Checkout,
+            'paystack_account' => PaystackClient::usesCompanyAccount($account->company) ? 'company' : 'platform',
             'amount' => $amount,
             'status' => PaymentIntentStatus::Initiated,
             'client_reference' => $clientReference,
@@ -59,7 +70,7 @@ class InitializeCheckoutAction
         // client_reference (the caller's own idempotency key) stays as given.
         $providerReference = 'SUSU-'.$clientReference;
 
-        $response = $this->paystack->initializeTransaction(
+        $response = $paystack->initializeTransaction(
             $this->emailFor($account, $initiatedBy),
             $amount,
             $providerReference,

@@ -2,6 +2,8 @@
 
 namespace App\Services\Payments;
 
+use App\Models\Company;
+use App\Models\PaymentIntent;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
@@ -10,6 +12,9 @@ use Illuminate\Support\Facades\Http;
  * No SDK package — just the Http facade, so removing/swapping providers
  * later never touches vendor code. All amounts are already minor units
  * (pesewas), matching Paystack's own convention.
+ *
+ * The container-built instance uses the platform key; forCompany()/forIntent()
+ * swap in a company's own key when it has connected its Paystack account.
  */
 class PaystackClient
 {
@@ -21,6 +26,38 @@ class PaystackClient
     {
         $this->secretKey = $secretKey ?? (string) config('services.paystack.secret_key');
         $this->baseUrl = $baseUrl ?? (string) config('services.paystack.base_url');
+    }
+
+    /** Whether a company's charges go to its own Paystack account (else the platform's). */
+    public static function usesCompanyAccount(Company $company): bool
+    {
+        return (bool) $company->paymentSetting?->hasOwnPaystackAccount();
+    }
+
+    /** The client new charges for this company should be created with. */
+    public function forCompany(Company $company): self
+    {
+        return self::usesCompanyAccount($company)
+            ? new self($company->paymentSetting->paystack_secret_key, $this->baseUrl)
+            : $this;
+    }
+
+    /**
+     * The client for an existing charge — always the account it was created
+     * on, so verify/OTP keep working even if the company changes keys later.
+     */
+    public function forIntent(PaymentIntent $intent): self
+    {
+        if ($intent->paystack_account !== 'company') {
+            return $this;
+        }
+
+        return new self((string) $intent->company->paymentSetting?->paystack_secret_key, $this->baseUrl);
+    }
+
+    public function isConfigured(): bool
+    {
+        return $this->secretKey !== '';
     }
 
     /**

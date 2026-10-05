@@ -24,6 +24,7 @@ class PaymentIntent extends Model
         'payable_id',
         'initiated_by',
         'flow',
+        'paystack_account',
         'channel',
         'phone',
         'amount',

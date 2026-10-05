@@ -68,6 +68,16 @@ return [
     'platform_sms' => [
         'provider' => env('PLATFORM_SMS_PROVIDER', 'log'),
         'sender_id' => env('PLATFORM_SMS_SENDER_ID'),
+        'api_key' => env('PLATFORM_SMS_API_KEY'),
+    ],
+
+    /*
+     * Arkesel host. Companies bring their own API key and sender ID
+     * (company_sms_settings); only the host is shared, so a white-label
+     * Arkesel endpoint can be swapped in here.
+     */
+    'arkesel' => [
+        'base_url' => env('ARKESEL_BASE_URL', 'https://sms.arkesel.com'),
     ],
 
 ];

@@ -39,7 +39,7 @@ it('sends a system notification with no Company via the platform driver config, 
 });
 
 it('rejects a system notification when the platform provider is not implemented', function (): void {
-    config(['services.platform_sms.provider' => 'arkesel']);
+    config(['services.platform_sms.provider' => 'hubtel']);
 
     app(SmsService::class)->sendSystem('+233244000000', 'Your license key is ready.');
-})->throws(InvalidArgumentException::class, "SMS provider 'arkesel' is not implemented yet.");
+})->throws(InvalidArgumentException::class, "SMS provider 'hubtel' is not implemented yet.");

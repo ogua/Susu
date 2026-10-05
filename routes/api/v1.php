@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AgentRouteController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
 use App\Http\Controllers\Api\V1\CollectionSheetController;
+use App\Http\Controllers\Api\V1\CompanyIntegrationController;
 use App\Http\Controllers\Api\V1\Customer;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
@@ -35,6 +36,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/sync/batch', [SyncController::class, 'batch'])->name('sync.batch');
         Route::get('/sync/bootstrap', [SyncController::class, 'bootstrap'])->name('sync.bootstrap');
         Route::get('/sync/delta', [SyncController::class, 'delta'])->name('sync.delta');
+    });
+
+    Route::middleware('role:company_admin')->group(function (): void {
+        Route::get('/company/integrations', [CompanyIntegrationController::class, 'show'])->name('company.integrations.show');
+        Route::put('/company/integrations', [CompanyIntegrationController::class, 'update'])->name('company.integrations.update');
     });
 
     Route::prefix('agent')->name('agent.')->middleware('role:field_agent|branch_manager|company_admin')->group(function (): void {

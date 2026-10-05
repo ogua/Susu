@@ -3,6 +3,7 @@
 namespace App\Actions\Payments;
 
 use App\Enums\PaymentIntentStatus;
+use App\Models\Company;
 use App\Models\PaymentIntent;
 
 /**
@@ -17,9 +18,13 @@ class HandlePaystackWebhookAction
     public function __construct(private VerifyPaymentIntentAction $verify) {}
 
     /**
+     * A company webhook ($company set) may only settle that company's own
+     * company-account intents, and a platform webhook only platform-account
+     * ones — so a company's key can never confirm a charge it didn't take.
+     *
      * @param  array<string, mixed>  $payload
      */
-    public function execute(array $payload): void
+    public function execute(array $payload, ?Company $company = null): void
     {
         $data = $payload['data'] ?? [];
         $reference = $data['reference'] ?? null;
@@ -27,8 +32,13 @@ class HandlePaystackWebhookAction
             return;
         }
 
-        $intent = PaymentIntent::where('provider_reference', $reference)
-            ->orWhere('client_reference', $reference)
+        $intent = PaymentIntent::query()
+            ->where(fn ($query) => $query->where('provider_reference', $reference)->orWhere('client_reference', $reference))
+            ->when(
+                $company !== null,
+                fn ($query) => $query->where('company_id', $company->id)->where('paystack_account', 'company'),
+                fn ($query) => $query->where('paystack_account', 'platform'),
+            )
             ->first();
 
         if ($intent === null) {

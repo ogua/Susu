@@ -36,7 +36,7 @@ class VerifyPaymentIntentAction
             return $intent;
         }
 
-        $response = $this->paystack->verify($intent->provider_reference ?? $intent->client_reference);
+        $response = $this->paystack->forIntent($intent)->verify($intent->provider_reference ?? $intent->client_reference);
         $data = $response['data'] ?? [];
 
         return $this->complete($intent, PaymentIntentStatus::fromProviderStatus($data['status'] ?? 'pending'), $response);

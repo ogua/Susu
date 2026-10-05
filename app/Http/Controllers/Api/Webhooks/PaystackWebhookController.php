@@ -11,7 +11,7 @@ class PaystackWebhookController extends Controller
 {
     public function __invoke(Request $request, HandlePaystackWebhookAction $action): JsonResponse
     {
-        $action->execute($request->json()->all());
+        $action->execute($request->json()->all(), $request->attributes->get('paystack_company'));
 
         return response()->json(['received' => true]);
     }

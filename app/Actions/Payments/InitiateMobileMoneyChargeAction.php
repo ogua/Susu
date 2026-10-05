@@ -10,6 +10,7 @@ use App\Models\SavingsAccount;
 use App\Models\User;
 use App\Services\Payments\PaystackClient;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Initiates a Paystack mobile money charge (Charge API flow) — the PIN
@@ -41,6 +42,15 @@ class InitiateMobileMoneyChargeAction
             return $existing;
         }
 
+        $account->loadMissing('company.paymentSetting');
+        $paystack = $this->paystack->forCompany($account->company);
+
+        if (! $paystack->isConfigured()) {
+            throw ValidationException::withMessages([
+                'amount' => 'Mobile money payments are not set up for this company yet.',
+            ]);
+        }
+
         $intent = PaymentIntent::create([
             'company_id' => $account->company_id,
             'branch_id' => $account->branch_id,
@@ -48,6 +58,7 @@ class InitiateMobileMoneyChargeAction
             'payable_id' => $account->id,
             'initiated_by' => $initiatedBy->id,
             'flow' => PaymentFlow::ChargeApi,
+            'paystack_account' => PaystackClient::usesCompanyAccount($account->company) ? 'company' : 'platform',
             'channel' => $provider,
             'phone' => $phone,
             'amount' => $amount,
@@ -60,7 +71,7 @@ class InitiateMobileMoneyChargeAction
         // client_reference (the caller's own idempotency key) stays as given.
         $providerReference = 'SUSU-'.$clientReference;
 
-        $response = $this->paystack->chargeMobileMoney(
+        $response = $paystack->chargeMobileMoney(
             email: $this->emailFor($account, $initiatedBy),
             amountMinorUnits: $amount,
             reference: $providerReference,

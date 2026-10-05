@@ -30,6 +30,13 @@ Route::post('/webhooks/paystack/gateway', PaystackWebhookController::class)
     ->middleware(['verify.gateway.signature', 'paystack.signature'])
     ->name('webhooks.paystack.gateway');
 
+// A company that connected its own Paystack account points that account's
+// webhook here; paystack.signature verifies against that company's key.
+Route::post('/webhooks/paystack/companies/{company}', PaystackWebhookController::class)
+    ->middleware('paystack.signature')
+    ->whereUuid('company')
+    ->name('webhooks.paystack.company');
+
 Route::post('/webhooks/paystack/license/gateway', LicenseWebhookController::class)
     ->middleware(['verify.gateway.signature', 'paystack.signature'])
     ->name('webhooks.paystack.license.gateway');
