@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
@@ -84,9 +85,12 @@ export default function LoginScreen() {
             style={[styles.brand, { paddingTop: insets.top + Spacing.five }]}
           >
             <Animated.View entering={FadeInDown.duration(300)} style={styles.brandInner}>
-              <View style={styles.logoMark}>
-                <Icon name="bank" size={30} color="#FFFFFF" />
-              </View>
+              <Image
+                source={require('../../../assets/images/logo.png')}
+                style={styles.logo}
+                contentFit="contain"
+                accessibilityLabel="OguaFinance logo"
+              />
               <ThemedText type="title" style={styles.brandTitle}>
                 OguaFinance
               </ThemedText>
@@ -203,15 +207,9 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: Radii.xl,
   },
   brandInner: { alignItems: 'center', gap: Spacing.two },
-  logoMark: {
-    width: 64,
-    height: 64,
-    borderRadius: Radii.lg,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  logo: {
+    width: 88,
+    height: 88,
     marginBottom: Spacing.one,
   },
   brandTitle: { color: '#FFFFFF' },
