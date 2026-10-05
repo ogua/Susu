@@ -98,8 +98,13 @@
                                     <td class="px-2 py-2">
                                         @if ($row['loan_id'])
                                             <x-filament::input.wrapper>
-                                                <x-filament::input type="number" step="0.01" min="0" wire:model.blur="rows.{{ $index }}.repayment" />
+                                                <x-filament::input type="number" step="0.01" min="0" wire:model.blur="rows.{{ $index }}.repayment" placeholder="0.00" />
                                             </x-filament::input.wrapper>
+                                            @if ($row['amount_due'] > 0)
+                                                <x-filament::link tag="button" size="sm" wire:click="fillDue({{ $index }})" class="mt-1">
+                                                    Paid in full ({{ Money::format($row['amount_due']) }})
+                                                </x-filament::link>
+                                            @endif
                                         @else
                                             <span class="text-gray-400">No active loan</span>
                                         @endif
@@ -138,7 +143,7 @@
                         </x-filament::input.select>
                     </x-filament::input.wrapper>
                     <x-filament::button color="gray" wire:click="loadSheet">Reset</x-filament::button>
-                    <x-filament::button wire:click="submit" wire:confirm="Post {{ Money::format($this->totalRepayment()) }} in repayments and {{ Money::format($this->totalDeposit()) }} in deposits?">
+                    <x-filament::button wire:click="submit" wire:confirm="Post {{ Money::format($this->totalRepayment()) }} in repayments and {{ Money::format($this->totalDeposit()) }} in deposits from {{ $this->payingCount() }} of {{ count($rows) }} client(s)? Only post money actually collected.">
                         Submit
                     </x-filament::button>
                 </div>

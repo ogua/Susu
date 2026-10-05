@@ -21,8 +21,9 @@ use UnitEnum;
 
 /**
  * "Enter Transaction" — eBanQR's collection sheet. Pick a branch, date, and a
- * customer group and/or loan officer; the sheet lists who is due, pre-filled
- * with what they owe, plus a savings deposit column. Submitting posts every
+ * customer group and/or loan officer; the sheet lists who is due and what they
+ * owe (rows start empty; "Paid in full" fills one), plus a savings deposit
+ * column. Submitting posts every
  * row through PostCollectionSheetAction (all-or-nothing).
  */
 class CollectionSheet extends Page
@@ -88,12 +89,29 @@ class CollectionSheet extends Page
         $group = $this->loanGroupId ? LoanGroup::where('branch_id', $branch->id)->find($this->loanGroupId) : null;
         $officer = $this->officerId ? User::where('company_id', $branch->company_id)->find($this->officerId) : null;
 
+        // Rows start empty: an untouched row must post nothing, or customers who
+        // didn't pay would be credited. fillDue() fills one row in a click.
         $this->rows = array_map(fn (array $row): array => $row + [
-            'repayment' => $row['amount_due'] > 0 ? number_format($row['amount_due'] / 100, 2, '.', '') : '',
+            'repayment' => '',
             'deposit' => '',
         ], app(BuildCollectionSheetAction::class)->execute($branch, Carbon::parse($this->date), $group, $officer));
 
         $this->loaded = true;
+    }
+
+    /** "Paid in full": fill a row's repayment with what is due. */
+    public function fillDue(int $index): void
+    {
+        $row = $this->rows[$index] ?? null;
+
+        if ($row !== null && $row['loan_id'] && $row['amount_due'] > 0) {
+            $this->rows[$index]['repayment'] = number_format($row['amount_due'] / 100, 2, '.', '');
+        }
+    }
+
+    public function payingCount(): int
+    {
+        return count(array_filter($this->rows, fn (array $row): bool => (float) ($row['repayment'] ?: 0) > 0 || (float) ($row['deposit'] ?: 0) > 0));
     }
 
     public function submit(): void

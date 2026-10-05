@@ -195,9 +195,33 @@ it('renders the group overview and the collection sheet page', function (): void
         ->set('loanGroupId', $this->group->id)
         ->call('loadSheet')
         ->assertSee('Ama')
+        ->assertSee('Paid in full')
+        ->assertSet('rows.0.repayment', '')
+        ->assertSet('rows.1.repayment', '')
+        ->call('fillDue', 0)
         ->assertSet('rows.0.repayment', '100.00')
+        ->assertSet('rows.1.repayment', '')
         ->call('submit')
         ->assertNotified('Collection sheet posted');
 
-    expect($this->ama->groupLoans()->first()->outstanding_balance)->toBe(900_00);
+    // Only the row marked paid is posted; Kofi's untouched row posts nothing.
+    expect($this->ama->groupLoans()->first()->outstanding_balance)->toBe(900_00)
+        ->and($this->kofi->groupLoans()->first()->outstanding_balance)->toBe(1_000_00);
+});
+
+it('posts nothing from an untouched collection sheet', function (): void {
+    issueAndActivateGroupLoans($this->manager, $this->group);
+    $this->actingAs($this->manager);
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($this->branch);
+    Filament::bootCurrentPanel();
+
+    livewire(CollectionSheet::class)
+        ->set('loanGroupId', $this->group->id)
+        ->call('loadSheet')
+        ->call('submit')
+        ->assertNotified('Nothing to post — enter at least one amount.');
+
+    expect($this->ama->groupLoans()->first()->outstanding_balance)->toBe(1_000_00)
+        ->and($this->kofi->groupLoans()->first()->outstanding_balance)->toBe(1_000_00);
 });
