@@ -25,6 +25,11 @@ class LoanGroupMemberResource extends JsonResource
             'active_loan' => $this->whenLoaded('activeLoan', fn () => $this->activeLoan
                 ? GroupLoanResource::make($this->activeLoan)
                 : null),
+            // Draft (awaiting deposit/activation) or active — clients should offer
+            // "issue loan" only when this is null.
+            'open_loan' => $this->whenLoaded('openLoan', fn () => $this->openLoan
+                ? GroupLoanResource::make($this->openLoan)
+                : null),
         ];
     }
 }

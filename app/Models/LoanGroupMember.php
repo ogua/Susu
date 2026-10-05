@@ -55,4 +55,15 @@ class LoanGroupMember extends Model
     {
         return $this->hasOne(GroupLoan::class)->where('status', GroupLoanStatus::Active)->latestOfMany();
     }
+
+    /**
+     * The member's in-flight loan: an active loan, or a draft still awaiting its
+     * security deposit / activation. A member with an open loan can't be issued another.
+     */
+    public function openLoan(): HasOne
+    {
+        return $this->hasOne(GroupLoan::class)
+            ->whereIn('status', [GroupLoanStatus::Draft, GroupLoanStatus::Active])
+            ->latestOfMany();
+    }
 }

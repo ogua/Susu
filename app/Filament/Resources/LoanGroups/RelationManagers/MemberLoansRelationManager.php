@@ -7,9 +7,12 @@ use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Enums\AccountStatus;
+use App\Enums\DepositStatus;
+use App\Enums\GroupLoanStatus;
 use App\Models\GroupLoan;
 use App\Models\SavingsAccount;
 use App\Support\Money;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Placeholder;
@@ -18,9 +21,11 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * The client's paper ledger: one row per member loan with Security Deposit /
@@ -57,48 +62,8 @@ class MemberLoansRelationManager extends RelationManager
                 TextColumn::make('status')->badge(),
             ])
             ->recordActions([
-                Action::make('recordDeposit')
-                    ->label('Record deposit')
-                    ->color('gray')
-                    ->visible(fn (GroupLoan $record): bool => $record->deposit_status->value === 'pending')
-                    ->disabled(fn (GroupLoan $record): bool => ! $record->customer->savingsAccounts()->exists())
-                    ->authorize(fn (GroupLoan $record): bool => Filament::auth()->user()->can('recordDeposit', $record))
-                    ->schema(fn (GroupLoan $record): array => [
-                        Select::make('savings_account_id')
-                            ->label('Deposit into savings account')
-                            ->options(fn (): array => $record->customer->savingsAccounts()
-                                ->where('status', AccountStatus::Active)
-                                ->get()
-                                ->mapWithKeys(fn (SavingsAccount $account): array => [
-                                    $account->id => $account->account_number.' — '.Money::format($account->balance),
-                                ])
-                                ->all())
-                            ->helperText(fn (): ?string => $record->customer->savingsAccounts()->exists()
-                                ? null
-                                : 'This customer has no savings accounts — open one first.')
-                            ->required(),
-                        TextInput::make('amount')->label('Amount (GHS)')->numeric()
-                            ->default($record->security_deposit_amount / 100)->readOnly()->required(),
-                    ])
-                    ->action(function (array $data, GroupLoan $record): void {
-                        app(RecordGroupLoanDepositAction::class)->execute(
-                            groupLoan: $record,
-                            savingsAccount: SavingsAccount::findOrFail($data['savings_account_id']),
-                            amount: Money::toMinorUnits($data['amount']),
-                            recordedBy: Filament::auth()->user(),
-                        );
-                        Notification::make()->title('Deposit recorded')->success()->send();
-                    }),
-                Action::make('activate')
-                    ->color('primary')
-                    ->visible(fn (GroupLoan $record): bool => $record->status->value === 'draft' && $record->deposit_status->value === 'held')
-                    ->authorize(fn (GroupLoan $record): bool => Filament::auth()->user()->can('activate', $record))
-                    ->requiresConfirmation()
-                    ->modalDescription('This generates the repayment schedule and disburses the principal.')
-                    ->action(function (GroupLoan $record): void {
-                        app(ActivateGroupLoanAction::class)->execute($record, Filament::auth()->user());
-                        Notification::make()->title('Loan activated')->success()->send();
-                    }),
+                self::recordDepositAction(fn (GroupLoan $record): GroupLoan => $record),
+                self::activateAction(fn (GroupLoan $record): GroupLoan => $record),
                 Action::make('recordRepayment')
                     ->label('Record repayment')
                     ->color('gray')
@@ -156,5 +121,74 @@ class MemberLoansRelationManager extends RelationManager
             ->headerActions([])
             ->toolbarActions([])
             ->defaultSort('issued_at');
+    }
+
+    /**
+     * Records a draft loan's security deposit into one of the borrower's savings
+     * accounts. Shared with the Members tab, which resolves the loan from the member row.
+     *
+     * @param  Closure(Model): ?GroupLoan  $loanFor
+     */
+    public static function recordDepositAction(Closure $loanFor): Action
+    {
+        return Action::make('recordDeposit')
+            ->label('Record deposit')
+            ->color('warning')
+            ->icon(Heroicon::Banknotes)
+            ->visible(fn (Model $record): bool => $loanFor($record)?->status === GroupLoanStatus::Draft
+                && $loanFor($record)->deposit_status === DepositStatus::Pending)
+            ->disabled(fn (Model $record): bool => ! $loanFor($record)?->customer->savingsAccounts()->exists())
+            ->tooltip(fn (Model $record): ?string => $loanFor($record)?->customer->savingsAccounts()->exists()
+                ? null
+                : 'This customer has no savings accounts — open one first.')
+            ->authorize(fn (Model $record): bool => Filament::auth()->user()->can('recordDeposit', $loanFor($record)))
+            ->modalHeading(fn (Model $record): string => 'Record security deposit for loan '.$loanFor($record)->loan_number)
+            ->schema(fn (Model $record): array => [
+                Select::make('savings_account_id')
+                    ->label('Deposit into savings account')
+                    ->options(fn (): array => $loanFor($record)->customer->savingsAccounts()
+                        ->where('status', AccountStatus::Active)
+                        ->get()
+                        ->mapWithKeys(fn (SavingsAccount $account): array => [
+                            $account->id => $account->account_number.' — '.Money::format($account->balance),
+                        ])
+                        ->all())
+                    ->required(),
+                TextInput::make('amount')->label('Amount (GHS)')->numeric()
+                    ->default($loanFor($record)->security_deposit_amount / 100)->readOnly()->required(),
+            ])
+            ->action(function (array $data, Model $record) use ($loanFor): void {
+                app(RecordGroupLoanDepositAction::class)->execute(
+                    groupLoan: $loanFor($record),
+                    savingsAccount: SavingsAccount::findOrFail($data['savings_account_id']),
+                    amount: Money::toMinorUnits($data['amount']),
+                    recordedBy: Filament::auth()->user(),
+                );
+                Notification::make()->title('Deposit recorded')->body('The loan is now ready to activate.')->success()->send();
+            });
+    }
+
+    /**
+     * Activates a draft loan whose deposit is held: generates the schedule and
+     * disburses the principal. Shared with the Members tab.
+     *
+     * @param  Closure(Model): ?GroupLoan  $loanFor
+     */
+    public static function activateAction(Closure $loanFor): Action
+    {
+        return Action::make('activate')
+            ->label('Activate loan')
+            ->color('success')
+            ->icon(Heroicon::CheckCircle)
+            ->visible(fn (Model $record): bool => $loanFor($record)?->status === GroupLoanStatus::Draft
+                && $loanFor($record)->deposit_status === DepositStatus::Held)
+            ->authorize(fn (Model $record): bool => Filament::auth()->user()->can('activate', $loanFor($record)))
+            ->requiresConfirmation()
+            ->modalHeading(fn (Model $record): string => 'Activate loan '.$loanFor($record)->loan_number)
+            ->modalDescription('This generates the repayment schedule and disburses the principal.')
+            ->action(function (Model $record) use ($loanFor): void {
+                app(ActivateGroupLoanAction::class)->execute($loanFor($record), Filament::auth()->user());
+                Notification::make()->title('Loan activated')->success()->send();
+            });
     }
 }

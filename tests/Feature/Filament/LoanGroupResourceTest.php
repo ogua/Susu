@@ -10,6 +10,7 @@ use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\LoanGroup;
 use App\Models\LoanGroupMember;
+use App\Models\SavingsAccount;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
@@ -86,6 +87,51 @@ it('adds a member then issues a loan from the members relation manager', functio
     expect($loan->status)->toBe(GroupLoanStatus::Draft)
         ->and($loan->principal_amount)->toBe(1000_00)
         ->and($loan->total_periods)->toBe(10);
+});
+
+it('replaces Issue Loan with the next step once a member has a draft loan', function (): void {
+    $loanGroup = LoanGroup::factory()->create(['company_id' => $this->branch->company_id, 'branch_id' => $this->branch->id]);
+    $customer = Customer::factory()->forBranch($this->branch)->create();
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $customer->id,
+    ]);
+    $member = LoanGroupMember::factory()->create(['loan_group_id' => $loanGroup->id, 'customer_id' => $customer->id]);
+
+    bootAdminPanel($this->manager, $this->branch);
+
+    $members = fn () => livewire(MembersRelationManager::class, ['ownerRecord' => $loanGroup, 'pageClass' => ViewLoanGroup::class]);
+
+    $members()
+        ->assertTableActionVisible('issueLoan', $member)
+        ->assertTableActionHidden('recordDeposit', $member)
+        ->callTableAction('issueLoan', record: $member, data: [
+            'principal_amount' => '1000.00',
+            'security_deposit_amount' => '100.00',
+            'periodic_amount' => '100.00',
+            'repayment_frequency' => 'weekly',
+            'start_date' => Carbon::now()->toDateString(),
+        ])
+        ->assertHasNoTableActionErrors()
+        ->assertTableActionHidden('issueLoan', $member)
+        ->assertTableActionVisible('recordDeposit', $member)
+        ->assertTableActionHidden('activate', $member);
+
+    $members()
+        ->callTableAction('recordDeposit', record: $member, data: ['savings_account_id' => $savingsAccount->id])
+        ->assertHasNoTableActionErrors()
+        ->assertTableActionHidden('issueLoan', $member)
+        ->assertTableActionHidden('recordDeposit', $member)
+        ->assertTableActionVisible('activate', $member);
+
+    $members()
+        ->callTableAction('activate', record: $member)
+        ->assertHasNoTableActionErrors()
+        ->assertTableActionHidden('issueLoan', $member)
+        ->assertTableActionHidden('activate', $member);
+
+    expect(GroupLoan::where('loan_group_member_id', $member->id)->sole()->status)->toBe(GroupLoanStatus::Active);
 });
 
 it('denies a field agent from adding a loan group member (no update ability)', function (): void {

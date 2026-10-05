@@ -304,6 +304,19 @@ it('allows only one active loan per member at a time', function (): void {
     expect($second->status)->toBe(GroupLoanStatus::Draft);
 });
 
+it('refuses a second loan while the first is still a draft awaiting deposit or activation', function (): void {
+    $draft = issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer);
+
+    expect(fn () => issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer))
+        ->toThrow(ValidationException::class, "This member already has loan {$draft->loan_number} awaiting its security deposit and activation.");
+
+    app(RecordGroupLoanDepositAction::class)->execute($draft, $this->savingsAccount, $draft->security_deposit_amount, $this->agent);
+
+    expect(fn () => issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer))
+        ->toThrow(ValidationException::class)
+        ->and(GroupLoan::where('customer_id', $this->customer->id)->count())->toBe(1);
+});
+
 it('uses the client_reference as the group loan id', function (): void {
     $ref = (string) Str::uuid();
     $loan = issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer, clientReference: $ref);

@@ -5,8 +5,11 @@ namespace App\Filament\Resources\LoanGroups\RelationManagers;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\LoanGroups\AddLoanGroupMemberAction;
 use App\Actions\LoanGroups\RemoveLoanGroupMemberAction;
+use App\Enums\DepositStatus;
+use App\Enums\GroupLoanStatus;
 use App\Enums\LoanFrequency;
 use App\Models\Customer;
+use App\Models\GroupLoan;
 use App\Models\LoanGroup;
 use App\Models\LoanGroupMember;
 use App\Services\Loans\PeriodicScheduleGenerator;
@@ -26,7 +29,10 @@ use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
-/** The roster. Members are added here, then issued a loan; the loan ledger lives in the "Member Loans" tab. */
+/**
+ * The roster. Members are added here and taken through issue → security deposit →
+ * activation; repayments and write-offs live in the "Member Loans" tab.
+ */
 class MembersRelationManager extends RelationManager
 {
     protected static string $relationship = 'members';
@@ -41,19 +47,29 @@ class MembersRelationManager extends RelationManager
                     ->formatStateUsing(fn ($record) => $record->customer->fullName()),
                 TextColumn::make('security_deposit')
                     ->label('Security deposit')
-                    ->state(fn (LoanGroupMember $record): string => $record->activeLoan
-                        ? Money::format($record->activeLoan->security_deposit_amount)
+                    ->state(fn (LoanGroupMember $record): string => $record->openLoan
+                        ? Money::format($record->openLoan->security_deposit_amount)
                         : '—'),
                 TextColumn::make('amount_to_be_paid')
                     ->label('Amount to be paid')
-                    ->state(fn (LoanGroupMember $record): string => $record->activeLoan
-                        ? Money::format($record->activeLoan->periodic_amount)
+                    ->state(fn (LoanGroupMember $record): string => $record->openLoan
+                        ? Money::format($record->openLoan->periodic_amount)
                         : '—'),
                 TextColumn::make('loan_outstanding')
                     ->label('Loan outstanding')
-                    ->state(fn (LoanGroupMember $record): string => $record->activeLoan
-                        ? Money::format($record->activeLoan->outstanding_balance)
+                    ->state(fn (LoanGroupMember $record): string => $record->openLoan
+                        ? Money::format($record->openLoan->outstanding_balance)
                         : '—'),
+                TextColumn::make('loan_stage')
+                    ->label('Loan')
+                    ->badge()
+                    ->state(fn (LoanGroupMember $record): string => self::loanStage($record))
+                    ->color(fn (string $state): string => match ($state) {
+                        'Awaiting deposit' => 'warning',
+                        'Ready to activate' => 'info',
+                        'Active' => 'success',
+                        default => 'gray',
+                    }),
                 TextColumn::make('status')->badge(),
                 TextColumn::make('joined_at')->dateTime(),
             ])
@@ -87,7 +103,7 @@ class MembersRelationManager extends RelationManager
                 Action::make('issueLoan')
                     ->label('Issue Loan')
                     ->color('primary')
-                    ->visible(fn (LoanGroupMember $record): bool => $record->status === 'active' && $record->activeLoan === null)
+                    ->visible(fn (LoanGroupMember $record): bool => $record->status === 'active' && $record->openLoan === null)
                     ->authorize(fn (): bool => Filament::auth()->user()->can('update', $this->getOwnerRecord()))
                     ->schema([
                         TextInput::make('principal_amount')->label('Loan amount (GHS)')->numeric()->required()->live(onBlur: true),
@@ -122,8 +138,16 @@ class MembersRelationManager extends RelationManager
                             return;
                         }
 
-                        Notification::make()->title('Loan issued')->success()->send();
+                        Notification::make()
+                            ->title('Loan issued')
+                            ->body(Money::toMinorUnits($data['security_deposit_amount'] ?? 0) > 0
+                                ? 'Next: record the security deposit, then activate the loan.'
+                                : 'Next: activate the loan to disburse it.')
+                            ->success()
+                            ->send();
                     }),
+                MemberLoansRelationManager::recordDepositAction(fn (LoanGroupMember $record): ?GroupLoan => $record->openLoan),
+                MemberLoansRelationManager::activateAction(fn (LoanGroupMember $record): ?GroupLoan => $record->openLoan),
                 Action::make('removeMember')
                     ->color('danger')
                     ->visible(fn (LoanGroupMember $record): bool => $record->status === 'active' && $record->activeLoan === null)
@@ -141,7 +165,21 @@ class MembersRelationManager extends RelationManager
                         Notification::make()->title('Member removed')->success()->send();
                     }),
             ])
+            ->modifyQueryUsing(fn ($query) => $query->with(['customer', 'openLoan.customer']))
             ->defaultSort('joined_at');
+    }
+
+    /** Where the member's open loan sits in the issue → deposit → activate flow. */
+    private static function loanStage(LoanGroupMember $member): string
+    {
+        $loan = $member->openLoan;
+
+        return match (true) {
+            $loan === null => 'No loan',
+            $loan->status === GroupLoanStatus::Active => 'Active',
+            $loan->deposit_status === DepositStatus::Pending => 'Awaiting deposit',
+            default => 'Ready to activate',
+        };
     }
 
     private static function previewSchedule(Get $get): string

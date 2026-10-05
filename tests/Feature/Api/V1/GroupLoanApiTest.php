@@ -150,6 +150,17 @@ it('exposes the group outstanding and member active-loan summary on loan-groups'
         ->assertJsonPath('data.members.0.active_loan.outstanding_balance', 1000_00);
 });
 
+it('exposes a draft loan as open_loan so clients stop offering issue loan', function (): void {
+    $loan = apiIssuedLoan($this->agent, $this->customer, $this->loanGroup);
+
+    $this->actingAs($this->agent, 'sanctum')
+        ->getJson("/api/v1/loan-groups/{$this->loanGroup->id}")
+        ->assertOk()
+        ->assertJsonPath('data.members.0.active_loan', null)
+        ->assertJsonPath('data.members.0.open_loan.id', $loan->id)
+        ->assertJsonPath('data.members.0.open_loan.status', 'draft');
+});
+
 it('replays an offline issue -> deposit -> activate -> repayment through /sync/batch', function (): void {
     $loanId = (string) Str::uuid();
     $now = Carbon::now()->toISOString();

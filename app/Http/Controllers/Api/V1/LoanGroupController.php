@@ -22,7 +22,7 @@ class LoanGroupController extends Controller
     {
         $user = $request->user();
 
-        $query = LoanGroup::with('members.customer', 'members.activeLoan')
+        $query = LoanGroup::with('members.customer', 'members.activeLoan', 'members.openLoan')
             ->withCount('members')
             ->withSum('activeGroupLoans as group_outstanding_sum', 'outstanding_balance')
             ->where('company_id', $user->company_id)
@@ -38,7 +38,7 @@ class LoanGroupController extends Controller
             ->where('company_id', $request->user()->company_id)
             ->findOrFail($loanGroup);
 
-        return LoanGroupResource::make($model->load('members.customer', 'members.activeLoan'));
+        return LoanGroupResource::make($model->load('members.customer', 'members.activeLoan', 'members.openLoan'));
     }
 
     public function store(StoreLoanGroupRequest $request): JsonResponse
@@ -66,7 +66,7 @@ class LoanGroupController extends Controller
 
         $action->execute($group, $customer);
 
-        return LoanGroupResource::make($group->fresh()->load('members.customer', 'members.activeLoan'))
+        return LoanGroupResource::make($group->fresh()->load('members.customer', 'members.activeLoan', 'members.openLoan'))
             ->response()->setStatusCode(201);
     }
 
@@ -79,6 +79,6 @@ class LoanGroupController extends Controller
 
         $action->execute($memberModel);
 
-        return LoanGroupResource::make($group->fresh()->load('members.customer', 'members.activeLoan'));
+        return LoanGroupResource::make($group->fresh()->load('members.customer', 'members.activeLoan', 'members.openLoan'));
     }
 }

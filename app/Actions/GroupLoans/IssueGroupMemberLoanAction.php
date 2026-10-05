@@ -69,9 +69,16 @@ class IssueGroupMemberLoanAction
         return DB::transaction(function () use ($issuedBy, $loanGroup, $customer, $principal, $securityDeposit, $periodicAmount, $frequency, $startDate, $notes, $clientReference): GroupLoan {
             $member = $this->resolveMember($loanGroup, $customer);
 
-            if ($member->groupLoans()->where('status', GroupLoanStatus::Active)->exists()) {
+            $openLoan = $member->groupLoans()
+                ->whereIn('status', [GroupLoanStatus::Draft, GroupLoanStatus::Active])
+                ->lockForUpdate()
+                ->first();
+
+            if ($openLoan !== null) {
                 throw ValidationException::withMessages([
-                    'customer_id' => 'This member already has an active loan in the group.',
+                    'customer_id' => $openLoan->status === GroupLoanStatus::Draft
+                        ? "This member already has loan {$openLoan->loan_number} awaiting its security deposit and activation."
+                        : 'This member already has an active loan in the group.',
                 ]);
             }
 
