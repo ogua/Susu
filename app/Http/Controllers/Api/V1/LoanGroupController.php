@@ -9,6 +9,7 @@ use App\Actions\LoanGroups\IssueLoansToGroupAction;
 use App\Actions\LoanGroups\OpenSavingsForGroupAction;
 use App\Actions\LoanGroups\RemoveLoanGroupMemberAction;
 use App\Enums\LoanFrequency;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AddLoanGroupMemberRequest;
 use App\Http\Requests\Api\V1\IssueLoansToGroupRequest;
@@ -27,6 +28,8 @@ use Illuminate\Support\Carbon;
 /** Staff-only (field_agent/branch_manager/company_admin) — see routes/api/v1.php. */
 class LoanGroupController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $user = $request->user();
@@ -45,6 +48,7 @@ class LoanGroupController extends Controller
         $model = LoanGroup::withCount('members')
             ->withSum('activeGroupLoans as group_outstanding_sum', 'outstanding_balance')
             ->where('company_id', $request->user()->company_id)
+            ->whereIn('branch_id', $request->user()->accessibleBranchIds())
             ->findOrFail($loanGroup);
 
         return LoanGroupResource::make($model->load('members.customer.savingsAccounts', 'members.activeLoan', 'members.openLoan'))
@@ -53,7 +57,7 @@ class LoanGroupController extends Controller
 
     public function history(Request $request, string $loanGroup, BuildLoanGroupHistoryAction $action): JsonResponse
     {
-        $model = LoanGroup::where('company_id', $request->user()->company_id)->findOrFail($loanGroup);
+        $model = $this->scopeToBranches(LoanGroup::where('company_id', $request->user()->company_id), $request->user())->findOrFail($loanGroup);
 
         return response()->json(['data' => $action->execute($model, min($request->integer('limit', 200), 500))]);
     }
@@ -61,7 +65,7 @@ class LoanGroupController extends Controller
     /** "Apply a loan to the group" — same terms to every active member (or member_ids). */
     public function issueLoans(IssueLoansToGroupRequest $request, string $loanGroup, IssueLoansToGroupAction $action): JsonResponse
     {
-        $group = LoanGroup::where('company_id', $request->user()->company_id)->findOrFail($loanGroup);
+        $group = $this->scopeToBranches(LoanGroup::where('company_id', $request->user()->company_id), $request->user())->findOrFail($loanGroup);
 
         $result = $action->execute(
             issuedBy: $request->user(),
@@ -82,7 +86,7 @@ class LoanGroupController extends Controller
     public function openSavings(OpenSavingsForGroupRequest $request, string $loanGroup, OpenSavingsForGroupAction $action): JsonResponse
     {
         $user = $request->user();
-        $group = LoanGroup::where('company_id', $user->company_id)->findOrFail($loanGroup);
+        $group = $this->scopeToBranches(LoanGroup::where('company_id', $user->company_id), $user)->findOrFail($loanGroup);
         $product = SavingsProduct::where('company_id', $user->company_id)->findOrFail($request->validated('savings_product_id'));
 
         return response()->json(['data' => $action->execute($group, $product, contributionAmount: $request->validated('contribution_amount'))], 201);
@@ -108,8 +112,8 @@ class LoanGroupController extends Controller
     {
         $user = $request->user();
 
-        $group = LoanGroup::where('company_id', $user->company_id)->findOrFail($loanGroup);
-        $customer = Customer::where('company_id', $user->company_id)->findOrFail($request->validated('customer_id'));
+        $group = $this->scopeToBranches(LoanGroup::where('company_id', $user->company_id), $user)->findOrFail($loanGroup);
+        $customer = $this->scopeToBranches(Customer::where('company_id', $user->company_id), $user)->findOrFail($request->validated('customer_id'));
 
         $action->execute($group, $customer);
 
@@ -121,7 +125,7 @@ class LoanGroupController extends Controller
     {
         $user = $request->user();
 
-        $group = LoanGroup::where('company_id', $user->company_id)->findOrFail($loanGroup);
+        $group = $this->scopeToBranches(LoanGroup::where('company_id', $user->company_id), $user)->findOrFail($loanGroup);
         $memberModel = LoanGroupMember::where('loan_group_id', $group->id)->findOrFail($member);
 
         $action->execute($memberModel);

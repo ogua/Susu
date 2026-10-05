@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Reports\BuildGeneralLedgerAction;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Models\LedgerAccount;
 use Carbon\CarbonImmutable;
@@ -15,10 +16,13 @@ use Illuminate\Http\Request;
  */
 class LedgerController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function accounts(Request $request): JsonResponse
     {
         $accounts = LedgerAccount::query()
             ->where('company_id', $request->user()->company_id)
+            ->where(fn ($query) => $query->whereNull('branch_id')->orWhereIn('branch_id', $request->user()->accessibleBranchIds()))
             ->orderBy('type')
             ->orderBy('code')
             ->get();
@@ -39,7 +43,11 @@ class LedgerController extends Controller
 
     public function entries(Request $request, LedgerAccount $account): JsonResponse
     {
-        abort_unless($account->company_id === $request->user()->company_id, 404);
+        abort_unless(
+            $account->company_id === $request->user()->company_id
+                && ($account->branch_id === null || $request->user()->canAccessBranchId($account->branch_id)),
+            404,
+        );
 
         $validated = $request->validate([
             'from' => ['nullable', 'date'],

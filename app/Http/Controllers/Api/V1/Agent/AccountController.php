@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Agent;
 
 use App\Actions\Reports\GenerateAccountStatementPdfAction;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\SavingsAccountResource;
 use App\Models\SavingsAccount;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\URL;
 
 class AccountController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     /** Accounts assigned to the authenticated agent, searchable by name/number/phone. */
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -37,9 +40,18 @@ class AccountController extends Controller
         return SavingsAccountResource::collection($accounts);
     }
 
+    /** The assigned agent, or staff of the account's branch. */
+    private function canAccessAccount(Request $request, SavingsAccount $account): bool
+    {
+        $user = $request->user();
+
+        return $account->company_id === $user->company_id
+            && ($account->agent_id === $user->id || $this->canSeeBranch($user, $account->branch_id));
+    }
+
     public function statement(Request $request, SavingsAccount $account): Response
     {
-        abort_unless($account->company_id === $request->user()->company_id, 404);
+        abort_unless($this->canAccessAccount($request, $account), 404);
 
         $pdf = app(GenerateAccountStatementPdfAction::class)->execute(
             $account,
@@ -57,7 +69,7 @@ class AccountController extends Controller
      */
     public function statementUrl(Request $request, SavingsAccount $account): JsonResponse
     {
-        abort_unless($account->company_id === $request->user()->company_id, 404);
+        abort_unless($this->canAccessAccount($request, $account), 404);
 
         return response()->json([
             'url' => URL::temporarySignedRoute('statements.signed', now()->addMinutes(5), ['account' => $account->id]),

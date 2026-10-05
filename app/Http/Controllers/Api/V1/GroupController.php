@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Groups\PayoutGroupRoundAction;
 use App\Actions\Groups\RecordGroupContributionAction;
 use App\Enums\ClientOrigin;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\PayoutGroupRoundRequest;
 use App\Http\Requests\Api\V1\StoreGroupContributionRequest;
@@ -25,6 +26,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 class GroupController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $user = $request->user();
@@ -65,7 +68,7 @@ class GroupController extends Controller
 
     public function payout(PayoutGroupRoundRequest $request, string $round, PayoutGroupRoundAction $action): JsonResponse
     {
-        $model = GroupRound::whereHas('group', fn ($q) => $q->where('company_id', $request->user()->company_id))
+        $model = GroupRound::whereHas('group', fn ($q) => $this->scopeToBranches($q->where('company_id', $request->user()->company_id), $request->user()))
             ->findOrFail($round);
 
         $paid = $action->execute($model, $request->user(), override: (bool) $request->validated('override', false));
@@ -80,7 +83,7 @@ class GroupController extends Controller
     private function findScoped(Request $request, string $id): Group
     {
         $user = $request->user();
-        $query = Group::where('company_id', $user->company_id);
+        $query = $this->scopeToBranches(Group::where('company_id', $user->company_id), $user);
 
         if ($user->hasRole('customer')) {
             $query->whereHas('members', fn ($q) => $q->where('customer_id', $this->customerFor($user)->id));

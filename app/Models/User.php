@@ -126,15 +126,23 @@ class User extends Authenticatable implements HasAvatar, HasTenants
     }
 
     /**
-     * Branches this user may act on outside Filament (API, sync) — the same
+     * Branches this user may act on outside Filament (API, sync): every
+     * branch of the company for a company admin, otherwise the same
      * branch_users membership Filament tenancy uses, plus the home branch.
      *
      * @return array<int, string>
      */
     public function accessibleBranchIds(): array
     {
-        return $this->accessibleBranchIdsCache ??= $this->branches()
-            ->pluck('branches.id')
+        if ($this->accessibleBranchIdsCache !== null) {
+            return $this->accessibleBranchIdsCache;
+        }
+
+        $ids = $this->hasRole('company_admin')
+            ? Branch::where('company_id', $this->company_id)->pluck('id')
+            : $this->branches()->pluck('branches.id');
+
+        return $this->accessibleBranchIdsCache = $ids
             ->push($this->branch_id)
             ->filter()
             ->unique()

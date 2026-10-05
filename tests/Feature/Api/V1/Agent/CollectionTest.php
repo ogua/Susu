@@ -81,7 +81,7 @@ it('denies an agent from another branch', function (): void {
     $this->actingAs($otherAgent, 'sanctum')->postJson('/api/v1/agent/collections', [
         'savings_account_id' => $this->account->id,
         'amount' => 500,
-    ])->assertUnprocessable();
+    ])->assertNotFound();
 });
 
 it('rejects amounts that are not a multiple of the contribution', function (): void {

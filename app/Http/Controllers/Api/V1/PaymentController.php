@@ -6,6 +6,7 @@ use App\Actions\Payments\InitializeCheckoutAction;
 use App\Actions\Payments\InitiateMobileMoneyChargeAction;
 use App\Actions\Payments\SubmitChargeOtpAction;
 use App\Actions\Payments\VerifyPaymentIntentAction;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\InitializeCheckoutRequest;
 use App\Http\Requests\Api\V1\InitiateMobileMoneyChargeRequest;
@@ -24,6 +25,8 @@ use Illuminate\Http\Request;
  */
 class PaymentController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function chargeMobileMoney(
         InitiateMobileMoneyChargeRequest $request,
         InitiateMobileMoneyChargeAction $action,
@@ -90,7 +93,7 @@ class PaymentController extends Controller
     /** Read-only list for the desktop's hybrid-mode payments view — company-scoped, newest first. */
     public function index(Request $request): JsonResponse
     {
-        $intents = PaymentIntent::where('company_id', $request->user()->company_id)
+        $intents = $this->scopeToBranches(PaymentIntent::where('company_id', $request->user()->company_id), $request->user())
             ->latest()
             ->paginate(50);
 
@@ -106,6 +109,6 @@ class PaymentController extends Controller
 
     private function findScoped(Request $request, string $id): PaymentIntent
     {
-        return PaymentIntent::where('company_id', $request->user()->company_id)->findOrFail($id);
+        return $this->scopeToBranches(PaymentIntent::where('company_id', $request->user()->company_id), $request->user())->findOrFail($id);
     }
 }

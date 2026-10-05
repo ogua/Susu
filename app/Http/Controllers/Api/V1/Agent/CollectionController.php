@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Agent;
 
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\ClientOrigin;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Resources\V1\JournalEntryResource;
@@ -13,9 +14,11 @@ use Illuminate\Http\JsonResponse;
 
 class CollectionController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function store(StoreCollectionRequest $request, RecordCollectionAction $action): JsonResponse
     {
-        $account = SavingsAccount::where('company_id', $request->user()->company_id)
+        $account = $this->scopeToBranches(SavingsAccount::where('company_id', $request->user()->company_id), $request->user())
             ->findOrFail($request->validated('savings_account_id'));
 
         $result = $action->execute(

@@ -11,6 +11,7 @@ use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Actions\Loans\RecalculateRepaymentScheduleAction;
 use App\Enums\ClientOrigin;
 use App\Enums\LoanFrequency;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
 use App\Http\Requests\Api\V1\CancelGroupLoanRequest;
@@ -32,6 +33,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 /** Staff-only (field_agent/branch_manager/company_admin) — see routes/api/v1.php. */
 class GroupLoanController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $user = $request->user();
@@ -56,8 +59,8 @@ class GroupLoanController extends Controller
     {
         $user = $request->user();
 
-        $loanGroup = LoanGroup::where('company_id', $user->company_id)->findOrFail($request->validated('loan_group_id'));
-        $customer = Customer::where('company_id', $user->company_id)->findOrFail($request->validated('customer_id'));
+        $loanGroup = $this->scopeToBranches(LoanGroup::where('company_id', $user->company_id), $user)->findOrFail($request->validated('loan_group_id'));
+        $customer = $this->scopeToBranches(Customer::where('company_id', $user->company_id), $user)->findOrFail($request->validated('customer_id'));
 
         $groupLoan = $action->execute(
             issuedBy: $user,
@@ -78,7 +81,7 @@ class GroupLoanController extends Controller
     public function recordDeposit(RecordGroupLoanDepositRequest $request, string $groupLoan, RecordGroupLoanDepositAction $action): JsonResponse
     {
         $model = $this->findScoped($request, $groupLoan);
-        $savingsAccount = SavingsAccount::where('company_id', $request->user()->company_id)
+        $savingsAccount = $this->scopeToBranches(SavingsAccount::where('company_id', $request->user()->company_id), $request->user())
             ->findOrFail($request->validated('savings_account_id'));
 
         $result = $action->execute(
@@ -140,7 +143,7 @@ class GroupLoanController extends Controller
     {
         $model = $this->findScoped($request, $groupLoan);
         $savingsAccount = $request->filled('savings_account_id')
-            ? SavingsAccount::where('company_id', $request->user()->company_id)->findOrFail($request->validated('savings_account_id'))
+            ? $this->scopeToBranches(SavingsAccount::where('company_id', $request->user()->company_id), $request->user())->findOrFail($request->validated('savings_account_id'))
             : null;
 
         $groupLoan = $action->execute(
@@ -173,6 +176,6 @@ class GroupLoanController extends Controller
 
     private function findScoped(Request $request, string $id): GroupLoan
     {
-        return GroupLoan::where('company_id', $request->user()->company_id)->findOrFail($id);
+        return $this->scopeToBranches(GroupLoan::where('company_id', $request->user()->company_id), $request->user())->findOrFail($id);
     }
 }

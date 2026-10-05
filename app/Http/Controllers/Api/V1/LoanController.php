@@ -9,6 +9,7 @@ use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Enums\ClientOrigin;
 use App\Enums\InterestMethod;
 use App\Enums\LoanFrequency;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\RecalculateScheduleRequest;
 use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
@@ -35,6 +36,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 class LoanController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function products(Request $request): AnonymousResourceCollection
     {
         return LoanProductResource::collection(
@@ -52,7 +55,7 @@ class LoanController extends Controller
             'amount' => ['required', 'integer', 'min:1'],
         ]);
 
-        $account = SavingsAccount::where('company_id', $request->user()->company_id)
+        $account = $this->scopeToBranches(SavingsAccount::where('company_id', $request->user()->company_id), $request->user())
             ->findOrFail($validated['savings_account_id']);
 
         $result = $eligibility->evaluate($account, (int) $validated['amount']);
@@ -67,7 +70,7 @@ class LoanController extends Controller
         $query = Loan::with('loanProduct')->where('company_id', $user->company_id);
         $query = $user->hasRole('customer')
             ? $query->where('customer_id', $this->customerFor($user)->id)
-            : $query->latest();
+            : $this->scopeToBranches($query, $user)->latest();
 
         return LoanResource::collection($query->paginate($request->integer('per_page', 30)));
     }
@@ -84,11 +87,11 @@ class LoanController extends Controller
         $user = $request->user();
         $customer = $user->hasRole('customer')
             ? $this->customerFor($user)
-            : Customer::where('company_id', $user->company_id)->findOrFail($request->validated('customer_id'));
+            : $this->scopeToBranches(Customer::where('company_id', $user->company_id), $user)->findOrFail($request->validated('customer_id'));
 
         $product = LoanProduct::where('company_id', $user->company_id)->findOrFail($request->validated('loan_product_id'));
         $savingsAccount = $request->filled('savings_account_id')
-            ? SavingsAccount::where('company_id', $user->company_id)->find($request->validated('savings_account_id'))
+            ? $this->scopeToBranches(SavingsAccount::where('company_id', $user->company_id), $user)->find($request->validated('savings_account_id'))
             : null;
 
         $loan = $action->execute(
@@ -172,7 +175,7 @@ class LoanController extends Controller
     private function findScoped(Request $request, string $id): Loan
     {
         $user = $request->user();
-        $query = Loan::where('company_id', $user->company_id);
+        $query = $this->scopeToBranches(Loan::where('company_id', $user->company_id), $user);
 
         if ($user->hasRole('customer')) {
             $query->where('customer_id', $this->customerFor($user)->id);
