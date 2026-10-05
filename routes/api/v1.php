@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
 use App\Http\Controllers\Api\V1\Customer;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\GroupController;
@@ -21,6 +22,9 @@ Route::post('/auth/login', [AuthController::class, 'login'])
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
+    Route::post('/auth/me/photo', [ProfilePhotoController::class, 'update'])
+        ->middleware('throttle:10,1')->name('auth.me.photo.update');
+    Route::delete('/auth/me/photo', [ProfilePhotoController::class, 'destroy'])->name('auth.me.photo.destroy');
 
     // Offline sync (agents now; desktop back-office roles reuse the same protocol)
     Route::middleware(['role:field_agent|branch_manager|company_admin', 'throttle:30,1'])->group(function (): void {

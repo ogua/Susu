@@ -4,8 +4,10 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\HasAvatar;
 use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,12 +16,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements HasTenants
+class User extends Authenticatable implements HasAvatar, HasTenants
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasRoles, HasUuids, LogsActivity, Notifiable;
@@ -62,6 +65,36 @@ class User extends Authenticatable implements HasTenants
             'password' => 'hashed',
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Profile photos live on the public disk; when a photo is replaced or
+     * removed (staff form, profile page or API) the old file is deleted.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (User $user): void {
+            $previousPath = $user->getOriginal('photo_path');
+
+            if ($user->wasChanged('photo_path') && filled($previousPath)) {
+                Storage::disk('public')->delete($previousPath);
+            }
+        });
+    }
+
+    /**
+     * Public URL of the profile photo, or null when none is set.
+     *
+     * @return Attribute<?string, never>
+     */
+    protected function photoUrl(): Attribute
+    {
+        return Attribute::get(fn (): ?string => $this->photo_path ? Storage::disk('public')->url($this->photo_path) : null);
+    }
+
+    public function getFilamentAvatarUrl(): ?string
+    {
+        return $this->photo_url;
     }
 
     public function company(): BelongsTo

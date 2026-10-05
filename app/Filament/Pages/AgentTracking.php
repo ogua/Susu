@@ -16,7 +16,6 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -116,7 +115,7 @@ class AgentTracking extends Page implements HasTable
                 'color' => self::AGENT_COLORS[crc32($position->agent_id) % count(self::AGENT_COLORS)],
                 'phone' => $position->agent?->phone,
                 'email' => $position->agent?->email,
-                'photo_url' => $position->agent?->photo_path ? Storage::disk('public')->url($position->agent->photo_path) : null,
+                'photo_url' => $position->agent?->photo_url,
                 'status' => ! $position->on_duty ? 'off_duty' : ($isStale ? 'stale' : 'active'),
                 'pings_today' => (int) ($agentActivity?->pings_count ?? 0),
                 'started_at' => $firstPingAt?->format('g:i A'),
