@@ -17,10 +17,22 @@
         .ta-stat { padding: 0.875rem 1rem; }
         .ta-stat__sub { font-size: 0.75rem; color: var(--at-muted); margin-top: 2px; }
 
-        .ta-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
-        @media (min-width: 1024px) { .ta-layout { grid-template-columns: minmax(0, 1fr) 340px; } }
+        .ta-layout { display: flex; flex-direction: column; gap: 1rem; }
+
+        .ta-timeline__head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 0.875rem; border-bottom: 1px solid var(--at-border); }
+        .ta-timeline__title { font-size: 0.8125rem; font-weight: 700; color: var(--at-text); }
+        .ta-timeline__track { display: flex; overflow-x: auto; padding: 0.875rem 0 1rem; scroll-snap-type: x proximity; }
+        .ta-event { position: relative; flex: 0 0 190px; display: flex; flex-direction: column; gap: 0.375rem; text-align: left; padding: 0 0.875rem; background: transparent; cursor: pointer; scroll-snap-align: start; }
+        .ta-event::before { content: ''; position: absolute; top: 13px; left: 0; right: 0; height: 2px; background: var(--at-border); }
+        .ta-event:first-child::before { left: calc(0.875rem + 14px); }
+        .ta-event:last-child::before { right: calc(100% - 0.875rem - 14px); }
+        .ta-event:hover .ta-event__title { color: var(--agent); }
+        .ta-event__icon { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font: 700 12px/1 system-ui, sans-serif; color: #fff; border: 2px solid var(--at-surface); }
+        .ta-event__time { font-size: 0.6875rem; color: var(--at-muted); font-variant-numeric: tabular-nums; }
+        .ta-event__title { font-size: 0.8125rem; font-weight: 600; color: var(--at-text); }
+        .ta-event__sub { font-size: 0.75rem; color: var(--at-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .ta-map-wrap { position: relative; }
-        .ta-map { height: 600px; isolation: isolate; z-index: 0; }
+        .ta-map { height: 560px; isolation: isolate; z-index: 0; }
         .ta-empty { position: absolute; inset: auto 1rem 1rem 1rem; z-index: 500; padding: 0.75rem 1rem; border-radius: 0.75rem; background: var(--at-surface); border: 1px solid var(--at-border); font-size: 0.875rem; color: var(--at-muted); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
 
         .ta-player { display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; padding: 0.625rem 0.875rem; border-bottom: 1px solid var(--at-border); }
@@ -29,17 +41,6 @@
         .ta-player select { font-size: 0.75rem; padding: 0.3125rem 0.5rem; border-radius: 0.5rem; border: 1px solid var(--at-border); background: var(--at-soft); color: var(--at-text); }
         .ta-toggle { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; color: var(--at-muted); cursor: pointer; }
 
-        .ta-timeline { max-height: 652px; overflow-y: auto; }
-        .ta-timeline__title { padding: 0.75rem 0.875rem; font-size: 0.8125rem; font-weight: 700; color: var(--at-text); border-bottom: 1px solid var(--at-border); }
-        .ta-event { position: relative; display: flex; gap: 0.75rem; width: 100%; text-align: left; padding: 0.625rem 0.875rem; background: transparent; cursor: pointer; }
-        .ta-event:hover { background: var(--at-hover); }
-        .ta-event::before { content: ''; position: absolute; left: calc(0.875rem + 13px); top: 0; bottom: 0; width: 2px; background: var(--at-border); }
-        .ta-event:first-child::before { top: 50%; }
-        .ta-event:last-child::before { bottom: 50%; }
-        .ta-event__icon { position: relative; z-index: 1; flex: none; width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font: 700 12px/1 system-ui, sans-serif; color: #fff; border: 2px solid var(--at-surface); }
-        .ta-event__time { font-size: 0.6875rem; color: var(--at-muted); font-variant-numeric: tabular-nums; }
-        .ta-event__title { font-size: 0.8125rem; font-weight: 600; color: var(--at-text); }
-        .ta-event__sub { font-size: 0.75rem; color: var(--at-muted); }
 
         .ta-mark { display: flex; align-items: center; justify-content: center; border-radius: 999px; color: #fff; font: 700 12px/1 system-ui, sans-serif; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
         .ta-kind--start { background: #16a34a; }
@@ -155,18 +156,21 @@
                 </div>
             </div>
 
-            <div class="at-card ta-timeline">
-                <div class="ta-timeline__title">Timeline</div>
-                <template x-for="event in events" :key="event.key">
-                    <button type="button" class="ta-event" @click="focusEvent(event)">
-                        <span class="ta-event__icon" :class="`ta-kind--${event.kind}`" x-text="event.badge"></span>
-                        <span style="min-width: 0">
-                            <span class="ta-event__time" style="display: block" x-text="event.time"></span>
-                            <span class="ta-event__title" style="display: block" x-text="event.title"></span>
-                            <span class="ta-event__sub" style="display: block" x-show="event.subtitle" x-text="event.subtitle"></span>
-                        </span>
-                    </button>
-                </template>
+            <div class="at-card">
+                <div class="ta-timeline__head">
+                    <span class="ta-timeline__title">Timeline</span>
+                    <span class="at-row__meta" x-show="events.length" x-text="`${events.length} events · click one to find it on the map`"></span>
+                </div>
+                <div class="ta-timeline__track" x-show="events.length">
+                    <template x-for="event in events" :key="event.key">
+                        <button type="button" class="ta-event" @click="focusEvent(event)">
+                            <span class="ta-event__icon" :class="`ta-kind--${event.kind}`" x-text="event.badge"></span>
+                            <span class="ta-event__time" x-text="event.time"></span>
+                            <span class="ta-event__title" x-text="event.title"></span>
+                            <span class="ta-event__sub" x-show="event.subtitle" x-text="event.subtitle"></span>
+                        </button>
+                    </template>
+                </div>
                 <div class="at-empty" x-show="events.length === 0">Nothing recorded for this day.</div>
             </div>
         </div>
