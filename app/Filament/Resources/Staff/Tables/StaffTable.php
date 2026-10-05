@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\Staff\Tables;
 
+use App\Models\User;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -15,6 +17,11 @@ class StaffTable
     {
         return $table
             ->columns([
+                ImageColumn::make('photo_path')
+                    ->label('')
+                    ->disk('public')
+                    ->circular()
+                    ->defaultImageUrl(fn (User $record): string => filament()->getUserAvatarUrl($record)),
                 TextColumn::make('name')->searchable(),
                 TextColumn::make('email')->searchable(),
                 TextColumn::make('phone'),

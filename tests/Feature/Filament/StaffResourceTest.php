@@ -8,6 +8,8 @@ use App\Filament\Resources\Staff\Pages\ListStaff;
 use App\Models\Branch;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 beforeEach(function (): void {
@@ -170,4 +172,28 @@ it('denies a branch manager from promoting a field agent to branch manager', fun
     ))->toThrow(ValidationException::class);
 
     expect($agent->refresh()->hasRole('field_agent'))->toBeTrue();
+});
+
+it('stores an uploaded staff photo on the public disk', function (): void {
+    Storage::fake('public');
+    $branchManager = User::factory()->branchManager($this->branch)->create();
+    $this->actingAs($branchManager);
+    bootStaffAdminPanel($this->branch);
+
+    livewire(CreateStaff::class)
+        ->fillForm([
+            'name' => 'Efua Quaye',
+            'email' => 'efua.quaye@example.com',
+            'password' => 'password',
+            'role' => 'field_agent',
+            'branch_ids' => [$this->branch->id],
+            'photo_path' => UploadedFile::fake()->image('efua.jpg'),
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $staff = User::where('email', 'efua.quaye@example.com')->firstOrFail();
+
+    expect($staff->photo_path)->toStartWith('staff/photos/');
+    Storage::disk('public')->assertExists($staff->photo_path);
 });

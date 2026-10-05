@@ -15,7 +15,7 @@ class CreateStaffAction
     public function __construct(private readonly UserPolicy $policy) {}
 
     /**
-     * @param  array{name: string, email: string, phone: ?string, password: string, role: string, branch_ids: array<int, string>, is_active?: bool}  $data
+     * @param  array{name: string, email: string, phone: ?string, password: string, role: string, branch_ids: array<int, string>, is_active?: bool, photo_path?: ?string}  $data
      */
     public function execute(User $actor, Branch $tenant, array $data): User
     {
@@ -34,6 +34,7 @@ class CreateStaffAction
             'phone' => $data['phone'] ?? null,
             'password' => $data['password'],
             'is_active' => $data['is_active'] ?? true,
+            'photo_path' => $data['photo_path'] ?? null,
         ]);
 
         $user->assignRole($data['role']);

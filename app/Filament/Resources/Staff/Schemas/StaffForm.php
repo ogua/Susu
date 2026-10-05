@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Staff\Schemas;
 use App\Models\Branch;
 use App\Policies\UserPolicy;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -30,6 +31,15 @@ class StaffForm
                             ->dehydrated(fn (?string $state): bool => filled($state))
                             ->required(fn (string $operation): bool => $operation === 'create'),
                         Toggle::make('is_active')->default(true),
+                        FileUpload::make('photo_path')
+                            ->label('Photo')
+                            ->image()
+                            ->avatar()
+                            ->imageEditor()
+                            ->disk('public')
+                            ->directory('staff/photos')
+                            ->visibility('public')
+                            ->helperText('Shown on the agent tracking map.'),
                     ]),
 
                 Section::make('Role & branch access')

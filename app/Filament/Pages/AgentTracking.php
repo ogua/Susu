@@ -14,7 +14,10 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Live view of every agent currently on duty for the tenant branch: an
@@ -37,8 +40,14 @@ class AgentTracking extends Page implements HasTable
 
     public ?string $selectedAgentId = null;
 
-    /** @var array<int, array{lat: float, lng: float}> */
+    /** @var array<int, array{lat: float, lng: float, at: string}> */
     public array $trail = [];
+
+    /** Distance covered along the selected agent's trail today, in km. */
+    public float $trailDistanceKm = 0.0;
+
+    /** Distinct marker colours so agents are told apart at a glance. */
+    private const AGENT_COLORS = ['#2563eb', '#db2777', '#ea580c', '#7c3aed', '#0d9488', '#ca8a04', '#dc2626', '#4f46e5', '#0891b2', '#65a30d'];
 
     /**
      * Entangled with Alpine's `positions` state so the map re-renders on
@@ -84,15 +93,33 @@ class AgentTracking extends Page implements HasTable
             ->get()
             ->keyBy('agent_id');
 
-        return $positions->map(function (AgentLivePosition $position) use ($summaries): array {
+        $activity = AgentLocationPing::query()
+            ->where('branch_id', Filament::getTenant()?->id)
+            ->whereDate('recorded_at', $today)
+            ->groupBy('agent_id')
+            ->select('agent_id', DB::raw('COUNT(*) as pings_count'), DB::raw('MIN(recorded_at) as first_ping_at'))
+            ->get()
+            ->keyBy('agent_id');
+
+        return $positions->map(function (AgentLivePosition $position) use ($summaries, $activity): array {
             $summary = $summaries->get($position->agent_id);
+            $agentActivity = $activity->get($position->agent_id);
             $isStale = $position->located_at?->lt(now()->subMinutes(self::STALE_MINUTES)) ?? true;
+            $name = $position->agent?->name ?? 'Unknown agent';
+            $firstPingAt = $agentActivity?->first_ping_at ? Carbon::parse($agentActivity->first_ping_at) : null;
 
             return [
                 'id' => $position->agent_id,
-                'name' => $position->agent?->name,
+                'name' => $name,
+                'first_name' => Str::before($name, ' '),
+                'initials' => Str::of($name)->explode(' ')->filter()->take(2)->map(fn (string $part): string => Str::upper(Str::substr($part, 0, 1)))->implode(''),
+                'color' => self::AGENT_COLORS[crc32($position->agent_id) % count(self::AGENT_COLORS)],
                 'phone' => $position->agent?->phone,
-                'photo_url' => $position->agent?->photo_path ? Storage::url($position->agent->photo_path) : null,
+                'email' => $position->agent?->email,
+                'photo_url' => $position->agent?->photo_path ? Storage::disk('public')->url($position->agent->photo_path) : null,
+                'status' => ! $position->on_duty ? 'off_duty' : ($isStale ? 'stale' : 'active'),
+                'pings_today' => (int) ($agentActivity?->pings_count ?? 0),
+                'started_at' => $firstPingAt?->format('g:i A'),
                 'lat' => $position->latitude,
                 'lng' => $position->longitude,
                 'on_duty' => $position->on_duty,
@@ -114,15 +141,42 @@ class AgentTracking extends Page implements HasTable
             ->where('agent_id', $agentId)
             ->whereDate('recorded_at', now()->toDateString())
             ->orderBy('recorded_at')
-            ->get(['latitude', 'longitude'])
-            ->map(fn (AgentLocationPing $ping): array => ['lat' => $ping->latitude, 'lng' => $ping->longitude])
+            ->get(['latitude', 'longitude', 'recorded_at'])
+            ->map(fn (AgentLocationPing $ping): array => [
+                'lat' => (float) $ping->latitude,
+                'lng' => (float) $ping->longitude,
+                'at' => $ping->recorded_at->format('g:i A'),
+            ])
             ->all();
+
+        $this->trailDistanceKm = round($this->distanceAlong($this->trail), 2);
+    }
+
+    /**
+     * Sum of great-circle (haversine) distances between consecutive points, in km.
+     *
+     * @param  array<int, array{lat: float, lng: float}>  $points
+     */
+    private function distanceAlong(array $points): float
+    {
+        $totalKm = 0.0;
+
+        for ($i = 1; $i < count($points); $i++) {
+            $latDelta = deg2rad($points[$i]['lat'] - $points[$i - 1]['lat']);
+            $lngDelta = deg2rad($points[$i]['lng'] - $points[$i - 1]['lng']);
+            $a = sin($latDelta / 2) ** 2
+                + cos(deg2rad($points[$i - 1]['lat'])) * cos(deg2rad($points[$i]['lat'])) * sin($lngDelta / 2) ** 2;
+            $totalKm += 6371 * 2 * atan2(sqrt($a), sqrt(1 - $a));
+        }
+
+        return $totalKm;
     }
 
     public function clearSelection(): void
     {
         $this->selectedAgentId = null;
         $this->trail = [];
+        $this->trailDistanceKm = 0.0;
     }
 
     public function table(Table $table): Table
