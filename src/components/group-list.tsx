@@ -3,7 +3,7 @@ import { FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getGroups } from '@/api/groups';
-import { Badge, EmptyState, ErrorState, ListRow, LoadingState } from '@/components/ui';
+import { Badge, EmptyState, ErrorState, ListRow, SkeletonList } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Group } from '@/types/api';
@@ -47,7 +47,7 @@ export function GroupList({
       refreshing={groups.isRefetching}
       ListEmptyComponent={
         groups.isLoading ? (
-          <LoadingState label="Loading groups…" />
+          <SkeletonList />
         ) : groups.isError ? (
           <ErrorState title="Couldn't load groups" onRetry={() => void groups.refetch()} />
         ) : (

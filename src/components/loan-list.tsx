@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getLoans } from '@/api/loans';
 import { ThemedText } from '@/components/themed-text';
-import { Badge, EmptyState, ErrorState, ListRow, LoadingState } from '@/components/ui';
+import { Badge, EmptyState, ErrorState, ListRow, SkeletonList } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Loan } from '@/types/api';
@@ -65,7 +65,7 @@ export function LoanList({
       ListHeaderComponent={header ? <View style={styles.header}>{header}</View> : null}
       ListEmptyComponent={
         loans.isLoading ? (
-          <LoadingState label="Loading loans…" />
+          <SkeletonList />
         ) : loans.isError ? (
           <ErrorState title="Couldn't load loans" onRetry={() => void loans.refetch()} />
         ) : (

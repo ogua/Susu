@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Share, StyleSheet, View } from 'react-native';
 
 import { getAgentStatementUrl } from '@/api/accounts';
 import { apiErrorMessage } from '@/api/client';
@@ -345,6 +345,26 @@ function CollectionResult({
   }, [saved.opId, pendingCount, syncing]);
 
   const reference = saved.opId.slice(0, 8).toUpperCase();
+
+  async function shareReceipt() {
+    // Plain text so it works in WhatsApp, SMS and email alike. States the
+    // sync status honestly — an unsynced receipt says it is pending.
+    const lines = [
+      `${business || 'OguaFinance'} — Collection receipt`,
+      `Customer: ${customerName}`,
+      `Account: ${accountNumber ?? '—'}${productName ? ` (${productName})` : ''}`,
+      `Amount: ${formatMoney(saved.amount)} (Cash)`,
+      `Date: ${formatDateTime(saved.recordedAt)}`,
+      collector ? `Collected by: ${collector}` : null,
+      `Reference: ${reference}`,
+      status === 'synced' ? 'Status: Confirmed' : 'Status: Pending confirmation',
+    ];
+    try {
+      await Share.share({ message: lines.filter(Boolean).join('\n') });
+    } catch {
+      // User dismissed or no share target — nothing to do.
+    }
+  }
   const tone = status === 'synced' ? 'success' : status === 'rejected' ? 'failed' : 'pending';
   const title =
     status === 'synced'
@@ -366,6 +386,9 @@ function CollectionResult({
       footer={
         <>
           <Button title="Next customer" icon="search" size="lg" onPress={() => router.back()} />
+          {status !== 'rejected' ? (
+            <Button title="Share receipt" variant="outline" icon="send" onPress={shareReceipt} />
+          ) : null}
           {status === 'rejected' ? (
             <Button title="Open Sync Status" variant="outline" icon="sync" onPress={() => router.replace('/(agent)/sync')} />
           ) : (

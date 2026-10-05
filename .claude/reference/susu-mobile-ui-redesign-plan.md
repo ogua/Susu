@@ -57,7 +57,9 @@ See the audit doc.
 
 ## Phase 9 — Visual polish ✅ core · ⏳ more
 - Reanimated entering animations (≤ 300 ms) on dashboards, tiles, account cards, result icon and toast. Icon empty, error and loading states everywhere.
-- ⏳ Skeleton loaders; a balance count-up animation; branded illustration for login/empty states (needs a design asset).
+- ✅ Skeleton loaders (`Skeleton`, `SkeletonList`, `SkeletonHero`) on both dashboards and every list (accounts, transactions, loans, groups, group loans).
+- ✅ Share receipt on the collection result (RN `Share`, plain text for WhatsApp/SMS/email; states "Pending confirmation" until synced). 🔁 Desktop/web equivalent: printable receipt.
+- ⏳ Balance count-up animation (deliberately skipped: it delays reading a financial figure); branded illustration for login/empty states (needs a design asset).
 
 ## Phase 10 — Accessibility & performance ✅ core · ⏳ more
 - Roles and states on buttons, radios (segmented/chips), progress bars, switch label, alerts/live regions. Status badges = icon + text. Combined accessibility labels on money rows. 48 dp min targets.

@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 
 import { getAgentAccounts } from '@/api/accounts';
 import { ThemedText } from '@/components/themed-text';
-import { Avatar, Badge, EmptyState, ErrorState, Input, ListRow, LoadingState, OfflineBanner } from '@/components/ui';
+import { Avatar, Badge, EmptyState, ErrorState, Input, ListRow, OfflineBanner, SkeletonList } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { SavingsAccount } from '@/types/api';
@@ -108,7 +108,7 @@ export default function AgentAccountsScreen() {
       </View>
 
       {accounts.isLoading ? (
-        <LoadingState label="Loading your accounts…" />
+        <SkeletonList />
       ) : accounts.isError && !accounts.data ? (
         <ErrorState
           title="Couldn't load accounts"

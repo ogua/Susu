@@ -26,6 +26,7 @@ import {
   PressableCard,
   ProgressBar,
   SectionHeader,
+  SkeletonHero,
 } from '@/components/ui';
 import { Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -228,9 +229,7 @@ export default function CustomerHome() {
               </View>
             </HeroCard>
           ) : dashboard.isLoading ? (
-            <Card style={styles.heroPlaceholder}>
-              <LoadingState label="Loading your savings…" />
-            </Card>
+            <SkeletonHero />
           ) : null}
         </Animated.View>
 
@@ -320,7 +319,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: Spacing.three, gap: Spacing.three },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heroPlaceholder: { minHeight: 160, justifyContent: 'center' },
   heroStats: { flexDirection: 'row', gap: Spacing.two },
   actions: { flexDirection: 'row', gap: 12 },
   accounts: { gap: 12 },

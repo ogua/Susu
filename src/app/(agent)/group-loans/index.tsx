@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getGroupLoans } from '@/api/groupLoans';
 import { ThemedText } from '@/components/themed-text';
-import { Avatar, Badge, Button, EmptyState, ErrorState, ListRow, LoadingState } from '@/components/ui';
+import { Avatar, Badge, Button, EmptyState, ErrorState, ListRow, SkeletonList } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { GroupLoan } from '@/types/api';
@@ -58,7 +58,7 @@ export default function AgentGroupLoansScreen() {
       }
       ListEmptyComponent={
         groupLoans.isLoading ? (
-          <LoadingState label="Loading group loans…" />
+          <SkeletonList />
         ) : groupLoans.isError ? (
           <ErrorState title="Couldn't load group loans" onRetry={() => void groupLoans.refetch()} />
         ) : (

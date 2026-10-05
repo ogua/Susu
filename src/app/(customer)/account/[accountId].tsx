@@ -19,7 +19,7 @@ import {
   ProgressBar,
   SectionHeader,
   TransactionRow,
-  type IconName,
+  type IconName,  SkeletonList,
 } from '@/components/ui';
 import { Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -219,7 +219,7 @@ export default function AccountDetailScreen() {
       ListFooterComponent={transactions.isFetchingNextPage ? <LoadingState label="Loading more…" /> : null}
       ListEmptyComponent={
         transactions.isLoading ? (
-          <LoadingState label="Loading transactions…" />
+          <SkeletonList />
         ) : transactions.isError ? (
           <ErrorState title="Couldn't load your transactions" onRetry={() => void transactions.refetch()} />
         ) : (

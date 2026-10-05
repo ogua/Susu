@@ -13,3 +13,4 @@ export { Screen } from '@/components/ui/Screen';
 export { ChipSelect, Field, SegmentedControl, type Option } from '@/components/ui/Selectors';
 export { StatTile, StatTileRow } from '@/components/ui/StatTile';
 export { EmptyState, ErrorState, LoadingState, Notice } from '@/components/ui/States';
+export { Skeleton, SkeletonHero, SkeletonList } from '@/components/ui/Skeleton';

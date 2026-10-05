@@ -22,6 +22,7 @@ import {
   IconButton,
   OfflineBanner,
   SectionHeader,
+  SkeletonHero,
   SyncStatusPill,
   type IconName,
 } from '@/components/ui';
@@ -185,9 +186,7 @@ export default function AgentDashboard() {
 
         <Animated.View entering={FadeInDown.duration(260)}>
           {dashboard.isLoading && !data ? (
-            <Card style={styles.heroPlaceholder}>
-              <ActivityIndicator color={theme.primary} />
-            </Card>
+            <SkeletonHero />
           ) : data ? (
             <HeroCard
               label="Collected today"
@@ -342,7 +341,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: Spacing.three, gap: Spacing.three },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heroPlaceholder: { minHeight: 180, alignItems: 'center', justifyContent: 'center' },
   heroStats: { flexDirection: 'row', gap: Spacing.two },
   dutyCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dutyIcon: { width: 36, height: 36, borderRadius: Radii.pill, alignItems: 'center', justifyContent: 'center' },
