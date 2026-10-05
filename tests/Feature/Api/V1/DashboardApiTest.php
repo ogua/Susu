@@ -72,6 +72,14 @@ it('lets a company admin pick a branch but not a foreign one', function (): void
         ->assertNotFound();
 });
 
+it('defaults a company admin without a home branch to their company branch', function (): void {
+    $this->companyAdmin->update(['branch_id' => null]);
+
+    $this->actingAs($this->companyAdmin, 'sanctum')
+        ->getJson('/api/v1/dashboard/branch')
+        ->assertOk();
+});
+
 it('denies a field agent the branch dashboard', function (): void {
     $this->actingAs($this->agent, 'sanctum')
         ->getJson('/api/v1/dashboard/branch')

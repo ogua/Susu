@@ -179,6 +179,17 @@ it('lists the branch agents live positions for a manager over the API', function
         ->assertJsonStructure(['data' => [['name', 'initials', 'color', 'photo_url', 'status', 'lat', 'lng', 'collections_total']]]);
 });
 
+it('defaults a company admin without a home branch to their company branch for positions', function (): void {
+    recordRoute($this->agent, [[0, 5.6, -0.19]]);
+    $companyAdmin = User::factory()->companyAdmin($this->branch->company)->create(['branch_id' => null]);
+    Sanctum::actingAs($companyAdmin);
+
+    $this->getJson('/api/v1/agents/positions')
+        ->assertOk()
+        ->assertJsonPath('branch.id', $this->branch->id)
+        ->assertJsonCount(1, 'data');
+});
+
 it('does not list agent positions to field agents', function (): void {
     Sanctum::actingAs($this->agent);
 

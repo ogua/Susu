@@ -14,6 +14,7 @@ use App\Actions\Reports\BuildIncomeStatementAction;
 use App\Actions\Reports\BuildLoanPortfolioReportAction;
 use App\Actions\Reports\BuildTrialBalanceAction;
 use App\Actions\Reports\BuildWithdrawalsReportAction;
+use App\Http\Controllers\Api\V1\Concerns\ResolvesRequestBranch;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\GroupLoanInstallment;
@@ -35,6 +36,8 @@ use Illuminate\Support\Facades\URL;
  */
 class ReportController extends Controller
 {
+    use ResolvesRequestBranch;
+
     public const REPORTS = [
         'trial-balance',
         'defaulters',
@@ -120,23 +123,6 @@ class ReportController extends Controller
             'url' => $url,
             'expires_at' => $expiresAt->toIso8601String(),
         ]);
-    }
-
-    private function resolveBranch(Request $request): Branch
-    {
-        $user = $request->user();
-
-        $validated = $request->validate([
-            'branch_id' => ['nullable', 'uuid'],
-        ]);
-
-        if (isset($validated['branch_id']) && $user->hasRole('company_admin')) {
-            return Branch::query()
-                ->where('company_id', $user->company_id)
-                ->findOrFail($validated['branch_id']);
-        }
-
-        return Branch::findOrFail($user->branch_id);
     }
 
     /**

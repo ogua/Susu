@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Agents\BuildAgentPositionsAction;
+use App\Http\Controllers\Api\V1\Concerns\ResolvesRequestBranch;
 use App\Http\Controllers\Controller;
-use App\Models\Branch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,6 +14,8 @@ use Illuminate\Http\Request;
  */
 class AgentPositionController extends Controller
 {
+    use ResolvesRequestBranch;
+
     public function index(Request $request, BuildAgentPositionsAction $buildPositions): JsonResponse
     {
         $branch = $this->resolveBranch($request);
@@ -23,26 +25,5 @@ class AgentPositionController extends Controller
             'stale_after_minutes' => BuildAgentPositionsAction::STALE_MINUTES,
             'data' => $buildPositions->execute($branch),
         ]);
-    }
-
-    /**
-     * Company admins may look at any of their branches via ?branch_id;
-     * branch managers are pinned to their own branch.
-     */
-    private function resolveBranch(Request $request): Branch
-    {
-        $user = $request->user();
-
-        $validated = $request->validate([
-            'branch_id' => ['nullable', 'uuid'],
-        ]);
-
-        if (isset($validated['branch_id']) && $user->hasRole('company_admin')) {
-            return Branch::query()
-                ->where('company_id', $user->company_id)
-                ->findOrFail($validated['branch_id']);
-        }
-
-        return Branch::findOrFail($user->branch_id);
     }
 }
