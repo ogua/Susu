@@ -5,6 +5,9 @@ namespace App\Filament\Resources\Customers;
 use App\Filament\Resources\Customers\Pages\CreateCustomer;
 use App\Filament\Resources\Customers\Pages\EditCustomer;
 use App\Filament\Resources\Customers\Pages\ListCustomers;
+use App\Filament\Resources\Customers\RelationManagers\BeneficiariesRelationManager;
+use App\Filament\Resources\Customers\RelationManagers\FamilyMembersRelationManager;
+use App\Filament\Resources\Customers\RelationManagers\IdentificationsRelationManager;
 use App\Filament\Resources\Customers\RelationManagers\SavingsAccountsRelationManager;
 use App\Filament\Resources\Customers\Schemas\CustomerForm;
 use App\Filament\Resources\Customers\Tables\CustomersTable;
@@ -71,6 +74,9 @@ class CustomerResource extends Resource
     {
         return [
             SavingsAccountsRelationManager::class,
+            IdentificationsRelationManager::class,
+            BeneficiariesRelationManager::class,
+            FamilyMembersRelationManager::class,
         ];
     }
 

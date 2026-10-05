@@ -28,15 +28,9 @@ class EditCustomer extends EditRecord
         /** @var Customer $record */
         $record = $this->getRecord();
 
-        $data['identifications'] = $record->identifications()
-            ->get(['id', 'id_type', 'id_number', 'issue_date', 'expiry_date', 'description', 'is_primary'])
-            ->toArray();
-        $data['beneficiaries'] = $record->beneficiaries()
-            ->get(['id', 'name', 'relationship', 'amount_of_legacy', 'phone', 'address', 'town', 'county', 'state_region'])
-            ->toArray();
-        $data['family_members'] = $record->familyMembers()
-            ->get(['id', 'name', 'relationship', 'contact_phone', 'occupation'])
-            ->toArray();
+        // Identifications/beneficiaries/family members are not part of this
+        // form — their relation managers edit them row-by-row in modals, so
+        // UpdateCustomerAction receives no arrays and leaves them untouched.
 
         // CustomerResource::getEloquentQuery() doesn't eager-load branch, so
         // the disabled branch.name TextInput has nothing to hydrate from

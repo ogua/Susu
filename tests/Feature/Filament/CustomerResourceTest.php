@@ -3,10 +3,12 @@
 use App\Filament\Resources\Customers\Pages\CreateCustomer;
 use App\Filament\Resources\Customers\Pages\EditCustomer;
 use App\Filament\Resources\Customers\Pages\ListCustomers;
+use App\Filament\Resources\Customers\RelationManagers\IdentificationsRelationManager;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\CustomerIdentification;
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 
 beforeEach(function (): void {
@@ -164,37 +166,27 @@ it('requires business_name/business_structure/business_start_date on the busines
     expect(Customer::where('phone', '+233302999888')->exists())->toBeFalse();
 });
 
-it('reconciles identification rows on edit, adding one and removing another', function (): void {
+it('adds, removes and re-primaries identifications through the modal relation manager', function (): void {
     bootAdminPanelWithTenant($this->branch);
 
     $customer = Customer::factory()->individual()->forBranch($this->branch)->create();
     $kept = CustomerIdentification::factory()->for($customer)->create(['id_type' => 'ghana_card', 'is_primary' => true]);
-    $removed = CustomerIdentification::factory()->for($customer)->create(['id_type' => 'passport']);
+    $removed = CustomerIdentification::factory()->for($customer)->create(['id_type' => 'passport', 'is_primary' => false]);
 
-    livewire(EditCustomer::class, ['record' => $customer->getKey()])
-        ->fillForm([
-            'identifications' => [
-                [
-                    'id' => $kept->id,
-                    'id_type' => 'ghana_card',
-                    'id_number' => $kept->id_number,
-                    'issue_date' => $kept->issue_date?->toDateString(),
-                    'is_primary' => true,
-                ],
-                [
-                    'id_type' => 'voters_id',
-                    'id_number' => 'VOT-999999',
-                    'issue_date' => '2024-01-01',
-                ],
-            ],
+    livewire(IdentificationsRelationManager::class, ['ownerRecord' => $customer, 'pageClass' => EditCustomer::class])
+        ->callAction(TestAction::make('create')->table(), [
+            'id_type' => 'voters_id',
+            'id_number' => 'VOT-999999',
+            'issue_date' => '2024-01-01',
+            'is_primary' => true,
         ])
-        ->call('save')
-        ->assertHasNoFormErrors();
+        ->assertHasNoFormErrors()
+        ->callAction(TestAction::make('delete')->table($removed));
 
     $customer->refresh();
 
     expect(CustomerIdentification::find($removed->id))->toBeNull()
-        ->and(CustomerIdentification::find($kept->id))->not->toBeNull()
-        ->and($customer->identifications()->where('id_type', 'voters_id')->exists())->toBeTrue()
-        ->and($customer->identifications)->toHaveCount(2);
+        ->and($customer->identifications)->toHaveCount(2)
+        ->and($kept->fresh()->is_primary)->toBeFalse()
+        ->and($customer->id_number)->toBe('VOT-999999');
 });

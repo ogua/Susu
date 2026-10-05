@@ -14,7 +14,6 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -110,23 +109,10 @@ class CustomerFormFields
     {
         return Repeater::make('identifications')
             ->label('Identification')
-            ->table([
-                TableColumn::make('ID Type')->markAsRequired(),
-                TableColumn::make('Unique ID Number')->markAsRequired(),
-                TableColumn::make('Issue Date')->markAsRequired(),
-                TableColumn::make('Expiry Date'),
-                TableColumn::make('Description'),
-                TableColumn::make('Primary'),
-            ])
-            ->schema([
-                Hidden::make('id'),
-                Select::make('id_type')->options(IdentificationType::class)->required(),
-                TextInput::make('id_number')->required(),
-                DatePicker::make('issue_date')->required(),
-                DatePicker::make('expiry_date'),
-                TextInput::make('description'),
-                Toggle::make('is_primary'),
-            ])
+            ->schema(static::identificationFields())
+            ->columns(3)
+            ->itemLabel(fn (array $state): string => static::itemLabel($state, ['id_number'], 'New identification'))
+            ->collapsible()
             ->addActionLabel('Add Identification')
             ->defaultItems(0)
             ->reorderable(false)
@@ -134,9 +120,45 @@ class CustomerFormFields
     }
 
     /**
+     * Shared by the create-wizard repeater and the modal form of the
+     * Identifications relation manager on the view/edit pages.
+     *
      * @return array<int, Component>
      */
-    public static function otherInfoFields(): array
+    public static function identificationFields(): array
+    {
+        return [
+            Hidden::make('id'),
+            Select::make('id_type')->label('ID type')->options(IdentificationType::class)->required(),
+            TextInput::make('id_number')->label('Unique ID number')->required(),
+            DatePicker::make('issue_date')->required(),
+            DatePicker::make('expiry_date')->afterOrEqual('issue_date'),
+            TextInput::make('description')->columnSpan(2),
+            Toggle::make('is_primary')->label('Primary ID')->inline(false),
+        ];
+    }
+
+    /**
+     * Collapsed repeater cards show the row's key values instead of a bare
+     * index, so a long list stays scannable.
+     *
+     * @param  array<string, mixed>  $state
+     * @param  list<string>  $keys
+     */
+    private static function itemLabel(array $state, array $keys, string $fallback): string
+    {
+        $parts = array_filter(array_map(fn (string $key): string => trim((string) ($state[$key] ?? '')), $keys));
+
+        return $parts === [] ? $fallback : implode(' — ', $parts);
+    }
+
+    /**
+     * The edit form passes false: on an existing customer, family members are
+     * managed one at a time in a modal (FamilyMembersRelationManager).
+     *
+     * @return array<int, Component>
+     */
+    public static function otherInfoFields(bool $includeFamilyMembers = true): array
     {
         return [
             Select::make('marital_status')->options(MaritalStatus::class),
@@ -152,11 +174,11 @@ class CustomerFormFields
             TextInput::make('spouse_employer_region')->label('Spouse employer state/region'),
             Section::make('Family & religion')
                 ->collapsed()
-                ->schema([
+                ->schema(array_values(array_filter([
                     TextInput::make('religion')
                         ->helperText('Best-guess field — the source recording never expanded this section.'),
-                    static::familyMembersRepeater(),
-                ])
+                    $includeFamilyMembers ? static::familyMembersRepeater() : null,
+                ])))
                 ->columnSpanFull(),
         ];
     }
@@ -165,24 +187,28 @@ class CustomerFormFields
     {
         return Repeater::make('family_members')
             ->label('Family details')
-            ->helperText('Best-guess section — the source recording never expanded this section.')
-            ->table([
-                TableColumn::make('Name')->markAsRequired(),
-                TableColumn::make('Relationship'),
-                TableColumn::make('Contact phone'),
-                TableColumn::make('Occupation'),
-            ])
-            ->schema([
-                Hidden::make('id'),
-                TextInput::make('name')->required(),
-                TextInput::make('relationship'),
-                TextInput::make('contact_phone')->tel(),
-                TextInput::make('occupation'),
-            ])
+            ->schema(static::familyMemberFields())
+            ->columns(2)
+            ->itemLabel(fn (array $state): string => static::itemLabel($state, ['name', 'relationship'], 'New family member'))
+            ->collapsible()
             ->addActionLabel('Add Family Member')
             ->defaultItems(0)
             ->reorderable(false)
             ->columnSpanFull();
+    }
+
+    /**
+     * @return array<int, Component>
+     */
+    public static function familyMemberFields(): array
+    {
+        return [
+            Hidden::make('id'),
+            TextInput::make('name')->required(),
+            TextInput::make('relationship'),
+            TextInput::make('contact_phone')->tel(),
+            TextInput::make('occupation'),
+        ];
     }
 
     /**
@@ -209,35 +235,37 @@ class CustomerFormFields
     public static function beneficiariesRepeater(): Repeater
     {
         return Repeater::make('beneficiaries')
-            ->table([
-                TableColumn::make('Beneficiary Name')->markAsRequired(),
-                TableColumn::make('Relationship to Client'),
-                TableColumn::make('Amount of Legacy (GHS)')->markAsRequired(),
-                TableColumn::make('Phone'),
-                TableColumn::make('Address'),
-                TableColumn::make('Town'),
-                TableColumn::make('County'),
-                TableColumn::make('State/Region'),
-            ])
-            ->schema([
-                Hidden::make('id'),
-                TextInput::make('name')->required(),
-                TextInput::make('relationship'),
-                TextInput::make('amount_of_legacy')
-                    ->numeric()
-                    ->required()
-                    ->formatStateUsing(fn (?int $state): ?float => $state === null ? null : $state / 100)
-                    ->dehydrateStateUsing(fn (?float $state): int => (int) round(($state ?? 0) * 100)),
-                TextInput::make('phone')->tel(),
-                Textarea::make('address'),
-                TextInput::make('town'),
-                TextInput::make('county'),
-                TextInput::make('state_region'),
-            ])
+            ->schema(static::beneficiaryFields())
+            ->columns(3)
+            ->itemLabel(fn (array $state): string => static::itemLabel($state, ['name', 'relationship'], 'New beneficiary'))
+            ->collapsible()
             ->addActionLabel('Add Beneficiary')
             ->defaultItems(0)
             ->reorderable(false)
             ->columnSpanFull();
+    }
+
+    /**
+     * @return array<int, Component>
+     */
+    public static function beneficiaryFields(): array
+    {
+        return [
+            Hidden::make('id'),
+            TextInput::make('name')->label('Beneficiary name')->required(),
+            TextInput::make('relationship')->label('Relationship to client'),
+            TextInput::make('amount_of_legacy')
+                ->label('Amount of legacy (GHS)')
+                ->numeric()
+                ->required()
+                ->formatStateUsing(fn (?int $state): ?float => $state === null ? null : $state / 100)
+                ->dehydrateStateUsing(fn (?float $state): int => (int) round(($state ?? 0) * 100)),
+            TextInput::make('phone')->tel(),
+            TextInput::make('town'),
+            TextInput::make('county'),
+            TextInput::make('state_region')->label('State/Region'),
+            Textarea::make('address')->columnSpan(2),
+        ];
     }
 
     /**

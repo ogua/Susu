@@ -74,9 +74,11 @@ class CustomerForm
                 ->columns(2)
                 ->schema(CustomerFormFields::principalContactFields());
         } else {
-            $components[] = Section::make('Identification')
+            // Identification, beneficiary and family rows are edited one at a
+            // time in modals (relation managers below the form), not inline.
+            $components[] = Section::make('Identification document')
+                ->description('Add or edit ID records in the Identifications tab below.')
                 ->schema([
-                    CustomerFormFields::identificationRepeater(),
                     FileUpload::make('id_photo_path')
                         ->label('Primary ID document photo')
                         ->image()
@@ -88,14 +90,12 @@ class CustomerForm
 
             $components[] = Section::make('Other info')
                 ->columns(2)
-                ->schema(CustomerFormFields::otherInfoFields());
+                ->schema(CustomerFormFields::otherInfoFields(includeFamilyMembers: false));
 
             $components[] = Section::make('Employment/business details')
                 ->columns(2)
+                ->collapsible()
                 ->schema(CustomerFormFields::employmentBusinessFields());
-
-            $components[] = Section::make('Beneficiaries')
-                ->schema([CustomerFormFields::beneficiariesRepeater()]);
         }
 
         $components[] = Section::make('Next of kin')
