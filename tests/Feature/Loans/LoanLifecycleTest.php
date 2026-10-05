@@ -337,6 +337,35 @@ it('write-off caps savings applied at the loan outstanding balance', function ()
     ))->toThrow(ValidationException::class);
 });
 
+it('write-off caps savings applied at the principal, not the interest-bearing outstanding balance', function (): void {
+    $loan = applyLoan($this->agent, $this->customer, $this->product);
+    app(ApproveLoanAction::class)->execute($loan, $this->manager);
+    $disbursed = app(DisburseLoanAction::class)->execute($loan->fresh(), $this->manager);
+    $principalOutstanding = $disbursed->receivableAccount->balance;
+
+    // Above the principal on the receivable but within outstanding_balance (which includes interest).
+    $request = $principalOutstanding + 1_00;
+    expect($request)->toBeLessThanOrEqual($disbursed->outstanding_balance);
+
+    $savingsAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+        'balance' => 10_000_00,
+    ]);
+
+    expect(fn () => app(WriteOffLoanAction::class)->execute(
+        $disbursed->fresh(),
+        $this->manager,
+        'Borrower absconded',
+        savingsAccount: $savingsAccount,
+        savingsAmountApplied: $request,
+    ))->toThrow(ValidationException::class);
+
+    expect($disbursed->fresh()->status)->toBe(LoanStatus::Disbursed)
+        ->and($disbursed->receivableAccount->refresh()->balance)->toBe($principalOutstanding);
+});
+
 it('write-off rejects a savings account that does not belong to the borrower', function (): void {
     $loan = applyLoan($this->agent, $this->customer, $this->product);
     app(ApproveLoanAction::class)->execute($loan, $this->manager);

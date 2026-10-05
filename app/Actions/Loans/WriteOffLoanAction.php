@@ -65,8 +65,11 @@ class WriteOffLoanAction
                 if ($savingsAccount->customer_id !== $loan->customer_id) {
                     throw ValidationException::withMessages(['savings_account_id' => 'This savings account does not belong to the borrower.']);
                 }
-                if ($savingsAmountApplied > $writeOffAmount) {
-                    throw ValidationException::withMessages(['savings_amount_applied' => 'Cannot apply more than the outstanding balance.']);
+                // Capped at the principal on the receivable, not outstanding_balance:
+                // the latter includes interest never recognized as income, so applying
+                // past the principal would credit the receivable negative.
+                if ($savingsAmountApplied > $loan->receivableAccount->refresh()->balance) {
+                    throw ValidationException::withMessages(['savings_amount_applied' => 'Cannot apply more than the outstanding principal.']);
                 }
 
                 // Must run before the principal read below — this posting
