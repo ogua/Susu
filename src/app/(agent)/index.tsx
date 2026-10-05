@@ -37,7 +37,8 @@ import { drainOutbox } from '@/sync/engine';
 import { firstName, formatRelative, greeting, roleLabel } from '@/utils/format';
 import { formatMoney } from '@/utils/money';
 
-const ACTIONS: { label: string; hint: string; icon: IconName; href: Href }[] = [
+const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; managersOnly?: boolean }[] = [
+  { label: 'Track agents', hint: 'Live map & routes', icon: 'map', href: '/(agent)/tracking' as Href, managersOnly: true },
   { label: 'Register customer', hint: 'Works offline', icon: 'personAdd', href: '/(agent)/register-customer' },
   { label: 'Close my day', hint: 'Declare cash', icon: 'dayClose', href: '/(agent)/day-close' },
   { label: 'Loans', hint: 'Repayments', icon: 'loan', href: '/(agent)/loans' },
@@ -160,6 +161,7 @@ export default function AgentDashboard() {
   const trendTotal = trend.reduce((sum, point) => sum + point.total, 0);
   const hasTrend = trend.some((point) => point.total > 0);
   const branch = user?.branches?.[0]?.name;
+  const isManager = user?.role === 'branch_manager' || user?.role === 'company_admin';
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.background }]}>
@@ -265,7 +267,7 @@ export default function AgentDashboard() {
 
         <SectionHeader title="Quick actions" />
         <View style={styles.grid}>
-          {ACTIONS.map((action, index) => (
+          {ACTIONS.filter((action) => !action.managersOnly || isManager).map((action, index) => (
             <Animated.View
               key={action.label}
               entering={FadeInDown.duration(220).delay(40 * index)}

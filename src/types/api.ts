@@ -400,3 +400,93 @@ export interface Paginated<T> {
   links: { first: string | null; last: string | null; prev: string | null; next: string | null };
   meta: { current_page: number; last_page: number; per_page: number; total: number };
 }
+
+/** Live agent on the branch tracking map (GET /agents/positions). Amounts in minor units. */
+export type AgentTrackingStatus = 'active' | 'stale' | 'off_duty';
+
+export interface AgentPosition {
+  id: string;
+  name: string;
+  first_name: string;
+  initials: string;
+  color: string;
+  phone: string | null;
+  email: string | null;
+  photo_url: string | null;
+  status: AgentTrackingStatus;
+  on_duty: boolean;
+  stale: boolean;
+  lat: number;
+  lng: number;
+  located_at: string | null;
+  located_at_human: string | null;
+  pings_today: number;
+  started_at: string | null;
+  collections_count: number;
+  collections_total: number;
+  collections_total_formatted: string;
+}
+
+export interface AgentPositionsResponse {
+  branch: { id: string; name: string };
+  stale_after_minutes: number;
+  data: AgentPosition[];
+}
+
+export interface RoutePoint {
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  at: string;
+  time: string;
+}
+
+export interface RouteStop {
+  lat: number;
+  lng: number;
+  arrived_at: string;
+  left_at: string;
+  arrived_time: string;
+  left_time: string;
+  minutes: number;
+}
+
+export interface RouteCollection {
+  reference: string;
+  description: string | null;
+  amount: number;
+  amount_formatted: string;
+  lat: number;
+  lng: number;
+  at: string;
+  time: string;
+}
+
+/** One agent's movement for a day (GET /agents/{agent}/route). */
+export interface AgentRoute {
+  agent: {
+    id: string;
+    name: string;
+    phone: string | null;
+    photo_url: string | null;
+    on_duty: boolean;
+    last_seen_at: string | null;
+  };
+  date: string;
+  points: RoutePoint[];
+  stops: RouteStop[];
+  collections: RouteCollection[];
+  summary: {
+    distance_km: number;
+    started_at: string | null;
+    ended_at: string | null;
+    started_time: string | null;
+    ended_time: string | null;
+    duration_minutes: number;
+    points_count: number;
+    stops_count: number;
+    collections_count: number;
+    collections_total: number;
+    collections_total_formatted: string;
+  };
+}
