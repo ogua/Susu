@@ -24,6 +24,7 @@ class WithdrawalRequest extends Model
         'reason',
         'status',
         'requested_by',
+        'client_reference',
         'approved_by',
         'rejected_reason',
         'paid_entry_id',

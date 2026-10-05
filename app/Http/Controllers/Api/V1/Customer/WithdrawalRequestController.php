@@ -31,6 +31,7 @@ class WithdrawalRequestController extends Controller
             'savings_account_id' => ['required', 'uuid'],
             'amount' => ['required', 'integer', 'min:1'],
             'reason' => ['nullable', 'string', 'max:500'],
+            'client_reference' => ['nullable', 'uuid'],
         ]);
 
         $customer = $this->customerFor($request);
@@ -42,9 +43,13 @@ class WithdrawalRequestController extends Controller
             $account,
             (int) $validated['amount'],
             $validated['reason'] ?? null,
+            $validated['client_reference'] ?? null,
         );
 
-        return WithdrawalRequestResource::make($withdrawal)->response()->setStatusCode(201);
+        // A replayed client_reference returns the original request (200), not a new one.
+        return WithdrawalRequestResource::make($withdrawal)
+            ->response()
+            ->setStatusCode($withdrawal->wasRecentlyCreated ? 201 : 200);
     }
 
     protected function customerFor(Request $request): Customer

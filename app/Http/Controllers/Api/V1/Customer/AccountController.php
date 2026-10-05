@@ -33,6 +33,9 @@ class AccountController extends Controller
 
         $entries = JournalEntry::query()
             ->whereHas('lines', fn ($q) => $q->where('ledger_account_id', $account->ledger_account_id))
+            // Only this account's own lines: JournalEntryResource derives the
+            // entry's direction (money in/out of this account) from them.
+            ->with(['lines' => fn ($q) => $q->where('ledger_account_id', $account->ledger_account_id)])
             ->orderByDesc('recorded_at')
             ->paginate($request->integer('per_page', 30));
 
