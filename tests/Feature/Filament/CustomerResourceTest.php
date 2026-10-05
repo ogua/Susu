@@ -9,7 +9,6 @@ use App\Models\Customer;
 use App\Models\CustomerIdentification;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
-use Filament\Facades\Filament;
 
 beforeEach(function (): void {
     seedRoles();
@@ -48,18 +47,6 @@ it('lets a company admin see customers across every branch in their company', fu
         ->assertCanSeeTableRecords([$mine, $sameCompany])
         ->assertCountTableRecords(2);
 });
-
-/**
- * Booting the panel registers Filament's automatic tenant-association
- * listener, which force-sets branch_id on every NEW Customer to the current
- * tenant — so fixtures for other branches must be created before this runs.
- */
-function bootAdminPanelWithTenant(Branch $branch): void
-{
-    Filament::setCurrentPanel('admin');
-    Filament::setTenant($branch);
-    Filament::bootCurrentPanel();
-}
 
 it('creates a customer through CreateCustomerAction, auto-assigning code and branch', function (): void {
     bootAdminPanelWithTenant($this->branch);

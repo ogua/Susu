@@ -86,7 +86,7 @@ class CustomersTable
                     CustomerActions::assignAgent(),
                     CustomerActions::transfer(),
                     CustomerActions::addToGroup(),
-                    DeleteAction::make(),
+                    CustomerActions::guardedDelete(DeleteAction::make()),
                 ]),
             ])
             ->toolbarActions([

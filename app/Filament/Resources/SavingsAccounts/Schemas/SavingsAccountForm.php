@@ -4,6 +4,7 @@ namespace App\Filament\Resources\SavingsAccounts\Schemas;
 
 use App\Enums\AccountStatus;
 use App\Enums\SavingsProductType;
+use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -37,7 +38,10 @@ class SavingsAccountForm
                     ->label('Assigned agent')
                     ->options(fn () => User::role('field_agent')
                         ->where('branch_id', Filament::getTenant()?->id)
-                        ->pluck('name', 'id')),
+                        ->pluck('name', 'id'))
+                    // Reassigning goes through the customer's "Assign agent"
+                    // action so every active account moves together.
+                    ->disabledOn('edit'),
                 TextInput::make('contribution_amount')
                     ->label('Daily contribution (GHS)')
                     ->numeric()
@@ -59,8 +63,13 @@ class SavingsAccountForm
                     ->visible(fn (Get $get): bool => self::isTargetOrFixedDepositProduct($get))
                     ->minDate(now()->addDay())
                     ->disabledOn('edit'),
+                // Closing is the "Close account" action (it checks the balance
+                // is zero); the form only toggles active/dormant.
                 Select::make('status')
-                    ->options(AccountStatus::class)
+                    ->options(fn (?SavingsAccount $record): array => $record?->status === AccountStatus::Closed
+                        ? [AccountStatus::Closed->value => 'Closed']
+                        : [AccountStatus::Active->value => 'Active', AccountStatus::Dormant->value => 'Dormant'])
+                    ->disabled(fn (?SavingsAccount $record): bool => $record?->status === AccountStatus::Closed)
                     ->required()
                     ->visibleOn('edit'),
             ]);

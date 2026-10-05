@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Customers;
 
 use App\Actions\Customers\AssignCustomerAgentAction;
+use App\Actions\Customers\DeleteCustomerAction;
 use App\Actions\Customers\TransferCustomerAction;
 use App\Actions\LoanGroups\AddLoanGroupMemberAction;
 use App\Models\Branch;
@@ -11,6 +12,7 @@ use App\Models\LoanGroup;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
+use Filament\Actions\DeleteAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -28,6 +30,23 @@ use Throwable;
  */
 class CustomerActions
 {
+    /**
+     * A customer can only be deleted once nothing financial is still open
+     * for them (DeleteCustomerAction::blockingReason); otherwise the delete
+     * is cancelled with the reason.
+     */
+    public static function guardedDelete(DeleteAction $action): DeleteAction
+    {
+        return $action->before(function (DeleteAction $action, Customer $record): void {
+            $reason = app(DeleteCustomerAction::class)->blockingReason($record);
+
+            if ($reason !== null) {
+                Notification::make()->title('Customer not deleted')->body($reason)->danger()->send();
+                $action->cancel();
+            }
+        });
+    }
+
     public static function transfer(): Action
     {
         return Action::make('transfer')

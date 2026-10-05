@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Customers\Pages;
 
 use App\Actions\Customers\UpdateCustomerAction;
+use App\Filament\Resources\Customers\CustomerActions;
 use App\Filament\Resources\Customers\CustomerResource;
 use App\Models\Customer;
 use Filament\Actions\DeleteAction;
@@ -16,7 +17,7 @@ class EditCustomer extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make(),
+            CustomerActions::guardedDelete(DeleteAction::make()),
         ];
     }
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Branch;
 use Database\Seeders\RoleSeeder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -74,5 +75,17 @@ function seedRoles(): void
 function bootSuperAdminPanel(): void
 {
     Filament::setCurrentPanel('superadmin');
+    Filament::bootCurrentPanel();
+}
+
+/**
+ * Booting the panel registers Filament's automatic tenant-association
+ * listener, which force-sets branch_id on every NEW Customer to the current
+ * tenant — so fixtures for other branches must be created before this runs.
+ */
+function bootAdminPanelWithTenant(Branch $branch): void
+{
+    Filament::setCurrentPanel('admin');
+    Filament::setTenant($branch);
     Filament::bootCurrentPanel();
 }
