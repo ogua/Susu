@@ -12,11 +12,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Loan extends Model
 {
     /** @use HasFactory<LoanFactory> */
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, LogsActivity;
 
     protected $fillable = [
         'company_id',
@@ -36,6 +38,8 @@ class Loan extends Model
         'origination_fee_amount',
         'penalty_rate_bps',
         'grace_period_days',
+        'first_repayment_date',
+        'purpose',
         'total_interest',
         'total_repayable',
         'outstanding_balance',
@@ -76,6 +80,7 @@ class Loan extends Model
             'origination_fee_amount' => 'integer',
             'penalty_rate_bps' => 'integer',
             'grace_period_days' => 'integer',
+            'first_repayment_date' => 'date',
             'total_interest' => 'integer',
             'total_repayable' => 'integer',
             'outstanding_balance' => 'integer',
@@ -151,5 +156,50 @@ class Loan extends Model
     public function writeOffSavingsAccount(): BelongsTo
     {
         return $this->belongsTo(SavingsAccount::class, 'write_off_savings_account_id');
+    }
+
+    public function charges(): HasMany
+    {
+        return $this->hasMany(LoanCharge::class);
+    }
+
+    public function collaterals(): HasMany
+    {
+        return $this->hasMany(LoanCollateral::class);
+    }
+
+    public function guarantors(): HasMany
+    {
+        return $this->hasMany(LoanGuarantor::class);
+    }
+
+    /** Every posting against this loan's receivable (disbursement, repayments, write-off). */
+    public function receivableLines(): HasMany
+    {
+        return $this->hasMany(JournalLine::class, 'ledger_account_id', 'receivable_account_id');
+    }
+
+    /**
+     * Lifecycle and term changes only — outstanding_balance moves on every
+     * repayment and is already traceable through the ledger.
+     */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'status',
+                'principal_amount',
+                'interest_rate_bps',
+                'term_period_count',
+                'repayment_frequency',
+                'origination_fee_amount',
+                'first_repayment_date',
+                'approved_by',
+                'rejection_reason',
+                'write_off_reason',
+            ])
+            ->logOnlyDirty()
+            ->useLogName('loan')
+            ->dontSubmitEmptyLogs();
     }
 }

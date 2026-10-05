@@ -9,6 +9,8 @@ use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
 use App\Models\User;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -29,6 +31,7 @@ class ApplyForLoanAction
         ?string $guarantorPhone = null,
         ?string $notes = null,
         ?string $clientReference = null,
+        ?LoanApplicationDetails $details = null,
     ): Loan {
         if ($clientReference !== null) {
             $existing = Loan::where('client_reference', $clientReference)->first();
@@ -52,6 +55,14 @@ class ApplyForLoanAction
             throw ValidationException::withMessages(['savings_account_id' => 'This account does not belong to the customer.']);
         }
 
+        $details ??= new LoanApplicationDetails;
+        $this->assertDetails($submittedBy, $customer, $details);
+
+        $firstGuarantor = $details->guarantors[0] ?? null;
+        $originationFee = $details->charges !== null
+            ? array_sum(array_column($details->charges, 'amount'))
+            : $product->origination_fee_amount;
+
         $branch = $customer->branch;
 
         $loan = new Loan([
@@ -63,13 +74,15 @@ class ApplyForLoanAction
             'agent_id' => $submittedBy->hasRole('field_agent') ? $submittedBy->id : null,
             'loan_number' => $this->nextLoanNumber($branch),
             'principal_amount' => $requestedAmount,
-            'interest_method' => $product->interest_method,
-            'interest_rate_bps' => $product->interest_rate_bps,
-            'term_period_count' => $product->term_period_count,
-            'repayment_frequency' => $product->repayment_frequency,
-            'origination_fee_amount' => $product->origination_fee_amount,
+            'interest_method' => $details->interestMethod ?? $product->interest_method,
+            'interest_rate_bps' => $details->interestRateBps ?? $product->interest_rate_bps,
+            'term_period_count' => $details->termPeriodCount ?? $product->term_period_count,
+            'repayment_frequency' => $details->repaymentFrequency ?? $product->repayment_frequency,
+            'origination_fee_amount' => $originationFee,
             'penalty_rate_bps' => $product->penalty_rate_bps,
-            'grace_period_days' => $product->grace_period_days,
+            'grace_period_days' => $details->gracePeriodDays ?? $product->grace_period_days,
+            'first_repayment_date' => $details->firstRepaymentDate,
+            'purpose' => $details->purpose,
             // Explicit rather than relying on the DB column defaults: Eloquent
             // never reflects those back onto the in-memory model create()
             // returns, so callers immediately serializing this loan (e.g. the
@@ -78,8 +91,10 @@ class ApplyForLoanAction
             'total_repayable' => 0,
             'outstanding_balance' => 0,
             'status' => LoanStatus::Applied,
-            'guarantor_name' => $guarantorName,
-            'guarantor_phone' => $guarantorPhone,
+            // Legacy single-guarantor columns, mirrored from the first itemised
+            // guarantor so older clients reading them still see one.
+            'guarantor_name' => $guarantorName ?? $firstGuarantor['name'] ?? null,
+            'guarantor_phone' => $guarantorPhone ?? $firstGuarantor['phone'] ?? null,
             'notes' => $notes,
             'client_reference' => $clientReference,
             'applied_at' => now(),
@@ -96,9 +111,39 @@ class ApplyForLoanAction
             $loan->forceFill(['id' => $clientReference]);
         }
 
-        $loan->save();
+        return DB::transaction(function () use ($loan, $details, $product): Loan {
+            $loan->save();
 
-        return $loan;
+            $charges = $details->charges ?? ($product->origination_fee_amount > 0
+                ? [['name' => 'Processing fee', 'amount' => $product->origination_fee_amount]]
+                : []);
+            foreach (array_filter($charges, fn (array $charge): bool => $charge['amount'] > 0) as $charge) {
+                $loan->charges()->create($charge);
+            }
+            foreach ($details->collaterals as $collateral) {
+                $loan->collaterals()->create(Arr::only($collateral, ['type', 'description', 'estimated_value', 'serial_number', 'notes']) + ['estimated_value' => 0]);
+            }
+            foreach ($details->guarantors as $guarantor) {
+                $loan->guarantors()->create(Arr::only($guarantor, ['customer_id', 'name', 'phone', 'relationship', 'address', 'id_type', 'id_number', 'guaranteed_amount']));
+            }
+
+            return $loan;
+        });
+    }
+
+    private function assertDetails(User $submittedBy, Customer $customer, LoanApplicationDetails $details): void
+    {
+        if ($details->overridesTerms() && ! $submittedBy->hasRole(['field_agent', 'branch_manager', 'company_admin'])) {
+            throw ValidationException::withMessages(['term_period_count' => 'Only staff can change a product\'s terms or charges.']);
+        }
+
+        $guarantorCustomerIds = array_filter(array_column($details->guarantors, 'customer_id'));
+        if (in_array($customer->id, $guarantorCustomerIds, true)) {
+            throw ValidationException::withMessages(['guarantors' => 'A customer cannot guarantee their own loan.']);
+        }
+        if ($guarantorCustomerIds !== [] && Customer::whereIn('id', $guarantorCustomerIds)->where('company_id', $customer->company_id)->count() !== count(array_unique($guarantorCustomerIds))) {
+            throw ValidationException::withMessages(['guarantors' => 'Guarantor not found.']);
+        }
     }
 
     /** G7 numbering: {branch_code}-L{sequence}, opaque and unique — UUIDs remain the real identity. */

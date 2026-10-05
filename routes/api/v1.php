@@ -5,7 +5,9 @@ use App\Http\Controllers\Api\V1\AgentPositionController;
 use App\Http\Controllers\Api\V1\AgentRouteController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
+use App\Http\Controllers\Api\V1\CollectionSheetController;
 use App\Http\Controllers\Api\V1\Customer;
+use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\GroupController;
 use App\Http\Controllers\Api\V1\GroupLoanController;
@@ -59,6 +61,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/withdrawal-requests', [Customer\WithdrawalRequestController::class, 'store'])->name('withdrawals.store');
     });
 
+    // Back-office customer list, branch transfer (single + bulk) and agent assignment.
+    Route::prefix('customers')->name('customers.')
+        ->middleware(['throttle:30,1', 'role:branch_manager|company_admin'])
+        ->group(function (): void {
+            Route::get('/', [CustomerController::class, 'index'])->name('index');
+            Route::get('/overview', [CustomerController::class, 'overview'])->name('overview');
+            Route::post('/transfer', [CustomerController::class, 'bulkTransfer'])->name('transfer.bulk');
+            Route::post('/{customer}/transfer', [CustomerController::class, 'transfer'])->name('transfer');
+            Route::post('/{customer}/assign-agent', [CustomerController::class, 'assignAgent'])->name('assign-agent');
+        });
+
     // Shared by agent (collect screen) and customer (deposit screen) roles —
     // RecordCollectionAction enforces who may act on a given account.
     Route::prefix('payments')->name('payments.')->middleware('throttle:20,1')->group(function (): void {
@@ -81,6 +94,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::prefix('loans')->name('loans.')->middleware('throttle:20,1')->group(function (): void {
         Route::get('/products', [LoanController::class, 'products'])->name('products');
         Route::get('/eligibility', [LoanController::class, 'eligibility'])->name('eligibility');
+        Route::post('/calculator', [LoanController::class, 'calculate'])->name('calculator');
         Route::get('/', [LoanController::class, 'index'])->name('index');
         Route::post('/', [LoanController::class, 'store'])->name('store');
         Route::get('/{loan}', [LoanController::class, 'show'])->name('show');
@@ -89,6 +103,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/{loan}/repayments', [LoanController::class, 'recordRepayment'])
             ->middleware('role:field_agent|branch_manager|company_admin')
             ->name('repayments.store');
+
+        // Re-date unpaid installments; manager-only (RecalculateScheduleRequest).
+        Route::post('/{loan}/recalculate-schedule', [LoanController::class, 'recalculateSchedule'])
+            ->name('recalculate-schedule');
     });
 
     // Staff-only — a group loan is issued per member; roster management
@@ -98,9 +116,21 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->group(function (): void {
             Route::get('/', [LoanGroupController::class, 'index'])->name('index');
             Route::get('/{loanGroup}', [LoanGroupController::class, 'show'])->name('show');
+            Route::get('/{loanGroup}/history', [LoanGroupController::class, 'history'])->name('history');
+            Route::post('/{loanGroup}/issue-loans', [LoanGroupController::class, 'issueLoans'])->name('issue-loans');
+            Route::post('/{loanGroup}/open-savings', [LoanGroupController::class, 'openSavings'])->name('open-savings');
             Route::post('/', [LoanGroupController::class, 'store'])->name('store');
             Route::post('/{loanGroup}/members', [LoanGroupController::class, 'storeMember'])->name('members.store');
             Route::delete('/{loanGroup}/members/{member}', [LoanGroupController::class, 'destroyMember'])->name('members.destroy');
+        });
+
+    // "Enter Transaction": who is due on a date (by group and/or officer), and
+    // posting the filled-in sheet in one all-or-nothing request.
+    Route::prefix('collection-sheet')->name('collection-sheet.')
+        ->middleware(['throttle:30,1', 'role:field_agent|branch_manager|company_admin'])
+        ->group(function (): void {
+            Route::get('/', [CollectionSheetController::class, 'show'])->name('show');
+            Route::post('/', [CollectionSheetController::class, 'store'])->name('store');
         });
 
     Route::prefix('group-loans')->name('group-loans.')
@@ -113,6 +143,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/{groupLoan}/activate', [GroupLoanController::class, 'activate'])->name('activate');
             Route::post('/{groupLoan}/repayments', [GroupLoanController::class, 'recordRepayment'])->name('repayments.store');
             Route::post('/{groupLoan}/cancel', [GroupLoanController::class, 'cancel'])->name('cancel');
+            Route::post('/{groupLoan}/recalculate-schedule', [GroupLoanController::class, 'recalculateSchedule'])->name('recalculate-schedule');
 
             // Write-off is manager-tier only (enforced in WriteOffGroupLoanRequest).
             Route::post('/{groupLoan}/write-off', [GroupLoanController::class, 'writeOff'])->name('write-off');

@@ -10,6 +10,16 @@ enum LoanFrequency: string
     case Weekly = 'weekly';
     case Monthly = 'monthly';
 
+    /** "day" / "week" / "month" — for "5% per week" style labels. */
+    public function periodNoun(): string
+    {
+        return match ($this) {
+            self::Daily => 'day',
+            self::Weekly => 'week',
+            self::Monthly => 'month',
+        };
+    }
+
     public function addPeriod(Carbon $date, int $periods = 1): Carbon
     {
         return match ($this) {

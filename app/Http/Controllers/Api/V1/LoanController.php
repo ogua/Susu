@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Loans\ApplyForLoanAction;
+use App\Actions\Loans\LoanApplicationDetails;
+use App\Actions\Loans\RecalculateRepaymentScheduleAction;
 use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Enums\ClientOrigin;
+use App\Enums\InterestMethod;
+use App\Enums\LoanFrequency;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\RecalculateScheduleRequest;
 use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\StoreLoanApplicationRequest;
 use App\Http\Resources\V1\LoanProductResource;
@@ -16,6 +21,7 @@ use App\Models\LoanProduct;
 use App\Models\SavingsAccount;
 use App\Models\User;
 use App\Services\Loans\EligibilityService;
+use App\Services\Loans\LoanCalculator;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -70,7 +76,7 @@ class LoanController extends Controller
     {
         $model = $this->findScoped($request, $loan);
 
-        return LoanResource::make($model->load('loanProduct', 'installments'));
+        return LoanResource::make($model->load('loanProduct', 'installments', 'charges', 'collaterals', 'guarantors'));
     }
 
     public function store(StoreLoanApplicationRequest $request, ApplyForLoanAction $action): JsonResponse
@@ -95,9 +101,10 @@ class LoanController extends Controller
             guarantorPhone: $request->validated('guarantor_phone'),
             notes: $request->validated('notes'),
             clientReference: $request->validated('client_reference'),
+            details: LoanApplicationDetails::fromArray($request->validated()),
         );
 
-        return LoanResource::make($loan)->response()->setStatusCode(201);
+        return LoanResource::make($loan->load('charges', 'collaterals', 'guarantors'))->response()->setStatusCode(201);
     }
 
     public function recordRepayment(RecordLoanRepaymentRequest $request, string $loan, RecordLoanRepaymentAction $action): JsonResponse
@@ -118,6 +125,48 @@ class LoanController extends Controller
             'loan' => LoanResource::make($result->loan->load('installments')),
             'duplicate' => $result->duplicate,
         ], $result->duplicate ? 200 : 201);
+    }
+
+    public function recalculateSchedule(RecalculateScheduleRequest $request, string $loan, RecalculateRepaymentScheduleAction $action): JsonResponse
+    {
+        $model = $this->findScoped($request, $loan);
+
+        $result = $action->execute(
+            $model,
+            $request->user(),
+            $request->filled('first_due_date') ? Carbon::parse($request->validated('first_due_date')) : null,
+            $request->validated('reason'),
+        );
+
+        return LoanResource::make($model->fresh()->load('loanProduct', 'installments'))
+            ->additional(['recalculation' => $result])
+            ->response();
+    }
+
+    /** What-if repayment schedule (the "loan terms for repayment calculation" calculator). */
+    public function calculate(Request $request, LoanCalculator $calculator): JsonResponse
+    {
+        $data = $request->validate([
+            'principal_amount' => ['required', 'integer', 'min:1'],
+            'interest_rate_bps' => ['required', 'integer', 'min:0', 'max:10000'],
+            'interest_method' => ['required', 'string', 'in:flat,reducing_balance'],
+            'term_period_count' => ['required', 'integer', 'min:1', 'max:520'],
+            'repayment_frequency' => ['required', 'string', 'in:daily,weekly,monthly'],
+            'disbursement_date' => ['nullable', 'date'],
+            'first_repayment_date' => ['nullable', 'date'],
+            'charges' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        return response()->json(['data' => $calculator->calculate(
+            (int) $data['principal_amount'],
+            (int) $data['interest_rate_bps'],
+            (int) $data['term_period_count'],
+            InterestMethod::from($data['interest_method']),
+            LoanFrequency::from($data['repayment_frequency']),
+            Carbon::parse($data['disbursement_date'] ?? now()),
+            isset($data['first_repayment_date']) ? Carbon::parse($data['first_repayment_date']) : null,
+            (int) ($data['charges'] ?? 0),
+        )]);
     }
 
     private function findScoped(Request $request, string $id): Loan

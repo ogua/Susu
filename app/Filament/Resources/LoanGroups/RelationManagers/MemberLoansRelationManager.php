@@ -10,6 +10,7 @@ use App\Actions\GroupLoans\WriteOffGroupLoanAction;
 use App\Enums\AccountStatus;
 use App\Enums\DepositStatus;
 use App\Enums\GroupLoanStatus;
+use App\Filament\Resources\Loans\LoanActions;
 use App\Models\GroupLoan;
 use App\Models\SavingsAccount;
 use App\Support\Money;
@@ -82,6 +83,7 @@ class MemberLoansRelationManager extends RelationManager
                         );
                         Notification::make()->title('Repayment recorded')->success()->send();
                     }),
+                LoanActions::recalculateSchedule(),
                 Action::make('writeOff')
                     ->label('Write off')
                     ->color('danger')

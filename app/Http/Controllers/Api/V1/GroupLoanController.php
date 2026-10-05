@@ -8,12 +8,14 @@ use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
+use App\Actions\Loans\RecalculateRepaymentScheduleAction;
 use App\Enums\ClientOrigin;
 use App\Enums\LoanFrequency;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
 use App\Http\Requests\Api\V1\CancelGroupLoanRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
+use App\Http\Requests\Api\V1\RecalculateScheduleRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanDepositRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\WriteOffGroupLoanRequest;
@@ -151,6 +153,22 @@ class GroupLoanController extends Controller
         );
 
         return GroupLoanResource::make($groupLoan->load('loanGroup', 'customer'));
+    }
+
+    public function recalculateSchedule(RecalculateScheduleRequest $request, string $groupLoan, RecalculateRepaymentScheduleAction $action): JsonResponse
+    {
+        $model = $this->findScoped($request, $groupLoan);
+
+        $result = $action->execute(
+            $model,
+            $request->user(),
+            $request->filled('first_due_date') ? Carbon::parse($request->validated('first_due_date')) : null,
+            $request->validated('reason'),
+        );
+
+        return GroupLoanResource::make($model->fresh()->load('loanGroup', 'customer', 'installments'))
+            ->additional(['recalculation' => $result])
+            ->response();
     }
 
     private function findScoped(Request $request, string $id): GroupLoan

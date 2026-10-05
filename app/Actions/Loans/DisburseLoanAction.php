@@ -47,6 +47,11 @@ class DisburseLoanAction
                 $loan->interest_method,
                 $loan->repayment_frequency,
                 $disbursedAt,
+                // The date chosen on the application, unless disbursement came
+                // too late for it — then fall back to one period from today.
+                $loan->first_repayment_date?->gte($disbursedAt->copy()->startOfDay())
+                    ? $loan->first_repayment_date->copy()
+                    : null,
             );
 
             $totalInterest = array_sum(array_map(

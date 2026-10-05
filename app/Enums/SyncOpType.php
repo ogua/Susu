@@ -24,6 +24,8 @@ enum SyncOpType: string
     case RestructureLoan = 'loan.restructure';
     case TopUpLoan = 'loan.top_up';
     case WriteOffLoan = 'loan.write_off';
+    case RecalculateLoanSchedule = 'loan.schedule.recalculate';
+    case RecalculateGroupLoanSchedule = 'group_loan.schedule.recalculate';
 
     /**
      * Op types each role may push through /sync/batch.
@@ -51,7 +53,7 @@ enum SyncOpType: string
                 self::CancelGroupLoan,
             ],
             // Managers/admins additionally own the individual-loan approve/
-            // reject/disburse decisions and every write-off.
+            // reject/disburse decisions, every write-off and schedule recalculation.
             'branch_manager', 'company_admin' => self::cases(),
             default => [],
         };

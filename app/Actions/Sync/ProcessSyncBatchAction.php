@@ -15,6 +15,8 @@ use App\Actions\Groups\RecordGroupContributionAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
+use App\Actions\Loans\LoanApplicationDetails;
+use App\Actions\Loans\RecalculateRepaymentScheduleAction;
 use App\Actions\Loans\RecordLoanRepaymentAction;
 use App\Actions\Loans\RejectLoanAction;
 use App\Actions\Loans\RestructureLoanAction;
@@ -30,6 +32,7 @@ use App\Http\Requests\Api\V1\ApproveLoanRequest;
 use App\Http\Requests\Api\V1\CancelGroupLoanRequest;
 use App\Http\Requests\Api\V1\DisburseLoanRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
+use App\Http\Requests\Api\V1\RecalculateScheduleRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanDepositRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
@@ -89,6 +92,7 @@ class ProcessSyncBatchAction
         private WriteOffLoanAction $writeOffLoan,
         private WriteOffGroupLoanAction $writeOffGroupLoan,
         private CancelGroupLoanAction $cancelGroupLoan,
+        private RecalculateRepaymentScheduleAction $recalculateSchedule,
     ) {}
 
     /**
@@ -176,6 +180,8 @@ class ProcessSyncBatchAction
             SyncOpType::WriteOffLoan => $this->applyWriteOffLoan($actor, $payload),
             SyncOpType::WriteOffGroupLoan => $this->applyWriteOffGroupLoan($actor, $origin, $payload),
             SyncOpType::CancelGroupLoan => $this->applyCancelGroupLoan($actor, $payload),
+            SyncOpType::RecalculateLoanSchedule => $this->applyRecalculateSchedule($actor, Loan::where('company_id', $actor->company_id)->findOrFail($payload['loan_id']), $payload),
+            SyncOpType::RecalculateGroupLoanSchedule => $this->applyRecalculateSchedule($actor, GroupLoan::where('company_id', $actor->company_id)->findOrFail($payload['group_loan_id']), $payload),
         };
     }
 
@@ -206,6 +212,8 @@ class ProcessSyncBatchAction
             SyncOpType::WriteOffLoan => WriteOffLoanRequest::payloadRules(),
             SyncOpType::WriteOffGroupLoan => WriteOffGroupLoanRequest::payloadRules(),
             SyncOpType::CancelGroupLoan => CancelGroupLoanRequest::payloadRules(),
+            SyncOpType::RecalculateLoanSchedule => RecalculateScheduleRequest::payloadRules(),
+            SyncOpType::RecalculateGroupLoanSchedule => RecalculateScheduleRequest::groupPayloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -324,6 +332,7 @@ class ProcessSyncBatchAction
             guarantorPhone: $payload['guarantor_phone'] ?? null,
             notes: $payload['notes'] ?? null,
             clientReference: $payload['client_reference'] ?? $opId,
+            details: LoanApplicationDetails::fromArray($payload),
         );
 
         return ['loan_id' => $loan->id, 'loan_number' => $loan->loan_number, 'status' => $loan->status->value];
@@ -600,6 +609,22 @@ class ProcessSyncBatchAction
         $groupLoan = $this->cancelGroupLoan->execute($groupLoan, $actor, $payload['reason'] ?? null);
 
         return ['group_loan_id' => $groupLoan->id, 'status' => $groupLoan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyRecalculateSchedule(User $actor, Loan|GroupLoan $loan, array $payload): array
+    {
+        $result = $this->recalculateSchedule->execute(
+            $loan,
+            $actor,
+            isset($payload['first_due_date']) ? Carbon::parse($payload['first_due_date']) : null,
+            $payload['reason'] ?? null,
+        );
+
+        return [$loan instanceof GroupLoan ? 'group_loan_id' : 'loan_id' => $loan->id, ...$result];
     }
 
     /**

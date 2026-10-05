@@ -11,6 +11,12 @@ use Illuminate\Support\Carbon;
  * equally as possible across periods, with any rounding remainder absorbed
  * into the *last* installment — so the schedule's principal always sums to
  * exactly the loan amount, never a pesewa more or less.
+ *
+ * Due dates step one period from disbursement, unless a first due date is
+ * given (the date chosen on the application), in which case the first
+ * installment falls on it and the rest step from there. Dates step from the
+ * previous due date (not the anchor) — the desktop's ported generator does the
+ * same, so month-end schedules stay identical across platforms.
  */
 class ScheduleGenerator
 {
@@ -26,16 +32,21 @@ class ScheduleGenerator
         InterestMethod $method,
         LoanFrequency $frequency,
         Carbon $disbursedAt,
+        ?Carbon $firstDueDate = null,
     ): array {
         $principalPerPeriod = intdiv($principal, $termPeriods);
         $lastPeriodRemainder = $principal - ($principalPerPeriod * $termPeriods);
 
         $schedule = [];
         $balance = $principal;
-        $dueDate = $disbursedAt->copy();
+        $dueDate = null;
 
         for ($period = 1; $period <= $termPeriods; $period++) {
-            $dueDate = $frequency->addPeriod($dueDate);
+            $dueDate = match (true) {
+                $dueDate !== null => $frequency->addPeriod($dueDate),
+                $firstDueDate !== null => $firstDueDate->copy(),
+                default => $frequency->addPeriod($disbursedAt),
+            };
             $periodPrincipal = $principalPerPeriod + ($period === $termPeriods ? $lastPeriodRemainder : 0);
             $periodInterest = $this->interest->periodInterest($balance, $principal, $rateBasisPoints, $method);
 

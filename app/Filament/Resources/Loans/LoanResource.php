@@ -2,10 +2,17 @@
 
 namespace App\Filament\Resources\Loans;
 
+use App\Filament\RelationManagers\ActivityHistoryRelationManager;
 use App\Filament\Resources\Loans\Pages\CreateLoan;
 use App\Filament\Resources\Loans\Pages\ListLoans;
+use App\Filament\Resources\Loans\Pages\ViewLoan;
+use App\Filament\Resources\Loans\RelationManagers\ChargesRelationManager;
+use App\Filament\Resources\Loans\RelationManagers\CollateralsRelationManager;
+use App\Filament\Resources\Loans\RelationManagers\GuarantorsRelationManager;
 use App\Filament\Resources\Loans\RelationManagers\InstallmentsRelationManager;
+use App\Filament\Resources\Loans\RelationManagers\TransactionsRelationManager;
 use App\Filament\Resources\Loans\Schemas\LoanForm;
+use App\Filament\Resources\Loans\Schemas\LoanInfolist;
 use App\Filament\Resources\Loans\Tables\LoansTable;
 use App\Models\Loan;
 use BackedEnum;
@@ -51,6 +58,11 @@ class LoanResource extends Resource
         return LoanForm::configure($schema);
     }
 
+    public static function infolist(Schema $schema): Schema
+    {
+        return LoanInfolist::configure($schema);
+    }
+
     public static function table(Table $table): Table
     {
         return LoansTable::configure($table);
@@ -60,6 +72,11 @@ class LoanResource extends Resource
     {
         return [
             InstallmentsRelationManager::class,
+            TransactionsRelationManager::class,
+            CollateralsRelationManager::class,
+            GuarantorsRelationManager::class,
+            ChargesRelationManager::class,
+            ActivityHistoryRelationManager::class,
         ];
     }
 
@@ -68,6 +85,7 @@ class LoanResource extends Resource
         return [
             'index' => ListLoans::route('/'),
             'create' => CreateLoan::route('/create'),
+            'view' => ViewLoan::route('/{record}'),
         ];
     }
 }
