@@ -1,13 +1,17 @@
 package com.ogua.susudesktop;
 
 import db.SessionManager;
+import java.time.LocalDate;
 import java.util.List;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -16,7 +20,9 @@ import models.Customer;
 import models.LoanGroup;
 import models.LoanGroupMember;
 import service.CustomerService;
+import service.LoanGroupInsightsService;
 import service.LoanGroupService;
+import support.Money;
 
 /**
  * Loan group roster management: create, add/remove members. Unlike susu
@@ -43,6 +49,9 @@ public class LoanGroupsController {
 
     @FXML private Button toggleActiveButton;
     @FXML private Button removeMemberButton;
+    @FXML private Button enterTransactionButton;
+    @FXML private Button historyButton;
+    @FXML private Label summaryLabel;
 
     @FXML private TableView<LoanGroupMember> membersTable;
     @FXML private TableColumn<LoanGroupMember, String> memberNameColumn;
@@ -51,6 +60,7 @@ public class LoanGroupsController {
 
     private final LoanGroupService loanGroupService = new LoanGroupService();
     private final CustomerService customerService = new CustomerService();
+    private final LoanGroupInsightsService insightsService = new LoanGroupInsightsService();
 
     @FXML
     private void initialize() {
@@ -84,6 +94,7 @@ public class LoanGroupsController {
         table.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
             updateActionButtons(selected);
             loadMembers(selected);
+            loadSummary(selected);
         });
         membersTable.getSelectionModel().selectedItemProperty().addListener((obs, old, member) ->
                 removeMemberButton.setDisable(member == null));
@@ -95,6 +106,118 @@ public class LoanGroupsController {
     private void updateActionButtons(LoanGroup selected) {
         toggleActiveButton.setDisable(selected == null);
         removeMemberButton.setDisable(true);
+        enterTransactionButton.setDisable(selected == null || !selected.isActive());
+        historyButton.setDisable(selected == null);
+    }
+
+    /** Disbursed / paid / outstanding / overdue for the selected group (BuildLoanGroupSummaryAction parity). */
+    private void loadSummary(LoanGroup group) {
+        if (group == null) {
+            summaryLabel.setText("Select a group to see its totals.");
+            return;
+        }
+        Task<LoanGroupInsightsService.Summary> task = new Task<>() {
+            @Override
+            protected LoanGroupInsightsService.Summary call() throws Exception {
+                return insightsService.summary(group.getId());
+            }
+        };
+        task.setOnSucceeded(event -> {
+            LoanGroupInsightsService.Summary summary = task.getValue();
+            summaryLabel.setText(group.getName() + " — disbursed " + Money.format(summary.totalDisbursed())
+                    + " · paid " + Money.format(summary.totalPaid())
+                    + " · outstanding " + Money.format(summary.outstanding())
+                    + " · overdue " + Money.format(summary.overdue())
+                    + " · " + summary.activeMembers() + " member(s), " + summary.activeLoans() + " active loan(s)"
+                    + (summary.draftLoans() > 0 ? ", " + summary.draftLoans() + " awaiting activation" : ""));
+        });
+        task.setOnFailed(event -> summaryLabel.setText("Could not load totals: " + task.getException().getMessage()));
+        new Thread(task, "loan-group-summary").start();
+    }
+
+    @FXML
+    private void onEnterTransaction() {
+        LoanGroup group = table.getSelectionModel().getSelectedItem();
+        if (group == null) {
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        Task<List<LoanGroupInsightsService.SheetRow>> load = new Task<>() {
+            @Override
+            protected List<LoanGroupInsightsService.SheetRow> call() throws Exception {
+                return insightsService.sheet(group.getId(), today);
+            }
+        };
+        load.setOnSucceeded(event -> CollectionSheetDialog.show(group.getName(), today.toString(), load.getValue())
+                .filter(entries -> !entries.isEmpty())
+                .ifPresent(entries -> postSheet(group, entries)));
+        load.setOnFailed(event -> statusLabel.setText("Could not load the sheet: " + load.getException().getMessage()));
+        new Thread(load, "loan-group-sheet-load").start();
+    }
+
+    private void postSheet(LoanGroup group, List<LoanGroupInsightsService.SheetEntry> entries) {
+        var user = SessionManager.getCurrentUser();
+        String agentId = user != null ? user.getId() : null;
+        String agentName = user != null ? user.getName() : null;
+        statusLabel.setText("Posting collection sheet…");
+        Task<LoanGroupInsightsService.PostResult> task = new Task<>() {
+            @Override
+            protected LoanGroupInsightsService.PostResult call() throws Exception {
+                return insightsService.post(agentId, agentName, entries);
+            }
+        };
+        task.setOnSucceeded(event -> {
+            LoanGroupInsightsService.PostResult result = task.getValue();
+            statusLabel.setText("");
+            Alert alert = new Alert(Alert.AlertType.INFORMATION, result.repaymentsCount() + " repayment(s) of "
+                    + Money.format(result.repaymentsTotal()) + " and " + result.depositsCount() + " deposit(s) of "
+                    + Money.format(result.depositsTotal()) + " recorded.");
+            alert.setHeaderText("Collection sheet posted");
+            alert.showAndWait();
+            loadSummary(group);
+        });
+        task.setOnFailed(event -> statusLabel.setText("Sheet not posted: " + task.getException().getMessage()));
+        new Thread(task, "loan-group-sheet-post").start();
+    }
+
+    @FXML
+    private void onShowHistory() {
+        LoanGroup group = table.getSelectionModel().getSelectedItem();
+        if (group == null) {
+            return;
+        }
+        Task<List<LoanGroupInsightsService.HistoryEvent>> load = new Task<>() {
+            @Override
+            protected List<LoanGroupInsightsService.HistoryEvent> call() throws Exception {
+                return insightsService.history(group.getId());
+            }
+        };
+        load.setOnSucceeded(event -> {
+            TableView<LoanGroupInsightsService.HistoryEvent> history = new TableView<>(FXCollections.observableArrayList(load.getValue()));
+            history.getColumns().add(historyColumn("When", e -> e.at().length() > 16 ? e.at().substring(0, 16).replace('T', ' ') : e.at()));
+            history.getColumns().add(historyColumn("Activity", LoanGroupInsightsService.HistoryEvent::description));
+            history.getColumns().add(historyColumn("Member", e -> e.member() == null ? "—" : e.member()));
+            history.getColumns().add(historyColumn("Amount", e -> e.amount() == null ? "—" : Money.format(e.amount())));
+            history.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+            history.setPrefSize(760, 420);
+
+            Dialog<Void> dialog = new Dialog<>();
+            dialog.setTitle("Group History — " + group.getName());
+            dialog.setHeaderText("Every membership change, loan event, deposit and repayment, newest first.");
+            dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+            dialog.getDialogPane().setContent(history);
+            dialog.setResizable(true);
+            dialog.showAndWait();
+        });
+        load.setOnFailed(event -> statusLabel.setText("Could not load history: " + load.getException().getMessage()));
+        new Thread(load, "loan-group-history").start();
+    }
+
+    private static TableColumn<LoanGroupInsightsService.HistoryEvent, String> historyColumn(
+            String title, java.util.function.Function<LoanGroupInsightsService.HistoryEvent, String> value) {
+        TableColumn<LoanGroupInsightsService.HistoryEvent, String> column = new TableColumn<>(title);
+        column.setCellValueFactory(data -> new SimpleStringProperty(value.apply(data.getValue())));
+        return column;
     }
 
     @FXML
