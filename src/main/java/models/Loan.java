@@ -4,6 +4,7 @@ import enums.InterestMethod;
 import enums.LoanFrequency;
 import enums.LoanStatus;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public class Loan {
@@ -36,6 +37,9 @@ public class Loan {
     private String guarantorPhone;
     private String rejectionReason;
     private String notes;
+    private String purpose;
+    /** Chosen on the application; null = one period after disbursement. */
+    private LocalDate firstRepaymentDate;
     private String clientReference;
 
     private Instant appliedAt;
@@ -132,6 +136,12 @@ public class Loan {
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+
+    public String getPurpose() { return purpose; }
+    public void setPurpose(String purpose) { this.purpose = purpose; }
+
+    public LocalDate getFirstRepaymentDate() { return firstRepaymentDate; }
+    public void setFirstRepaymentDate(LocalDate firstRepaymentDate) { this.firstRepaymentDate = firstRepaymentDate; }
 
     public String getClientReference() { return clientReference; }
     public void setClientReference(String clientReference) { this.clientReference = clientReference; }

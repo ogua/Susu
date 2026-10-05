@@ -98,6 +98,19 @@ class GroupLoanServiceTest {
     }
 
     @Test
+    void recalculatesAnActiveLoansScheduleAndMovesItsStartDate() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-RCL");
+        GroupLoan loan = activate(issue(group, newCustomer("Abena", "Ofori"), 300_00, 50_00, 100_00));
+        LocalDate restart = LocalDate.now().plusWeeks(2);
+
+        int rescheduled = groupLoans.recalculateSchedule(loan.getId(), MANAGER_ID, restart, "Market closed");
+
+        assertEquals(3, rescheduled);
+        assertEquals(restart, groupLoans.findById(loan.getId()).getStartDate());
+        assertEquals(restart.plusWeeks(2), groupLoans.findInstallments(loan.getId()).get(2).getDueDate());
+    }
+
+    @Test
     void issuesADraftLoanWithoutTouchingTheLedger() throws Exception {
         LoanGroup group = newLoanGroup("LGRP-101");
         GroupLoan loan = issue(group, newCustomer("Ama", "Serwaa"), 1000_00, 100_00, 100_00);

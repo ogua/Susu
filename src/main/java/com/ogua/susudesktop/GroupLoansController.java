@@ -69,6 +69,7 @@ public class GroupLoansController {
     @FXML private Button repayButton;
     @FXML private Button writeOffButton;
     @FXML private Button cancelButton;
+    @FXML private Button recalculateButton;
 
     @FXML private TableView<GroupLoanInstallment> installmentsTable;
     @FXML private TableColumn<GroupLoanInstallment, String> seqColumn;
@@ -127,6 +128,9 @@ public class GroupLoansController {
         boolean canWriteOff = canWriteOff();
         writeOffButton.setVisible(canWriteOff);
         writeOffButton.setManaged(canWriteOff);
+        // Schedule recalculation is manager-tier too (RecalculateScheduleRequest).
+        recalculateButton.setVisible(canWriteOff);
+        recalculateButton.setManaged(canWriteOff);
 
         table.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
             updateActionButtons(selected);
@@ -163,6 +167,7 @@ public class GroupLoansController {
         repayButton.setDisable(!active);
         writeOffButton.setDisable(!canWriteOff() || !active);
         cancelButton.setDisable(selected == null || selected.getStatus() != enums.GroupLoanStatus.DRAFT);
+        recalculateButton.setDisable(!canWriteOff() || !active);
     }
 
     private void updatePreview() {
@@ -315,6 +320,26 @@ public class GroupLoansController {
         String activatedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
         runAction("Activating…", () -> groupLoanService.activate(selected.getId(), activatedBy),
                 "Could not activate loan");
+    }
+
+    @FXML
+    private void onRecalculateSchedule() {
+        GroupLoan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        LocalDate nextDue = installmentsTable.getItems().stream()
+                .filter(installment -> installment.getStatus() != enums.InstallmentStatus.PAID)
+                .map(GroupLoanInstallment::getDueDate)
+                .findFirst()
+                .orElse(null);
+        String recalculatedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+        LoanDialogs.recalculate(selected.getLoanNumber(), nextDue).ifPresent(input -> runAction("Recalculating schedule…",
+                () -> {
+                    groupLoanService.recalculateSchedule(selected.getId(), recalculatedBy, input.firstDueDate(), input.reason());
+                    return groupLoanService.findById(selected.getId());
+                },
+                "Could not recalculate the schedule"));
     }
 
     @FXML

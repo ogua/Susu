@@ -9,11 +9,13 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import models.JournalEntry;
@@ -46,6 +48,22 @@ public class LoanService {
     public Loan apply(String agentId, String customerId, String productId, long requestedAmount,
                        String savingsAccountId, String guarantorName, String guarantorPhone, String notes,
                        String clientReference) throws SQLException {
+        return apply(agentId, customerId, productId, requestedAmount, savingsAccountId, guarantorName,
+                guarantorPhone, notes, clientReference, LoanApplicationDetails.none());
+    }
+
+    /**
+     * Applies with the application's optional details (term overrides,
+     * itemised charges, collateral, guarantors, first repayment date) — mirrors
+     * the backend's ApplyForLoanAction with a LoanApplicationDetails. Charges
+     * sum to the origination fee; with none itemised, the product fee becomes
+     * one "Processing fee" charge. The legacy guarantor columns fall back to
+     * the first itemised guarantor.
+     */
+    public Loan apply(String agentId, String customerId, String productId, long requestedAmount,
+                       String savingsAccountId, String guarantorName, String guarantorPhone, String notes,
+                       String clientReference, LoanApplicationDetails details) throws SQLException {
+        LoanApplicationDetails effectiveDetails = details != null ? details : LoanApplicationDetails.none();
         String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
 
         Loan existing = findByClientReference(effectiveClientReference);
@@ -68,6 +86,23 @@ public class LoanService {
             }
         }
 
+        for (LoanApplicationDetails.Guarantor guarantor : effectiveDetails.guarantors()) {
+            if (customerId.equals(guarantor.customerId())) {
+                throw new IllegalArgumentException("A customer cannot guarantee their own loan.");
+            }
+        }
+
+        List<LoanApplicationDetails.Charge> charges = effectiveDetails.charges() != null
+                ? effectiveDetails.charges()
+                : (product.getOriginationFeeAmount() > 0
+                        ? List.of(new LoanApplicationDetails.Charge("Processing fee", product.getOriginationFeeAmount()))
+                        : List.of());
+        long originationFee = charges.stream().mapToLong(LoanApplicationDetails.Charge::amount).sum();
+        LoanApplicationDetails.Guarantor firstGuarantor = effectiveDetails.guarantors().isEmpty()
+                ? null : effectiveDetails.guarantors().get(0);
+        String effectiveGuarantorName = guarantorName != null ? guarantorName : (firstGuarantor != null ? firstGuarantor.name() : null);
+        String effectiveGuarantorPhone = guarantorPhone != null ? guarantorPhone : (firstGuarantor != null ? firstGuarantor.phone() : null);
+
         // The local id doubles as client_reference (see SavingsAccountService.open
         // for why): the backend's ApplyForLoanAction uses it as the row's own id,
         // so later ops in this loan's lifecycle (approve/disburse/repayment)
@@ -83,8 +118,9 @@ public class LoanService {
                     + " loan_number, principal_amount, interest_method, interest_rate_bps, term_period_count,"
                     + " repayment_frequency, origination_fee_amount, penalty_rate_bps, grace_period_days,"
                     + " total_interest, total_repayable, outstanding_balance, status, guarantor_name,"
-                    + " guarantor_phone, notes, client_reference, applied_at, created_at, updated_at)"
-                    + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?,?,?)";
+                    + " guarantor_phone, notes, client_reference, applied_at, created_at, updated_at,"
+                    + " purpose, first_repayment_date)"
+                    + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, id);
                 ps.setString(2, customerId);
@@ -93,26 +129,30 @@ public class LoanService {
                 ps.setString(5, agentId);
                 ps.setString(6, loanNumber);
                 ps.setLong(7, requestedAmount);
-                ps.setString(8, product.getInterestMethod().value());
-                ps.setInt(9, product.getInterestRateBps());
-                ps.setInt(10, product.getTermPeriodCount());
-                ps.setString(11, product.getRepaymentFrequency().value());
-                ps.setLong(12, product.getOriginationFeeAmount());
+                ps.setString(8, (effectiveDetails.interestMethod() != null ? effectiveDetails.interestMethod() : product.getInterestMethod()).value());
+                ps.setInt(9, effectiveDetails.interestRateBps() != null ? effectiveDetails.interestRateBps() : product.getInterestRateBps());
+                ps.setInt(10, effectiveDetails.termPeriodCount() != null ? effectiveDetails.termPeriodCount() : product.getTermPeriodCount());
+                ps.setString(11, (effectiveDetails.repaymentFrequency() != null ? effectiveDetails.repaymentFrequency() : product.getRepaymentFrequency()).value());
+                ps.setLong(12, originationFee);
                 ps.setInt(13, product.getPenaltyRateBps());
-                ps.setInt(14, product.getGracePeriodDays());
+                ps.setInt(14, effectiveDetails.gracePeriodDays() != null ? effectiveDetails.gracePeriodDays() : product.getGracePeriodDays());
                 ps.setString(15, LoanStatus.APPLIED.value());
-                ps.setString(16, guarantorName);
-                ps.setString(17, guarantorPhone);
+                ps.setString(16, effectiveGuarantorName);
+                ps.setString(17, effectiveGuarantorPhone);
                 ps.setString(18, notes);
                 ps.setString(19, effectiveClientReference);
                 ps.setString(20, now);
                 ps.setString(21, now);
                 ps.setString(22, now);
+                ps.setString(23, effectiveDetails.purpose());
+                ps.setString(24, effectiveDetails.firstRepaymentDate() != null ? effectiveDetails.firstRepaymentDate().toString() : null);
                 ps.executeUpdate();
             }
+
+            insertApplicationDetails(conn, id, charges, effectiveDetails, now);
         }
 
-        outbox.enqueueIfHybrid("loan.apply", new JSONObject()
+        JSONObject payload = new JSONObject()
                 .put("customer_id", customerId)
                 .put("loan_product_id", productId)
                 .put("amount", requestedAmount)
@@ -120,9 +160,68 @@ public class LoanService {
                 .put("guarantor_name", guarantorName)
                 .put("guarantor_phone", guarantorPhone)
                 .put("notes", notes)
-                .put("client_reference", effectiveClientReference));
+                .put("client_reference", effectiveClientReference);
+        effectiveDetails.writeTo(payload);
+        outbox.enqueueIfHybrid("loan.apply", payload);
 
         return findById(id);
+    }
+
+    /** Runs on the caller's open connection — never opens another (single-connection SQLite pool). */
+    private void insertApplicationDetails(Connection conn, String loanId, List<LoanApplicationDetails.Charge> charges,
+                                          LoanApplicationDetails details, String now) throws SQLException {
+        for (LoanApplicationDetails.Charge charge : charges) {
+            if (charge.amount() <= 0) {
+                continue;
+            }
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO loan_charges (id, loan_id, name, amount, created_at, updated_at) VALUES (?,?,?,?,?,?)")) {
+                ps.setString(1, UUID.randomUUID().toString());
+                ps.setString(2, loanId);
+                ps.setString(3, charge.name());
+                ps.setLong(4, charge.amount());
+                ps.setString(5, now);
+                ps.setString(6, now);
+                ps.executeUpdate();
+            }
+        }
+        for (LoanApplicationDetails.Collateral collateral : details.collaterals()) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO loan_collaterals (id, loan_id, type, description, estimated_value, serial_number, notes,"
+                    + " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)")) {
+                ps.setString(1, UUID.randomUUID().toString());
+                ps.setString(2, loanId);
+                ps.setString(3, collateral.type());
+                ps.setString(4, collateral.description());
+                ps.setLong(5, collateral.estimatedValue());
+                ps.setString(6, collateral.serialNumber());
+                ps.setString(7, collateral.notes());
+                ps.setString(8, now);
+                ps.setString(9, now);
+                ps.executeUpdate();
+            }
+        }
+        for (LoanApplicationDetails.Guarantor guarantor : details.guarantors()) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO loan_guarantors (id, loan_id, customer_id, name, phone, relationship, address,"
+                    + " guaranteed_amount, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)")) {
+                ps.setString(1, UUID.randomUUID().toString());
+                ps.setString(2, loanId);
+                ps.setString(3, guarantor.customerId());
+                ps.setString(4, guarantor.name());
+                ps.setString(5, guarantor.phone());
+                ps.setString(6, guarantor.relationship());
+                ps.setString(7, guarantor.address());
+                if (guarantor.guaranteedAmount() != null) {
+                    ps.setLong(8, guarantor.guaranteedAmount());
+                } else {
+                    ps.setNull(8, Types.INTEGER);
+                }
+                ps.setString(9, now);
+                ps.setString(10, now);
+                ps.executeUpdate();
+            }
+        }
     }
 
     public Loan approve(String loanId, String approvedBy) throws SQLException {
@@ -171,7 +270,10 @@ public class LoanService {
 
         List<ScheduledInstallment> schedule = scheduleGenerator.generate(
                 loan.getPrincipalAmount(), loan.getInterestRateBps(), loan.getTermPeriodCount(),
-                loan.getInterestMethod(), loan.getRepaymentFrequency(), disbursedDate);
+                loan.getInterestMethod(), loan.getRepaymentFrequency(), disbursedDate,
+                // The application's chosen date, unless disbursement came too late for it.
+                loan.getFirstRepaymentDate() != null && !loan.getFirstRepaymentDate().isBefore(disbursedDate)
+                        ? loan.getFirstRepaymentDate() : null);
 
         long totalInterest = schedule.stream().mapToLong(ScheduledInstallment::interestDue).sum();
         long totalRepayable = loan.getPrincipalAmount() + totalInterest;
@@ -723,6 +825,132 @@ public class LoanService {
         return new long[] {principalApplied, interestApplied, penaltyApplied};
     }
 
+    /**
+     * Re-dates a disbursed loan's unpaid installments — parity port of the
+     * backend's RecalculateRepaymentScheduleAction. Amounts, payments and the
+     * ledger are untouched; paid installments keep their dates. Unpaid ones
+     * step one period apart from {@code firstDueDate}, or — when null — from
+     * the loan's own rule (first repayment date, else one period after
+     * disbursement). An overdue installment moved into the future is
+     * un-flagged; newly late ones are left to {@link #flagArrears()}.
+     *
+     * @return the number of installments rescheduled
+     */
+    public int recalculateSchedule(String loanId, String recalculatedBy, LocalDate firstDueDate, String reason)
+            throws SQLException {
+        Loan loan = requireStatus(loanId, LoanStatus.DISBURSED, "rescheduled");
+        List<LoanInstallment> unpaid = findInstallments(loanId).stream()
+                .filter(installment -> installment.getStatus() != InstallmentStatus.PAID)
+                .sorted(Comparator.comparingInt(LoanInstallment::getSequence))
+                .toList();
+        if (unpaid.isEmpty()) {
+            throw new IllegalStateException("Every installment is already paid — there is nothing to reschedule.");
+        }
+
+        LocalDate today = LocalDate.now();
+        String now = Instant.now().toString();
+        LocalDate dueDate = null;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE loan_installments SET due_date = ?, status = ?, updated_at = ? WHERE id = ?")) {
+            for (LoanInstallment installment : unpaid) {
+                if (dueDate != null) {
+                    dueDate = loan.getRepaymentFrequency().addPeriod(dueDate, 1);
+                } else if (firstDueDate != null) {
+                    dueDate = firstDueDate;
+                } else {
+                    dueDate = ruleDueDate(loan, installment.getSequence());
+                }
+
+                long paid = installment.getPrincipalPaid() + installment.getInterestPaid() + installment.getPenaltyPaid();
+                InstallmentStatus status = installment.getStatus() == InstallmentStatus.OVERDUE && dueDate.isBefore(today)
+                        ? InstallmentStatus.OVERDUE
+                        : (paid > 0 ? InstallmentStatus.PARTIALLY_PAID : InstallmentStatus.PENDING);
+
+                ps.setString(1, dueDate.format(DateTimeFormatter.ISO_LOCAL_DATE));
+                ps.setString(2, status.value());
+                ps.setString(3, now);
+                ps.setString(4, installment.getId());
+                ps.executeUpdate();
+            }
+        }
+
+        outbox.enqueueIfHybrid("loan.schedule.recalculate", new JSONObject()
+                .put("loan_id", loanId)
+                .putOpt("first_due_date", firstDueDate != null ? firstDueDate.toString() : null)
+                .putOpt("reason", reason));
+
+        return unpaid.size();
+    }
+
+    /** Where installment N falls under the loan's original dating rule (stepped like ScheduleGenerator). */
+    private LocalDate ruleDueDate(Loan loan, int sequence) {
+        LocalDate disbursedDate = LocalDate.ofInstant(loan.getDisbursedAt(), ZoneId.systemDefault());
+        LocalDate anchor;
+        int steps;
+        if (loan.getFirstRepaymentDate() != null && !loan.getFirstRepaymentDate().isBefore(disbursedDate)) {
+            anchor = loan.getFirstRepaymentDate();
+            steps = sequence - 1;
+        } else {
+            anchor = disbursedDate;
+            steps = sequence;
+        }
+        for (int step = 0; step < steps; step++) {
+            anchor = loan.getRepaymentFrequency().addPeriod(anchor, 1);
+        }
+        return anchor;
+    }
+
+    public List<LoanApplicationDetails.Charge> findCharges(String loanId) throws SQLException {
+        List<LoanApplicationDetails.Charge> charges = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT name, amount FROM loan_charges WHERE loan_id = ? ORDER BY created_at")) {
+            ps.setString(1, loanId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    charges.add(new LoanApplicationDetails.Charge(rs.getString("name"), rs.getLong("amount")));
+                }
+            }
+        }
+        return charges;
+    }
+
+    public List<LoanApplicationDetails.Collateral> findCollaterals(String loanId) throws SQLException {
+        List<LoanApplicationDetails.Collateral> collaterals = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT type, description, estimated_value, serial_number, notes FROM loan_collaterals WHERE loan_id = ? ORDER BY created_at")) {
+            ps.setString(1, loanId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    collaterals.add(new LoanApplicationDetails.Collateral(rs.getString("type"), rs.getString("description"),
+                            rs.getLong("estimated_value"), rs.getString("serial_number"), rs.getString("notes")));
+                }
+            }
+        }
+        return collaterals;
+    }
+
+    public List<LoanApplicationDetails.Guarantor> findGuarantors(String loanId) throws SQLException {
+        List<LoanApplicationDetails.Guarantor> guarantors = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT customer_id, name, phone, relationship, address, guaranteed_amount FROM loan_guarantors WHERE loan_id = ? ORDER BY created_at")) {
+            ps.setString(1, loanId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    long amount = rs.getLong("guaranteed_amount");
+                    Long guaranteedAmount = rs.wasNull() ? null : amount; // read before any other column
+                    guarantors.add(new LoanApplicationDetails.Guarantor(rs.getString("customer_id"), rs.getString("name"),
+                            rs.getString("phone"), rs.getString("relationship"), rs.getString("address"),
+                            guaranteedAmount));
+                }
+            }
+        }
+        return guarantors;
+    }
+
     private Loan requireStatus(String loanId, LoanStatus expected, String action) throws SQLException {
         Loan loan = findById(loanId);
         if (loan == null || loan.getStatus() != expected) {
@@ -918,6 +1146,9 @@ public class LoanService {
         loan.setGuarantorPhone(rs.getString("guarantor_phone"));
         loan.setRejectionReason(rs.getString("rejection_reason"));
         loan.setNotes(rs.getString("notes"));
+        loan.setPurpose(rs.getString("purpose"));
+        String firstRepaymentDate = rs.getString("first_repayment_date");
+        loan.setFirstRepaymentDate(firstRepaymentDate != null ? LocalDate.parse(firstRepaymentDate) : null);
         loan.setClientReference(rs.getString("client_reference"));
         loan.setAppliedAt(Instant.parse(rs.getString("applied_at")));
         String approvedAt = rs.getString("approved_at");

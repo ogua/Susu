@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import models.GroupLoan;
@@ -512,6 +513,85 @@ public class GroupLoanService {
         outbox.enqueueIfHybrid("group_loan.cancel", payload);
 
         return findById(groupLoanId);
+    }
+
+    /**
+     * Re-dates an active loan's unpaid installments — parity port of the
+     * backend's RecalculateRepaymentScheduleAction for group loans. Amounts and
+     * payments are untouched. Unpaid installments step one period apart from
+     * {@code firstDueDate}, or — when null — from start_date (installment N on
+     * start_date + N-1 periods). When the first installment is still unpaid,
+     * start_date moves with it.
+     *
+     * @return the number of installments rescheduled
+     */
+    public int recalculateSchedule(String groupLoanId, String recalculatedBy, LocalDate firstDueDate, String reason)
+            throws SQLException {
+        GroupLoan groupLoan = findById(groupLoanId);
+        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
+            throw new IllegalStateException("Only an active loan has a schedule to recalculate.");
+        }
+        List<GroupLoanInstallment> unpaid = findInstallments(groupLoanId).stream()
+                .filter(installment -> installment.getStatus() != InstallmentStatus.PAID)
+                .sorted(Comparator.comparingInt(GroupLoanInstallment::getSequence))
+                .toList();
+        if (unpaid.isEmpty()) {
+            throw new IllegalStateException("Every installment is already paid — there is nothing to reschedule.");
+        }
+
+        LoanFrequency frequency = groupLoan.getRepaymentFrequency();
+        LocalDate today = LocalDate.now();
+        String now = Instant.now().toString();
+        LocalDate dueDate = null;
+        LocalDate firstRescheduled = null;
+
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE group_loan_installments SET due_date = ?, status = ?, updated_at = ? WHERE id = ?")) {
+                for (GroupLoanInstallment installment : unpaid) {
+                    if (dueDate != null) {
+                        dueDate = frequency.addPeriod(dueDate, 1);
+                    } else if (firstDueDate != null) {
+                        dueDate = firstDueDate;
+                    } else {
+                        dueDate = groupLoan.getStartDate();
+                        for (int step = 1; step < installment.getSequence(); step++) {
+                            dueDate = frequency.addPeriod(dueDate, 1);
+                        }
+                    }
+                    if (firstRescheduled == null) {
+                        firstRescheduled = dueDate;
+                    }
+
+                    InstallmentStatus status = installment.getStatus() == InstallmentStatus.OVERDUE && dueDate.isBefore(today)
+                            ? InstallmentStatus.OVERDUE
+                            : (installment.getAmountPaid() > 0 ? InstallmentStatus.PARTIALLY_PAID : InstallmentStatus.PENDING);
+
+                    ps.setString(1, dueDate.format(DateTimeFormatter.ISO_LOCAL_DATE));
+                    ps.setString(2, status.value());
+                    ps.setString(3, now);
+                    ps.setString(4, installment.getId());
+                    ps.executeUpdate();
+                }
+            }
+
+            if (unpaid.get(0).getSequence() == 1) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE group_loans SET start_date = ?, updated_at = ? WHERE id = ?")) {
+                    ps.setString(1, firstRescheduled.format(DateTimeFormatter.ISO_LOCAL_DATE));
+                    ps.setString(2, now);
+                    ps.setString(3, groupLoanId);
+                    ps.executeUpdate();
+                }
+            }
+        }
+
+        outbox.enqueueIfHybrid("group_loan.schedule.recalculate", new JSONObject()
+                .put("group_loan_id", groupLoanId)
+                .putOpt("first_due_date", firstDueDate != null ? firstDueDate.toString() : null)
+                .putOpt("reason", reason));
+
+        return unpaid.size();
     }
 
     // --------------------------------------------------------------- helpers

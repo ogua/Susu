@@ -19,15 +19,32 @@ public class ScheduleGenerator {
 
     public List<ScheduledInstallment> generate(long principal, int rateBasisPoints, int termPeriods,
                                                 InterestMethod method, LoanFrequency frequency, LocalDate disbursedAt) {
+        return generate(principal, rateBasisPoints, termPeriods, method, frequency, disbursedAt, null);
+    }
+
+    /**
+     * With a {@code firstDueDate} (the date chosen on the application) the
+     * first installment falls on it and later ones step one period from the
+     * previous due date — same as the backend, so month-end schedules match.
+     */
+    public List<ScheduledInstallment> generate(long principal, int rateBasisPoints, int termPeriods,
+                                                InterestMethod method, LoanFrequency frequency, LocalDate disbursedAt,
+                                                LocalDate firstDueDate) {
         long principalPerPeriod = principal / termPeriods;
         long lastPeriodRemainder = principal - (principalPerPeriod * termPeriods);
 
         List<ScheduledInstallment> schedule = new ArrayList<>();
         long balance = principal;
-        LocalDate dueDate = disbursedAt;
+        LocalDate dueDate = null;
 
         for (int period = 1; period <= termPeriods; period++) {
-            dueDate = frequency.addPeriod(dueDate, 1);
+            if (dueDate != null) {
+                dueDate = frequency.addPeriod(dueDate, 1);
+            } else if (firstDueDate != null) {
+                dueDate = firstDueDate;
+            } else {
+                dueDate = frequency.addPeriod(disbursedAt, 1);
+            }
             long periodPrincipal = principalPerPeriod + (period == termPeriods ? lastPeriodRemainder : 0);
             long periodInterest = interest.periodInterest(balance, principal, rateBasisPoints, method);
 

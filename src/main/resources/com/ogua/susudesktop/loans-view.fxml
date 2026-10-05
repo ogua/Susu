@@ -19,6 +19,7 @@
     <HBox alignment="CENTER_LEFT" spacing="10">
         <Label styleClass="page-title" text="Loans"/>
         <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
+        <Button onAction="#onCalculator" styleClass="button-secondary" text="Loan Calculator"/>
     </HBox>
 
     <VBox spacing="10" styleClass="card">
@@ -37,6 +38,10 @@
             <TextField fx:id="guarantorNameField" promptText="Guarantor name (optional)" HBox.hgrow="ALWAYS"/>
             <TextField fx:id="guarantorPhoneField" promptText="Guarantor phone (optional)" prefWidth="180"/>
         </HBox>
+        <HBox alignment="CENTER_LEFT" spacing="8">
+            <Button onAction="#onApplicationDetails" styleClass="button-secondary" text="Terms, Charges, Collateral &amp; Guarantors…"/>
+            <Label fx:id="detailsSummaryLabel" styleClass="text-muted" wrapText="true"/>
+        </HBox>
         <Label fx:id="eligibilityLabel" styleClass="text-muted" wrapText="true"/>
         <HBox alignment="CENTER_LEFT" spacing="10">
             <Button onAction="#onSubmitApplication" styleClass="button-primary" text="Submit Application"/>
@@ -47,6 +52,7 @@
     <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
         <HBox alignment="CENTER_LEFT" spacing="10">
             <Label styleClass="section-title" text="All Loans"/>
+            <Button fx:id="detailsButton" onAction="#onShowDetails" styleClass="button-secondary" text="Details"/>
             <Button fx:id="approveButton" onAction="#onApprove" styleClass="button-secondary" text="Approve"/>
             <Button fx:id="rejectButton" onAction="#onReject" styleClass="button-secondary" text="Reject"/>
             <Button fx:id="disburseButton" onAction="#onDisburse" styleClass="button-secondary" text="Disburse"/>
@@ -54,6 +60,7 @@
             <Button fx:id="restructureButton" onAction="#onRestructure" styleClass="button-secondary" text="Restructure"/>
             <Button fx:id="topUpButton" onAction="#onTopUp" styleClass="button-secondary" text="Top Up"/>
             <Button fx:id="writeOffButton" onAction="#onWriteOff" styleClass="button-secondary" text="Write Off"/>
+            <Button fx:id="recalculateButton" onAction="#onRecalculateSchedule" styleClass="button-secondary" text="Recalculate Schedule"/>
         </HBox>
         <TableView fx:id="table" prefHeight="360" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>

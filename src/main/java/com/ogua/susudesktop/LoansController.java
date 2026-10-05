@@ -26,6 +26,7 @@ import models.Loan;
 import models.LoanProduct;
 import models.SavingsAccount;
 import service.CustomerService;
+import service.LoanApplicationDetails;
 import service.LoanEligibilityResult;
 import service.LoanEligibilityService;
 import service.LoanProductService;
@@ -52,6 +53,7 @@ public class LoansController {
     @FXML private TextField guarantorPhoneField;
     @FXML private Label eligibilityLabel;
     @FXML private Label applyStatusLabel;
+    @FXML private Label detailsSummaryLabel;
 
     @FXML private Button approveButton;
     @FXML private Button rejectButton;
@@ -60,6 +62,11 @@ public class LoansController {
     @FXML private Button restructureButton;
     @FXML private Button topUpButton;
     @FXML private Button writeOffButton;
+    @FXML private Button detailsButton;
+    @FXML private Button recalculateButton;
+
+    /** Wizard extras for the next application; reset when the product changes or after submitting. */
+    private LoanApplicationDetails pendingDetails = LoanApplicationDetails.none();
 
     private final CustomerService customerService = new CustomerService();
     private final SavingsAccountService accountService = new SavingsAccountService();
@@ -117,6 +124,11 @@ public class LoansController {
         topUpButton.setManaged(canDecide);
         writeOffButton.setVisible(canDecide);
         writeOffButton.setManaged(canDecide);
+        recalculateButton.setVisible(canDecide);
+        recalculateButton.setManaged(canDecide);
+
+        productCombo.valueProperty().addListener((obs, old, selected) -> resetDetails());
+        resetDetails();
 
         loadProducts();
         refresh();
@@ -141,6 +153,91 @@ public class LoansController {
         restructureButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
         topUpButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
         writeOffButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
+        recalculateButton.setDisable(!canDecide || selected == null || selected.getStatus() != enums.LoanStatus.DISBURSED);
+        detailsButton.setDisable(selected == null);
+    }
+
+    private void resetDetails() {
+        pendingDetails = LoanApplicationDetails.none();
+        detailsSummaryLabel.setText(LoanDialogs.summary(pendingDetails));
+    }
+
+    @FXML
+    private void onApplicationDetails() {
+        LoanProduct product = productCombo.getValue();
+        if (product == null) {
+            applyStatusLabel.setText("Select a loan product first.");
+            return;
+        }
+        LoanDialogs.applicationDetails(product, parsedAmount(), pendingDetails).ifPresent(details -> {
+            pendingDetails = details;
+            detailsSummaryLabel.setText(LoanDialogs.summary(details));
+        });
+    }
+
+    @FXML
+    private void onCalculator() {
+        LoanDialogs.calculator(productCombo.getItems());
+    }
+
+    @FXML
+    private void onShowDetails() {
+        Loan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        Task<Object[]> load = new Task<>() {
+            @Override
+            protected Object[] call() throws Exception {
+                return new Object[] {
+                        loanService.findInstallments(selected.getId()),
+                        loanService.findCharges(selected.getId()),
+                        loanService.findCollaterals(selected.getId()),
+                        loanService.findGuarantors(selected.getId()),
+                };
+            }
+        };
+        load.setOnSucceeded(event -> {
+            Object[] parts = load.getValue();
+            LoanDialogs.showLoanDetails(selected, castList(parts[0]), castList(parts[1]), castList(parts[2]), castList(parts[3]));
+        });
+        load.setOnFailed(event -> statusLabel.setText("Could not load loan details: " + load.getException().getMessage()));
+        new Thread(load, "loan-details-load").start();
+    }
+
+    @FXML
+    private void onRecalculateSchedule() {
+        Loan selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        Task<List<models.LoanInstallment>> load = new Task<>() {
+            @Override
+            protected List<models.LoanInstallment> call() throws Exception {
+                return loanService.findInstallments(selected.getId());
+            }
+        };
+        load.setOnSucceeded(event -> {
+            java.time.LocalDate nextDue = load.getValue().stream()
+                    .filter(installment -> installment.getStatus() != enums.InstallmentStatus.PAID)
+                    .map(models.LoanInstallment::getDueDate)
+                    .findFirst()
+                    .orElse(null);
+            String recalculatedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+            LoanDialogs.recalculate(selected.getLoanNumber(), nextDue).ifPresent(input -> runLoanAction("Recalculating schedule…",
+                    () -> {
+                        loanService.recalculateSchedule(selected.getId(), recalculatedBy, input.firstDueDate(), input.reason());
+                        return loanService.findById(selected.getId());
+                    },
+                    "Could not recalculate the schedule"));
+        });
+        load.setOnFailed(event -> statusLabel.setText("Could not load the schedule: " + load.getException().getMessage()));
+        new Thread(load, "loan-schedule-load").start();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> List<T> castList(Object value) {
+        return (List<T>) value;
     }
 
     private void loadProducts() {
@@ -257,6 +354,7 @@ public class LoansController {
         String agentId = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
         String guarantorName = guarantorNameField.getText().isBlank() ? null : guarantorNameField.getText().trim();
         String guarantorPhone = guarantorPhoneField.getText().isBlank() ? null : guarantorPhoneField.getText().trim();
+        LoanApplicationDetails details = pendingDetails;
         applyStatusLabel.setText("Submitting…");
 
         Task<Loan> task = new Task<>() {
@@ -265,7 +363,7 @@ public class LoansController {
                 List<SavingsAccount> accounts = accountService.findByCustomer(customer.getId());
                 String savingsAccountId = accounts.isEmpty() ? null : accounts.get(0).getId();
                 return loanService.apply(agentId, customer.getId(), product.getId(), amount, savingsAccountId,
-                        guarantorName, guarantorPhone, null, null);
+                        guarantorName, guarantorPhone, null, null, details);
             }
         };
         task.setOnSucceeded(event -> {
@@ -274,6 +372,7 @@ public class LoansController {
             amountField.clear();
             guarantorNameField.clear();
             guarantorPhoneField.clear();
+            resetDetails();
             eligibilityLabel.setText("");
             applyStatusLabel.setText("");
             refresh();
