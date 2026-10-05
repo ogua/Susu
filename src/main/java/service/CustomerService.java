@@ -432,6 +432,64 @@ public class CustomerService {
         }
     }
 
+    /** Search within one list segment (the web list's tabs). */
+    public List<Customer> search(String query, enums.CustomerSegment segment) throws SQLException {
+        enums.CustomerSegment effective = segment != null ? segment : enums.CustomerSegment.ALL;
+        boolean filtered = query != null && !query.isBlank();
+        String sql = "SELECT * FROM customers WHERE deleted_at IS NULL AND " + effective.condition()
+                + (filtered ? " AND (first_name LIKE ? OR last_name LIKE ? OR phone LIKE ? OR customer_code LIKE ?)" : "")
+                + " ORDER BY created_at DESC LIMIT 500";
+
+        List<Customer> results = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (filtered) {
+                String like = "%" + query + "%";
+                for (int i = 1; i <= 4; i++) {
+                    ps.setString(i, like);
+                }
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    results.add(map(rs));
+                }
+            }
+        }
+        return results;
+    }
+
+    /** Headline numbers for the list: per-segment counts, new this month, active savings held. */
+    public record Overview(java.util.Map<enums.CustomerSegment, Integer> segments, int newThisMonth, long savingsBalance) {}
+
+    public Overview overview() throws SQLException {
+        java.util.Map<enums.CustomerSegment, Integer> counts = new java.util.EnumMap<>(enums.CustomerSegment.class);
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            for (enums.CustomerSegment segment : enums.CustomerSegment.values()) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND " + segment.condition());
+                     ResultSet rs = ps.executeQuery()) {
+                    counts.put(segment, rs.next() ? rs.getInt(1) : 0);
+                }
+            }
+            int newThisMonth;
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND created_at >= ?")) {
+                ps.setString(1, java.time.LocalDate.now().withDayOfMonth(1).toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    newThisMonth = rs.next() ? rs.getInt(1) : 0;
+                }
+            }
+            long savings;
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT COALESCE(SUM(a.balance), 0) FROM savings_accounts a JOIN customers c ON c.id = a.customer_id"
+                    + " WHERE a.status = 'active' AND c.deleted_at IS NULL");
+                 ResultSet rs = ps.executeQuery()) {
+                savings = rs.next() ? rs.getLong(1) : 0;
+            }
+            return new Overview(counts, newThisMonth, savings);
+        }
+    }
+
     public List<Customer> search(String query) throws SQLException {
         List<Customer> results = new ArrayList<>();
         String sql = (query == null || query.isBlank())

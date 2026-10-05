@@ -1,6 +1,7 @@
 package com.ogua.susudesktop;
 
 import db.SessionManager;
+import enums.CustomerSegment;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -27,10 +28,13 @@ import models.CustomerBeneficiary;
 import models.CustomerFamilyMember;
 import models.CustomerIdentification;
 import service.CustomerService;
+import support.Money;
 
 public class CustomersController {
 
     @FXML private TextField searchField;
+    @FXML private ComboBox<CustomerSegment> segmentCombo;
+    @FXML private Label overviewLabel;
     @FXML private TableView<Customer> table;
     @FXML private TableColumn<Customer, String> codeColumn;
     @FXML private TableColumn<Customer, String> nameColumn;
@@ -138,6 +142,7 @@ public class CustomersController {
     @FXML private Label statusLabel;
 
     private final CustomerService customerService = new CustomerService();
+    private final java.util.Map<CustomerSegment, Integer> segmentCounts = new java.util.EnumMap<>(CustomerSegment.class);
     private final ObservableList<CustomerIdentification> identificationItems = FXCollections.observableArrayList();
     private final ObservableList<CustomerBeneficiary> beneficiaryItems = FXCollections.observableArrayList();
     private final ObservableList<CustomerFamilyMember> familyMemberItems = FXCollections.observableArrayList();
@@ -148,6 +153,25 @@ public class CustomersController {
         nameColumn.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().fullName()));
         phoneColumn.setCellValueFactory(new PropertyValueFactory<>("phone"));
         statusColumn.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getStatus().value()));
+
+        segmentCombo.setItems(FXCollections.observableArrayList(CustomerSegment.values()));
+        segmentCombo.setValue(CustomerSegment.ALL);
+        segmentCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(CustomerSegment segment) {
+                if (segment == null) {
+                    return "";
+                }
+                Integer count = segmentCounts.get(segment);
+                return segment.label() + (count != null ? " (" + count + ")" : "");
+            }
+
+            @Override
+            public CustomerSegment fromString(String string) {
+                return null;
+            }
+        });
+        segmentCombo.valueProperty().addListener((obs, old, segment) -> refresh(searchField.getText()));
 
         genderCombo.setItems(FXCollections.observableArrayList("male", "female"));
         residencyStatusCombo.setItems(FXCollections.observableArrayList("tenant", "property_owner"));
@@ -220,11 +244,44 @@ public class CustomersController {
 
     private void refresh(String query) {
         try {
-            List<Customer> results = customerService.search(query);
+            List<Customer> results = customerService.search(query, segmentCombo.getValue());
             table.setItems(FXCollections.observableArrayList(results));
+            refreshOverview();
         } catch (Exception e) {
             statusLabel.setText("Could not load customers: " + e.getMessage());
         }
+    }
+
+    /** Segment counts in the picker plus a totals line — the web list's tabs and stats header. */
+    private void refreshOverview() throws java.sql.SQLException {
+        CustomerService.Overview overview = customerService.overview();
+        segmentCounts.clear();
+        segmentCounts.putAll(overview.segments());
+        CustomerSegment selected = segmentCombo.getValue();
+        // Re-render the combo labels with the fresh counts without re-triggering a reload.
+        segmentCombo.setButtonCell(new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(CustomerSegment item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : segmentCombo.getConverter().toString(item));
+            }
+        });
+        segmentCombo.setCellFactory(list -> new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(CustomerSegment item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : segmentCombo.getConverter().toString(item));
+            }
+        });
+        if (selected == null) {
+            segmentCombo.setValue(CustomerSegment.ALL);
+        }
+
+        int total = overview.segments().getOrDefault(CustomerSegment.ALL, 0);
+        overviewLabel.setText(total + " customer(s) · " + overview.newThisMonth() + " registered this month · "
+                + overview.segments().getOrDefault(CustomerSegment.ACTIVE, 0) + " active · "
+                + overview.segments().getOrDefault(CustomerSegment.WITH_ACTIVE_LOANS, 0) + " with active loans · savings held "
+                + Money.format(overview.savingsBalance()));
     }
 
     @FXML

@@ -28,10 +28,13 @@
     <VBox spacing="12" HBox.hgrow="ALWAYS">
         <Label styleClass="page-title" text="Customers"/>
         <HBox spacing="8">
+            <ComboBox fx:id="segmentCombo" prefWidth="220" promptText="Segment"/>
             <TextField fx:id="searchField" onAction="#onSearch" promptText="Search by name, phone, or code" HBox.hgrow="ALWAYS"/>
             <Button onAction="#onSearch" styleClass="button-secondary" text="Search"/>
             <Button onAction="#onViewDetail" styleClass="button-secondary" text="View Detail"/>
         </HBox>
+
+        <Label fx:id="overviewLabel" styleClass="text-muted" wrapText="true"/>
 
         <TableView fx:id="table" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
