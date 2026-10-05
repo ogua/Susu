@@ -422,6 +422,8 @@ export interface CollectionSheetRow {
   customer_name: string;
   customer_code: string | null;
   phone: string | null;
+  /** The customer's active group(s), comma-separated. */
+  group_name: string | null;
   loan_type: 'group' | 'individual' | null;
   loan_id: string | null;
   loan_number: string | null;

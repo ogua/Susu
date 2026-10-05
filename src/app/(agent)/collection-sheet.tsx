@@ -1,9 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { getCollectionSheet } from '@/api/collectionSheet';
+import { getCollectionSheet, type CollectionSheetParams } from '@/api/collectionSheet';
 import { getLoanGroups } from '@/api/loanGroups';
 import { ThemedText } from '@/components/themed-text';
 import {
@@ -14,6 +14,7 @@ import {
   confirmAction,
   EmptyState,
   ErrorState,
+  Input,
   Notice,
   ResultView,
   Screen,
@@ -22,93 +23,114 @@ import {
   type Option,
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { drainOutbox } from '@/sync/engine';
 import { enqueueCollection, enqueueGroupLoanRepayment, enqueueLoanRepayment } from '@/sync/ops';
 import type { CollectionSheetRow } from '@/types/api';
 import { formatMoney, parseAmountToMinor } from '@/utils/money';
 
-type Entry = { repayment: string; deposit: string };
+/** What the agent typed for one row, kept with the row so it survives a search or group change. */
+type Entry = { row: CollectionSheetRow; repayment: string; deposit: string };
 
-const MY_SHEET = 'mine';
+const DUE_TODAY = 'due';
+const ALL_CUSTOMERS = 'all';
+const SEARCH_DEBOUNCE_MS = 300;
 
 /**
- * "Enter Transaction" — the day's collection sheet. Pick a customer group (or
- * "My sheet" for everything due to me today); each row shows what the member
- * owes (one tap fills it in) plus an optional savings deposit. Rows start
- * empty so only customers who actually paid are posted. Submitting queues
- * one outbox op per amount, so a sheet can be worked without signal and
- * syncs later — each op is idempotent on its op_id.
+ * "Enter Transaction" — the day's collection sheet. Show who is due today, all
+ * my customers (savers and loans not yet due too), or one group; search by
+ * name, phone, code, loan/account number or group. Each row shows what the
+ * member owes (one tap fills it in) plus an optional savings deposit. Rows
+ * start empty so only customers who actually paid are posted.
+ *
+ * Entries are kept across searches and group changes and all of them are
+ * posted together, so hiding a row never drops an amount the agent typed.
+ * Submitting queues one outbox op per amount, so a sheet can be worked
+ * without signal and syncs later — each op is idempotent on its op_id.
  */
 export default function CollectionSheetScreen() {
+  const theme = useTheme();
   // Opened from a group page → start on that group.
   const params = useLocalSearchParams<{ groupId?: string }>();
-  const [groupId, setGroupId] = useState<string>(params.groupId ?? MY_SHEET);
-  // Only what the agent typed; untouched rows fall back to what's due.
-  const [edits, setEdits] = useState<Record<string, Partial<Entry>>>({});
+  const [view, setView] = useState<string>(params.groupId ?? DUE_TODAY);
+  const [search, setSearch] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [entries, setEntries] = useState<Record<string, Entry>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [posted, setPosted] = useState<{ repayments: number; deposits: number; count: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(search.trim()), SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const query: CollectionSheetParams = {
+    ...(view === ALL_CUSTOMERS ? { all_customers: true } : view === DUE_TODAY ? {} : { loan_group_id: view }),
+    ...(debounced ? { search: debounced } : {}),
+  };
+
   const groups = useQuery({ queryKey: ['agent', 'loanGroups'], queryFn: () => getLoanGroups() });
   const sheet = useQuery({
-    queryKey: ['agent', 'collectionSheet', groupId],
-    queryFn: () => getCollectionSheet(groupId === MY_SHEET ? {} : { loan_group_id: groupId }),
+    queryKey: ['agent', 'collectionSheet', query],
+    queryFn: () => getCollectionSheet(query),
+    placeholderData: keepPreviousData,
   });
 
-  function entryFor(row: CollectionSheetRow): Entry {
-    return {
-      // Never pre-filled: an untouched row must post nothing, or customers who
-      // didn't pay would be credited. The "due" chip fills it in one tap.
-      repayment: edits[row.key]?.repayment ?? '',
-      deposit: edits[row.key]?.deposit ?? '',
-    };
-  }
-
-  function changeGroup(value: string) {
-    setGroupId(value);
-    setEdits({});
-    setErrors({});
-  }
-
-  const groupOptions: Option<string>[] = useMemo(
+  const viewOptions: Option<string>[] = useMemo(
     () => [
-      { value: MY_SHEET, label: 'My sheet' },
+      { value: DUE_TODAY, label: 'Due today' },
+      { value: ALL_CUSTOMERS, label: 'All my customers' },
       ...(groups.data?.data ?? []).filter((group) => group.is_active).map((group) => ({ value: group.id, label: group.name })),
     ],
     [groups.data],
   );
 
-  const rows = sheet.data ?? [];
-  let totalRepayments = 0;
-  let totalDeposits = 0;
-  let payers = 0;
-  for (const row of rows) {
-    const entry = entryFor(row);
-    const repayment = parseAmountToMinor(entry.repayment) ?? 0;
-    const deposit = parseAmountToMinor(entry.deposit) ?? 0;
-    totalRepayments += repayment;
-    totalDeposits += deposit;
-    if (repayment > 0 || deposit > 0) payers++;
-  }
-  const totals = { repayments: totalRepayments, deposits: totalDeposits };
+  const rows = sheet.data?.rows ?? [];
+  const searching = search.trim() !== debounced || (sheet.isFetching && !sheet.isRefetching);
+  const capped = view === ALL_CUSTOMERS && sheet.data !== undefined && new Set(rows.map((row) => row.customer_id)).size >= sheet.data.customerLimit;
 
-  function update(key: string, field: keyof Entry, value: string) {
-    setEdits((current) => ({ ...current, [key]: { ...current[key], [field]: value } }));
+  function amountsOf(entry: Entry) {
+    return { repayment: parseAmountToMinor(entry.repayment) ?? 0, deposit: parseAmountToMinor(entry.deposit) ?? 0 };
+  }
+
+  // Totals cover every entry, including rows the current search hides.
+  const filled = Object.values(entries).filter((entry) => {
+    const { repayment, deposit } = amountsOf(entry);
+    return repayment > 0 || deposit > 0;
+  });
+  const totals = filled.reduce(
+    (sum, entry) => {
+      const { repayment, deposit } = amountsOf(entry);
+      return { repayments: sum.repayments + repayment, deposits: sum.deposits + deposit };
+    },
+    { repayments: 0, deposits: 0 },
+  );
+  const payers = new Set(filled.map((entry) => entry.row.customer_id)).size;
+  const visibleKeys = new Set(rows.map((row) => row.key));
+  const hiddenEntries = filled.filter((entry) => !visibleKeys.has(entry.row.key)).length;
+
+  function update(row: CollectionSheetRow, field: 'repayment' | 'deposit', value: string) {
+    setEntries((current) => {
+      const existing = current[row.key] ?? { row, repayment: '', deposit: '' };
+      return { ...current, [row.key]: { ...existing, row, [field]: value } };
+    });
+    setErrors(({ [row.key]: _cleared, ...rest }) => rest);
   }
 
   /** Mirror the server's rules up front so a queued op can't be rejected later. */
-  function validate(rows: CollectionSheetRow[]): boolean {
+  function validate(list: Entry[]): boolean {
     const found: Record<string, string> = {};
-    for (const row of rows) {
-      const entry = entryFor(row);
-      const repayment = parseAmountToMinor(entry.repayment) ?? 0;
-      const deposit = parseAmountToMinor(entry.deposit) ?? 0;
+    for (const entry of list) {
+      const { row } = entry;
+      const { repayment, deposit } = amountsOf(entry);
 
       if (repayment > 0 && repayment > row.outstanding) {
-        found[row.key] = `Repayment is more than the ${formatMoney(row.outstanding)} balance.`;
+        found[row.key] = `${row.customer_name}: repayment is more than the ${formatMoney(row.outstanding)} balance.`;
       } else if (deposit > 0 && row.contribution_amount && deposit % row.contribution_amount !== 0) {
-        found[row.key] = `Deposit must be a multiple of ${formatMoney(row.contribution_amount)}.`;
+        found[row.key] = `${row.customer_name}: deposit must be a multiple of ${formatMoney(row.contribution_amount)}.`;
       }
     }
     setErrors(found);
@@ -116,17 +138,16 @@ export default function CollectionSheetScreen() {
     return Object.keys(found).length === 0;
   }
 
-  async function post(rows: CollectionSheetRow[]) {
+  async function post(list: Entry[]) {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
 
     try {
       let count = 0;
-      for (const row of rows) {
-        const entry = entryFor(row);
-        const repayment = parseAmountToMinor(entry.repayment) ?? 0;
-        const deposit = parseAmountToMinor(entry.deposit) ?? 0;
+      for (const entry of list) {
+        const { row } = entry;
+        const { repayment, deposit } = amountsOf(entry);
 
         if (repayment > 0 && row.loan_id) {
           if (row.loan_type === 'group') {
@@ -143,7 +164,7 @@ export default function CollectionSheetScreen() {
       }
 
       setPosted({ ...totals, count });
-      setEdits({});
+      setEntries({});
       void drainOutbox().then(() => void sheet.refetch());
     } finally {
       submittingRef.current = false;
@@ -152,17 +173,18 @@ export default function CollectionSheetScreen() {
   }
 
   function handleSubmit() {
-    if (totals.repayments + totals.deposits <= 0) {
+    if (filled.length === 0) {
       setErrors({ _: 'Enter at least one amount.' });
       return;
     }
-    if (!validate(rows)) return;
+    if (!validate(filled)) return;
 
+    const hiddenNote = hiddenEntries > 0 ? ` This includes ${hiddenEntries} entr${hiddenEntries === 1 ? 'y' : 'ies'} not shown by the current filter.` : '';
     confirmAction({
       title: 'Post collection sheet?',
-      message: `${formatMoney(totals.repayments)} in repayments and ${formatMoney(totals.deposits)} in deposits from ${payers} of ${rows.length} customer(s). Only post money you have actually collected.`,
+      message: `${formatMoney(totals.repayments)} in repayments and ${formatMoney(totals.deposits)} in deposits from ${payers} customer(s).${hiddenNote} Only post money you have actually collected.`,
       confirmLabel: 'Post',
-      onConfirm: () => void post(rows),
+      onConfirm: () => void post(filled),
     });
   }
 
@@ -181,80 +203,135 @@ export default function CollectionSheetScreen() {
     );
   }
 
+  const errorList = Object.entries(errors).filter(([key]) => key === '_' || !visibleKeys.has(key));
+
   return (
     <Screen
       footer={
-        rows.length > 0 ? (
+        filled.length > 0 || rows.length > 0 ? (
           <View style={styles.footer}>
             <View style={styles.totals}>
               <ThemedText type="caption" themeColor="textMuted">
-                {payers} of {rows.length} paying · Repayments {formatMoney(totals.repayments)} · Deposits {formatMoney(totals.deposits)}
+                {payers} paying · Repayments {formatMoney(totals.repayments)} · Deposits {formatMoney(totals.deposits)}
               </ThemedText>
+              {hiddenEntries > 0 ? (
+                <ThemedText type="caption" themeColor="warning">
+                  {hiddenEntries} entr{hiddenEntries === 1 ? 'y is' : 'ies are'} hidden by the filter and will also be posted.
+                </ThemedText>
+              ) : null}
             </View>
             <Button title="Submit sheet" icon="checkCircle" loading={submitting} onPress={handleSubmit} />
           </View>
         ) : undefined
       }
     >
-      <SectionHeader title="Group" />
-      <ChipSelect options={groupOptions} value={groupId} onChange={changeGroup} accessibilityLabel="Customer group" />
+      <SectionHeader title="Show" />
+      <ChipSelect options={viewOptions} value={view} onChange={setView} accessibilityLabel="Which customers to show" />
 
-      {errors._ ? <Notice tone="danger" message={errors._} /> : null}
+      <View style={styles.searchRow}>
+        <View style={styles.flex}>
+          <Input
+            icon="search"
+            placeholder="Name, phone, code, account or group"
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+            accessibilityLabel="Search the sheet"
+          />
+        </View>
+        {searching ? <ActivityIndicator size="small" color={theme.primary} /> : null}
+      </View>
 
-      <SectionHeader title={`Due today${rows.length ? ` (${rows.length})` : ''}`} />
+      {errorList.map(([key, message]) => (
+        <Notice key={key} tone="danger" message={message} />
+      ))}
+
+      <SectionHeader title={`${view === ALL_CUSTOMERS ? 'Customers' : view === DUE_TODAY ? 'Due today' : 'Members'}${rows.length ? ` (${rows.length})` : ''}`} />
+      {capped ? <Notice tone="info" message={`Showing the first ${sheet.data?.customerLimit} customers. Search to find someone else.`} /> : null}
       {sheet.isLoading ? (
         <SkeletonList />
       ) : sheet.isError ? (
         <ErrorState title="Couldn't load the sheet" hint="The sheet needs a connection to load. Queued entries still sync later." onRetry={() => void sheet.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState icon="checkCircle" title="Nobody is due" hint="Pick a group to see your members in it, or check back tomorrow." />
+        debounced ? (
+          <EmptyState
+            icon="search"
+            title="No match"
+            hint={view === ALL_CUSTOMERS ? 'Check the spelling, or search by phone or account number.' : 'Not found here. Try "All my customers".'}
+            actionLabel={view === ALL_CUSTOMERS ? undefined : 'Search all my customers'}
+            onAction={view === ALL_CUSTOMERS ? undefined : () => setView(ALL_CUSTOMERS)}
+          />
+        ) : (
+          <EmptyState
+            icon="checkCircle"
+            title="Nobody is due"
+            hint='Pick "All my customers" or a group to take a payment from someone not due today.'
+          />
+        )
       ) : (
-        rows.map((row) => (
-          <Card key={row.key} style={styles.card}>
-            <View style={styles.rowHeader}>
-              <View style={styles.flex}>
-                <ThemedText type="subtitle">{row.customer_name}</ThemedText>
-                <ThemedText type="caption" themeColor="textMuted">
-                  {[row.loan_number, row.product, row.phone].filter(Boolean).join(' · ') || 'No active loan'}
-                </ThemedText>
-              </View>
-              {row.loan_id ? (
-                <View style={styles.right}>
+        rows.map((row) => {
+          const entry = entries[row.key];
+
+          return (
+            <Card key={row.key} style={styles.card}>
+              <View style={styles.rowHeader}>
+                <View style={styles.flex}>
+                  <ThemedText type="subtitle">{row.customer_name}</ThemedText>
                   <ThemedText type="caption" themeColor="textMuted">
-                    Due {formatMoney(row.amount_due)}
+                    {[row.loan_number, row.product, row.phone].filter(Boolean).join(' · ') || 'No active loan'}
                   </ThemedText>
-                  {row.overdue > 0 ? (
-                    <ThemedText type="caption" themeColor="danger">
-                      Overdue {formatMoney(row.overdue)}
+                  {row.group_name ? (
+                    <ThemedText type="caption" themeColor="textSecondary">
+                      Group: {row.group_name}
                     </ThemedText>
                   ) : null}
                 </View>
-              ) : null}
-            </View>
+                {row.loan_id ? (
+                  <View style={styles.right}>
+                    <ThemedText type="caption" themeColor="textMuted">
+                      Due {formatMoney(row.amount_due)}
+                    </ThemedText>
+                    {row.overdue > 0 ? (
+                      <ThemedText type="caption" themeColor="danger">
+                        Overdue {formatMoney(row.overdue)}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
 
-            {row.loan_id ? (
-              <AmountInput
-                label="Loan repayment"
-                size="md"
-                value={entryFor(row).repayment}
-                onChangeText={(value) => update(row.key, 'repayment', value)}
-                hint={`Balance ${formatMoney(row.outstanding)} · tap the amount due if paid in full`}
-                quickAmounts={row.amount_due > 0 ? [row.amount_due] : undefined}
-              />
-            ) : null}
-            {row.savings_account_id ? (
-              <AmountInput
-                label={`Savings deposit · ${row.savings_account_number}`}
-                size="md"
-                value={entryFor(row).deposit}
-                onChangeText={(value) => update(row.key, 'deposit', value)}
-                hint={`Balance ${formatMoney(row.savings_balance ?? 0)}`}
-                quickAmounts={row.contribution_amount ? [row.contribution_amount, row.contribution_amount * 2, row.contribution_amount * 5] : undefined}
-              />
-            ) : null}
-            {errors[row.key] ? <Notice tone="danger" message={errors[row.key]} /> : null}
-          </Card>
-        ))
+              {row.loan_id ? (
+                <AmountInput
+                  label="Loan repayment"
+                  size="md"
+                  value={entry?.repayment ?? ''}
+                  onChangeText={(value) => update(row, 'repayment', value)}
+                  hint={`Balance ${formatMoney(row.outstanding)}${row.amount_due > 0 ? ' · tap the amount due if paid in full' : ''}`}
+                  quickAmounts={row.amount_due > 0 ? [row.amount_due] : undefined}
+                />
+              ) : null}
+              {row.savings_account_id ? (
+                <AmountInput
+                  label={`Savings deposit · ${row.savings_account_number}`}
+                  size="md"
+                  value={entry?.deposit ?? ''}
+                  onChangeText={(value) => update(row, 'deposit', value)}
+                  hint={`Balance ${formatMoney(row.savings_balance ?? 0)}`}
+                  quickAmounts={row.contribution_amount ? [row.contribution_amount, row.contribution_amount * 2, row.contribution_amount * 5] : undefined}
+                />
+              ) : null}
+              {!row.loan_id && !row.savings_account_id ? (
+                <ThemedText type="caption" themeColor="textMuted">
+                  No loan or savings account you can collect for.
+                </ThemedText>
+              ) : null}
+              {errors[row.key] ? <Notice tone="danger" message={errors[row.key]} /> : null}
+            </Card>
+          );
+        })
       )}
     </Screen>
   );
@@ -263,8 +340,9 @@ export default function CollectionSheetScreen() {
 const styles = StyleSheet.create({
   card: { gap: Spacing.two, marginBottom: Spacing.two },
   rowHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.two },
   flex: { flex: 1 },
   right: { alignItems: 'flex-end' },
   footer: { gap: Spacing.two },
-  totals: { alignItems: 'center' },
+  totals: { alignItems: 'center', gap: 2 },
 });
