@@ -35,6 +35,7 @@ export default function AgentLayout() {
       <Stack.Screen name="open-account" options={{ title: 'Open Savings Account' }} />
       <Stack.Screen name="day-close" options={{ title: 'Close My Day' }} />
       <Stack.Screen name="sync" options={{ title: 'Sync Status' }} />
+      <Stack.Screen name="profile" options={{ title: 'My Profile' }} />
       <Stack.Screen name="payment-verify" options={{ title: 'Mobile Money Payment' }} />
       <Stack.Screen name="loans/index" options={{ title: 'Loans' }} />
       <Stack.Screen name="loans/[loanId]" options={{ title: 'Loan' }} />

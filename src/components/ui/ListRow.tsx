@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -99,8 +100,22 @@ export function ListRow({
   );
 }
 
-export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+/** Photo when `uri` is set (e.g. the user's profile photo), otherwise initials. */
+export function Avatar({ name, size = 40, uri }: { name: string; size?: number; uri?: string | null }) {
   const theme = useTheme();
+
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: theme.primarySoft }}
+        contentFit="cover"
+        transition={150}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      />
+    );
+  }
 
   return (
     <View

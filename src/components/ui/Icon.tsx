@@ -52,6 +52,9 @@ const ICONS = {
   document: { ios: 'doc.richtext.fill', android: 'description' },
   location: { ios: 'location.fill', android: 'location_on' },
   send: { ios: 'arrow.up.circle.fill', android: 'send' },
+  camera: { ios: 'camera.fill', android: 'photo_camera' },
+  photoLibrary: { ios: 'photo.on.rectangle', android: 'photo_library' },
+  trash: { ios: 'trash.fill', android: 'delete' },
 } as const satisfies Record<string, { ios: SymbolViewProps['name'] & string; android: unknown }>;
 
 export type IconName = keyof typeof ICONS;

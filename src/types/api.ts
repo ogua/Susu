@@ -32,6 +32,8 @@ export interface User {
   email: string;
   phone: string | null;
   photo_path: string | null;
+  /** Absent on users cached before the API added it. */
+  photo_url?: string | null;
   is_active: boolean;
   role: Role | null;
   company?: CompanySummary;

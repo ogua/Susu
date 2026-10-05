@@ -6,7 +6,7 @@ import { LineChart } from 'react-native-gifted-charts';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { logout } from '@/api/auth';
+import { logout, me } from '@/api/auth';
 import { getAgentDashboard } from '@/api/dashboard';
 import { setDuty } from '@/api/duty';
 import { ThemedText } from '@/components/themed-text';
@@ -51,6 +51,7 @@ export default function AgentDashboard() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const setUser = useAuthStore((state) => state.setUser);
   const onDuty = useDutyStore((state) => state.onDuty);
   const setOnDuty = useDutyStore((state) => state.setOnDuty);
   const cached = useDashboardCache((state) => state.agent);
@@ -101,6 +102,8 @@ export default function AgentDashboard() {
     await drainOutbox();
     await refreshOutbox();
     await dashboard.refetch();
+    // Picks up profile changes made elsewhere (e.g. photo set on the web).
+    await me().then(setUser).catch(() => undefined);
     setRefreshing(false);
   }
 
@@ -166,7 +169,14 @@ export default function AgentDashboard() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Avatar name={user?.name ?? ''} size={44} />
+          <Pressable
+            onPress={() => router.push('/(agent)/profile')}
+            accessibilityRole="button"
+            accessibilityLabel="My profile and photo"
+            hitSlop={8}
+          >
+            <Avatar name={user?.name ?? ''} uri={user?.photo_url} size={44} />
+          </Pressable>
           <View style={styles.flex}>
             <ThemedText type="small" themeColor="textSecondary">
               {greeting()},

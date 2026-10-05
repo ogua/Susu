@@ -59,6 +59,13 @@
         }
       ],
       "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SusuApp uses your photos so you can set your profile picture, which your branch sees on the agent map.",
+          "cameraPermission": "SusuApp uses the camera so you can take your profile picture, which your branch sees on the agent map."
+        }
+      ],
       "expo-status-bar",
       "expo-web-browser"
     ],
