@@ -339,6 +339,8 @@ export interface LoanGroupMember {
   status: 'active' | 'left';
   joined_at: string | null;
   active_loan?: GroupLoan | null;
+  /** Draft (awaiting deposit/activation) or active loan; null when the member can be issued a new one. */
+  open_loan?: GroupLoan | null;
 }
 
 export interface LoanGroup {

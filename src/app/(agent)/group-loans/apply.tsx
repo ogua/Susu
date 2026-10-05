@@ -76,7 +76,11 @@ export default function IssueGroupMemberLoanScreen() {
     enabled: !!groupId,
   });
 
-  const members = (groupDetail.data?.members ?? []).filter((m) => m.status === 'active' && !m.active_loan);
+  // open_loan also covers drafts still awaiting deposit/activation; fall back to
+  // active_loan for servers that predate the field.
+  const members = (groupDetail.data?.members ?? []).filter(
+    (m) => m.status === 'active' && !(m.open_loan !== undefined ? m.open_loan : m.active_loan),
+  );
   const member = members.find((m) => m.id === memberId) ?? null;
   const principalMinor = parseAmountToMinor(principal) ?? 0;
   const periodicMinor = parseAmountToMinor(periodic) ?? 0;
