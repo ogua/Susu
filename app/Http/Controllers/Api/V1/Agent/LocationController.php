@@ -22,8 +22,9 @@ class LocationController extends Controller
     {
         $validated = $request->validate(['on_duty' => ['required', 'boolean']]);
 
-        $position = $action->execute($request->user(), (bool) $validated['on_duty']);
+        $onDuty = (bool) $validated['on_duty'];
+        $position = $action->execute($request->user(), $onDuty);
 
-        return response()->json(['on_duty' => $position->on_duty]);
+        return response()->json(['on_duty' => $position->on_duty ?? $onDuty]);
     }
 }

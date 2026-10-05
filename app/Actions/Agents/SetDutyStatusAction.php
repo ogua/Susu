@@ -9,12 +9,18 @@ use App\Models\User;
 /**
  * Duty toggle: going on duty opens today's day sheet and enables tracking;
  * going off duty stops tracking (day close/submit is a separate step).
+ * Users without a home branch (e.g. company admins) are not tracked, so
+ * nothing is recorded for them.
  */
 class SetDutyStatusAction
 {
-    public function execute(User $agent, bool $onDuty): AgentLivePosition
+    public function execute(User $agent, bool $onDuty): ?AgentLivePosition
     {
-        if ($onDuty && $agent->branch_id !== null) {
+        if ($agent->branch_id === null) {
+            return null;
+        }
+
+        if ($onDuty) {
             AgentDailySummary::firstOrCreate(
                 ['agent_id' => $agent->id, 'summary_date' => now()->toDateString()],
                 ['company_id' => $agent->company_id, 'branch_id' => $agent->branch_id],

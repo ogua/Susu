@@ -195,3 +195,24 @@ it('does not list agent positions to field agents', function (): void {
 
     $this->getJson('/api/v1/agents/positions')->assertForbidden();
 });
+
+it('toggles duty for a field agent over the API', function (): void {
+    Sanctum::actingAs($this->agent);
+
+    $this->postJson('/api/v1/agent/duty', ['on_duty' => true])
+        ->assertOk()
+        ->assertJsonPath('on_duty', true);
+
+    expect(AgentLivePosition::where('agent_id', $this->agent->id)->value('on_duty'))->toBeTrue();
+});
+
+it('accepts a duty toggle from a user without a home branch without tracking them', function (): void {
+    $companyAdmin = User::factory()->companyAdmin($this->branch->company)->create(['branch_id' => null]);
+    Sanctum::actingAs($companyAdmin);
+
+    $this->postJson('/api/v1/agent/duty', ['on_duty' => false])
+        ->assertOk()
+        ->assertJsonPath('on_duty', false);
+
+    expect(AgentLivePosition::where('agent_id', $companyAdmin->id)->exists())->toBeFalse();
+});
