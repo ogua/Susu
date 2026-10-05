@@ -6,9 +6,9 @@ use App\Actions\Collections\BuildCollectionSheetAction;
 use App\Actions\Collections\PostCollectionSheetAction;
 use App\Enums\ClientOrigin;
 use App\Enums\PaymentMethod;
+use App\Http\Controllers\Api\V1\Concerns\ResolvesRequestBranch;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\PostCollectionSheetRequest;
-use App\Models\Branch;
 use App\Models\LoanGroup;
 use App\Models\User;
 use App\Support\AgentAssignment;
@@ -19,10 +19,13 @@ use Illuminate\Support\Carbon;
 /**
  * "Enter Transaction" for the mobile/desktop clients. Field agents only see
  * their own customers (officer forced to themselves, with or without a
- * group); company admins may pass branch_id.
+ * group); company admins may pass branch_id and otherwise default to
+ * their company's first branch.
  */
 class CollectionSheetController extends Controller
 {
+    use ResolvesRequestBranch;
+
     public function show(Request $request, BuildCollectionSheetAction $action): JsonResponse
     {
         $request->validate([
@@ -35,9 +38,7 @@ class CollectionSheetController extends Controller
         ]);
 
         $user = $request->user();
-        $branch = $user->hasRole('company_admin') && $request->filled('branch_id')
-            ? Branch::where('company_id', $user->company_id)->findOrFail($request->query('branch_id'))
-            : $user->branch;
+        $branch = $this->resolveBranch($request);
 
         $group = $request->filled('loan_group_id')
             ? LoanGroup::where('branch_id', $branch->id)->findOrFail($request->query('loan_group_id'))

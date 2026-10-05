@@ -9,6 +9,7 @@ use App\Actions\LoanGroups\IssueLoansToGroupAction;
 use App\Actions\LoanGroups\OpenSavingsForGroupAction;
 use App\Actions\LoanGroups\RemoveLoanGroupMemberAction;
 use App\Enums\LoanFrequency;
+use App\Http\Controllers\Api\V1\Concerns\ResolvesRequestBranch;
 use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AddLoanGroupMemberRequest;
@@ -29,6 +30,7 @@ use Illuminate\Support\Carbon;
 /** Staff-only (field_agent/branch_manager/company_admin) — see routes/api/v1.php. */
 class LoanGroupController extends Controller
 {
+    use ResolvesRequestBranch;
     use ScopesToAccessibleBranches;
 
     public function index(Request $request): AnonymousResourceCollection
@@ -39,8 +41,9 @@ class LoanGroupController extends Controller
             ->withCount('members')
             ->withSum('activeGroupLoans as group_outstanding_sum', 'outstanding_balance')
             ->where('company_id', $user->company_id)
-            ->where('branch_id', $user->branch_id)
             ->when(AgentAssignment::restricts($user), fn ($q) => AgentAssignment::scopeGroups($q, $user));
+
+        $query = $this->scopeToBranches($query, $user);
 
         return LoanGroupResource::collection($query->latest()->paginate($request->integer('per_page', 30)));
     }
@@ -103,7 +106,7 @@ class LoanGroupController extends Controller
 
         $loanGroup = LoanGroup::create([
             'company_id' => $user->company_id,
-            'branch_id' => $user->branch_id,
+            'branch_id' => $this->resolveBranch($request)->id,
             'created_by' => $user->id,
             'name' => $request->validated('name'),
             'code' => $request->validated('code'),

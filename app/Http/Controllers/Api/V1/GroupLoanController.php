@@ -40,9 +40,8 @@ class GroupLoanController extends Controller
     {
         $user = $request->user();
 
-        $query = GroupLoan::with('loanGroup', 'customer', 'installments')
+        $query = $this->scopeToBranches(GroupLoan::with('loanGroup', 'customer', 'installments'), $user)
             ->where('company_id', $user->company_id)
-            ->where('branch_id', $user->branch_id)
             ->when(AgentAssignment::restricts($user), fn ($q) => AgentAssignment::scopeLoans($q, $user))
             ->when($request->filled('loan_group_id'), fn ($q) => $q->where('loan_group_id', $request->string('loan_group_id')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')));

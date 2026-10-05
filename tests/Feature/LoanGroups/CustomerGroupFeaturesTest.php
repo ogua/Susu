@@ -179,6 +179,26 @@ it('serves the summary, history, sheet and bulk endpoints over the API', functio
     expect($this->group->groupLoans()->where('status', GroupLoanStatus::Active)->sum('outstanding_balance'))->toEqual(1800_00);
 });
 
+it('serves the collection sheet and loan groups to a company admin without a home branch', function (): void {
+    issueAndActivateGroupLoans($this->manager, $this->group);
+    $companyAdmin = User::factory()->companyAdmin($this->branch->company)->create(['branch_id' => null]);
+
+    $this->actingAs($companyAdmin, 'sanctum')
+        ->getJson('/api/v1/collection-sheet')
+        ->assertOk()
+        ->assertJsonPath('meta.branch_id', $this->branch->id);
+
+    $this->actingAs($companyAdmin, 'sanctum')
+        ->getJson('/api/v1/loan-groups')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $this->group->id);
+
+    $this->actingAs($companyAdmin, 'sanctum')
+        ->getJson('/api/v1/group-loans')
+        ->assertOk()
+        ->assertJsonCount(2, 'data');
+});
+
 it('renders the group overview and the collection sheet page', function (): void {
     issueAndActivateGroupLoans($this->manager, $this->group);
     $this->actingAs($this->manager);
