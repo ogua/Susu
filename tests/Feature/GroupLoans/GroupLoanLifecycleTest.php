@@ -6,6 +6,8 @@ use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
+use App\Actions\Ledger\ReverseJournalEntryAction;
+use App\Actions\LoanGroups\BuildLoanGroupSummaryAction;
 use App\Enums\DepositStatus;
 use App\Enums\GroupLoanStatus;
 use App\Enums\InstallmentStatus;
@@ -150,6 +152,38 @@ it('applies a repayment oldest-first and reduces the outstanding balance', funct
         ->and($installments[2]->amount_paid)->toBe(50_00);
 
     $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('reverses a repayment and re-applies the remaining ones oldest-first', function (): void {
+    $loan = activateMemberLoan(issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer), $this->agent, $this->savingsAccount);
+
+    $first = app(RecordGroupLoanRepaymentAction::class)->execute($loan, 250_00, $this->agent);
+    app(RecordGroupLoanRepaymentAction::class)->execute($loan->fresh(), 50_00, $this->agent);
+
+    app(ReverseJournalEntryAction::class)->execute($first->entry, $this->manager, 'Wrong member');
+
+    $loan->refresh();
+    $installments = $loan->installments()->orderBy('sequence')->get();
+
+    expect($loan->outstanding_balance)->toBe(950_00)
+        ->and($installments[0]->amount_paid)->toBe(50_00)
+        ->and($installments[0]->status)->toBe(InstallmentStatus::PartiallyPaid)
+        ->and($installments[1]->amount_paid)->toBe(0)
+        ->and(app(BuildLoanGroupSummaryAction::class)->execute($this->loanGroup)['total_paid'])->toBe(50_00);
+
+    $this->artisan('ledger:verify-balances')->assertSuccessful();
+});
+
+it('reopens a repaid group loan when its final repayment is reversed', function (): void {
+    $loan = activateMemberLoan(issueMemberLoan($this->agent, $this->loanGroup->fresh(), $this->customer), $this->agent, $this->savingsAccount);
+    $payoff = app(RecordGroupLoanRepaymentAction::class)->execute($loan, 1000_00, $this->agent);
+    expect($loan->refresh()->status)->toBe(GroupLoanStatus::Closed);
+
+    app(ReverseJournalEntryAction::class)->execute($payoff->entry, $this->manager, 'Bounced momo');
+
+    expect($loan->refresh()->status)->toBe(GroupLoanStatus::Active)
+        ->and($loan->outstanding_balance)->toBe(1000_00)
+        ->and($loan->closed_at)->toBeNull();
 });
 
 it('auto-closes without touching savings when fully repaid in cash', function (): void {

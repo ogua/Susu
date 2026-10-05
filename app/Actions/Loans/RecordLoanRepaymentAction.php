@@ -3,7 +3,6 @@
 namespace App\Actions\Loans;
 
 use App\Enums\ClientOrigin;
-use App\Enums\InstallmentStatus;
 use App\Enums\LoanStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\TransactionType;
@@ -13,6 +12,7 @@ use App\Models\User;
 use App\Services\Ledger\ChartOfAccounts;
 use App\Services\Ledger\EntryData;
 use App\Services\Ledger\LedgerService;
+use App\Services\Loans\LoanInstallmentAllocator;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -29,6 +29,7 @@ class RecordLoanRepaymentAction
     public function __construct(
         private LedgerService $ledger,
         private ChartOfAccounts $chart,
+        private LoanInstallmentAllocator $allocator,
     ) {}
 
     public function execute(
@@ -60,7 +61,7 @@ class RecordLoanRepaymentAction
             /** @var Loan $lockedLoan */
             $lockedLoan = Loan::whereKey($loan->id)->lockForUpdate()->firstOrFail();
 
-            [$principalApplied, $interestApplied, $penaltyApplied] = $this->applyToInstallments($lockedLoan, $amount);
+            [$principalApplied, $interestApplied, $penaltyApplied] = $this->allocator->apply($lockedLoan, $amount);
 
             $lines = [
                 ['account' => $this->cashAccount($lockedLoan, $paymentMethod), 'debit' => $amount],
@@ -102,65 +103,6 @@ class RecordLoanRepaymentAction
 
             return new LoanRepaymentResult($entry, $lockedLoan->fresh(), duplicate: false);
         });
-    }
-
-    /**
-     * @return array{0: int, 1: int, 2: int} [principalApplied, interestApplied, penaltyApplied]
-     */
-    private function applyToInstallments(Loan $loan, int $amount): array
-    {
-        $remaining = $amount;
-        $principalApplied = 0;
-        $interestApplied = 0;
-        $penaltyApplied = 0;
-
-        $installments = $loan->installments()
-            ->whereIn('status', [InstallmentStatus::Pending, InstallmentStatus::PartiallyPaid, InstallmentStatus::Overdue])
-            ->get();
-
-        foreach ($installments as $installment) {
-            if ($remaining <= 0) {
-                break;
-            }
-
-            $installmentTotal = min($installment->remaining(), $remaining);
-            if ($installmentTotal <= 0) {
-                continue;
-            }
-
-            // Penalty first (it's the punitive charge for lateness), then
-            // interest, then principal — matches totalDue()'s composition so
-            // the three portions always sum to exactly $installmentTotal.
-            $penaltyPortion = min($installment->remainingPenalty(), $installmentTotal);
-            $interestPortion = min($installment->remainingInterest(), $installmentTotal - $penaltyPortion);
-            $principalPortion = min($installment->remainingPrincipal(), $installmentTotal - $penaltyPortion - $interestPortion);
-
-            $wasOverdue = $installment->status === InstallmentStatus::Overdue;
-
-            $installment->forceFill([
-                'penalty_paid' => $installment->penalty_paid + $penaltyPortion,
-                'interest_paid' => $installment->interest_paid + $interestPortion,
-                'principal_paid' => $installment->principal_paid + $principalPortion,
-            ]);
-            $installment->status = match (true) {
-                $installment->amountPaid() >= $installment->totalDue() => InstallmentStatus::Paid,
-                // Stays visibly overdue through a partial payment rather than
-                // reverting to PartiallyPaid — it's still late until settled.
-                $wasOverdue => InstallmentStatus::Overdue,
-                default => InstallmentStatus::PartiallyPaid,
-            };
-            if ($installment->status === InstallmentStatus::Paid) {
-                $installment->paid_at = now();
-            }
-            $installment->save();
-
-            $penaltyApplied += $penaltyPortion;
-            $principalApplied += $principalPortion;
-            $interestApplied += $interestPortion;
-            $remaining -= $installmentTotal;
-        }
-
-        return [$principalApplied, $interestApplied, $penaltyApplied];
     }
 
     private function cashAccount(Loan $loan, PaymentMethod $method): LedgerAccount

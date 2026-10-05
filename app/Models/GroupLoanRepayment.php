@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\EntryStatus;
 use Database\Factories\GroupLoanRepaymentFactory;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -46,5 +49,16 @@ class GroupLoanRepayment extends Model
     public function recordedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    /**
+     * Repayments whose journal entry still stands (not reversed).
+     *
+     * @param  Builder<GroupLoanRepayment>  $query
+     */
+    #[Scope]
+    protected function notReversed(Builder $query): void
+    {
+        $query->whereHas('journalEntry', fn (Builder $entry) => $entry->where('status', '!=', EntryStatus::Reversed));
     }
 }

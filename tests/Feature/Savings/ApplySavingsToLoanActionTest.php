@@ -16,11 +16,10 @@ beforeEach(function (): void {
     $this->manager = User::factory()->branchManager($this->branch)->create();
     $this->customer = Customer::factory()->forBranch($this->branch)->create();
 
-    $this->savingsAccount = SavingsAccount::factory()->create([
+    $this->savingsAccount = SavingsAccount::factory()->funded(500_00)->create([
         'branch_id' => $this->branch->id,
         'company_id' => $this->branch->company_id,
         'customer_id' => $this->customer->id,
-        'balance' => 500_00,
     ]);
 
     $this->receivableAccount = LedgerAccount::factory()->create(['company_id' => $this->branch->company_id]);
@@ -43,7 +42,7 @@ it('debits savings and credits the receivable account for the applied amount', f
     // direction (Liability debited = down; Asset credited = down).
     expect($entry->type)->toBe(TransactionType::SavingsAppliedToLoanWriteOff)
         ->and($this->savingsAccount->fresh()->balance)->toBe(300_00)
-        ->and($this->savingsAccount->ledgerAccount->refresh()->balance)->toBe(-200_00)
+        ->and($this->savingsAccount->ledgerAccount->refresh()->balance)->toBe(300_00)
         ->and($this->receivableAccount->refresh()->balance)->toBe(-200_00);
 
     $this->artisan('ledger:verify-balances')->assertSuccessful();

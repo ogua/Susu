@@ -99,33 +99,39 @@ class LedgerService
      */
     public function reverse(JournalEntry $entry, User $reversedBy, string $reason): JournalEntry
     {
-        if ($entry->status === EntryStatus::Reversed) {
-            throw new InvalidArgumentException('Entry has already been reversed.');
-        }
+        return DB::transaction(function () use ($entry, $reversedBy, $reason): JournalEntry {
+            // Locked re-read: two concurrent reversals must not both post.
+            $locked = JournalEntry::whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
-        $entry->loadMissing('lines.account', 'company', 'branch');
+            if ($locked->status === EntryStatus::Reversed) {
+                throw new InvalidArgumentException('Entry has already been reversed.');
+            }
 
-        $reversal = $this->post(new EntryData(
-            company: $entry->company,
-            type: TransactionType::Reversal,
-            lines: $entry->lines->map(fn ($line): array => [
-                'account' => $line->account,
-                'debit' => $line->credit,
-                'credit' => $line->debit,
-                'memo' => 'Reversal: '.$reason,
-            ])->all(),
-            branch: $entry->branch,
-            paymentMethod: PaymentMethod::Internal,
-            origin: ClientOrigin::System,
-            recordedBy: $reversedBy,
-            description: $reason,
-            meta: ['reverses' => $entry->id] + ($entry->meta ?? []),
-        ));
+            $locked->load('lines.account', 'company', 'branch');
 
-        $reversal->update(['reversed_entry_id' => $entry->id]);
-        $entry->update(['status' => EntryStatus::Reversed]);
+            $reversal = $this->post(new EntryData(
+                company: $locked->company,
+                type: TransactionType::Reversal,
+                lines: $locked->lines->map(fn ($line): array => [
+                    'account' => $line->account,
+                    'debit' => $line->credit,
+                    'credit' => $line->debit,
+                    'memo' => 'Reversal: '.$reason,
+                ])->all(),
+                branch: $locked->branch,
+                paymentMethod: PaymentMethod::Internal,
+                origin: ClientOrigin::System,
+                recordedBy: $reversedBy,
+                description: $reason,
+                meta: ['reverses' => $locked->id] + ($locked->meta ?? []),
+            ));
 
-        return $reversal;
+            $reversal->update(['reversed_entry_id' => $locked->id]);
+            $locked->update(['status' => EntryStatus::Reversed]);
+            $entry->status = EntryStatus::Reversed;
+
+            return $reversal;
+        });
     }
 
     /** Recompute a balance from the lines (integrity checks, tests). */

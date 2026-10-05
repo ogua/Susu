@@ -52,7 +52,7 @@ class BuildLoanGroupHistoryAction
                 $events->push($this->event($deposit->recorded_at, 'deposit_recorded', "Security deposit for {$loan->loan_number}", $loan->customer?->fullName(), $deposit->amount, $deposit->recordedBy?->name));
             });
 
-        GroupLoanRepayment::whereIn('group_loan_id', $loanIds)->with('recordedBy')->get()
+        GroupLoanRepayment::notReversed()->whereIn('group_loan_id', $loanIds)->with('recordedBy')->get()
             ->each(function (GroupLoanRepayment $repayment) use ($events, $loansById): void {
                 $loan = $loansById->get($repayment->group_loan_id);
                 $events->push($this->event($repayment->recorded_at, 'repayment_recorded', "Repayment on {$loan->loan_number}", $loan->customer?->fullName(), $repayment->amount, $repayment->recordedBy?->name));

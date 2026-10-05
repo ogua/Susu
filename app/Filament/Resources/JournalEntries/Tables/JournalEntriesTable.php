@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources\JournalEntries\Tables;
 
+use App\Actions\Ledger\ReverseJournalEntryAction;
 use App\Enums\TransactionType;
 use App\Models\JournalEntry;
-use App\Services\Ledger\LedgerService;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
@@ -17,6 +17,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\ValidationException;
 
 class JournalEntriesTable
 {
@@ -55,14 +56,21 @@ class JournalEntriesTable
             ->recordActions([
                 Action::make('reverse')
                     ->color('danger')
-                    ->visible(fn (JournalEntry $record): bool => $record->status->value !== 'reversed')
+                    ->visible(fn (JournalEntry $record): bool => ReverseJournalEntryAction::supports($record))
                     ->authorize('reverse')
                     ->requiresConfirmation()
                     ->schema([
                         Textarea::make('reason')->required(),
                     ])
                     ->action(function (array $data, JournalEntry $record): void {
-                        app(LedgerService::class)->reverse($record, Filament::auth()->user(), $data['reason']);
+                        try {
+                            app(ReverseJournalEntryAction::class)->execute($record, Filament::auth()->user(), $data['reason']);
+                        } catch (ValidationException $e) {
+                            Notification::make()->title(collect($e->errors())->flatten()->first())->danger()->send();
+
+                            return;
+                        }
+
                         Notification::make()->title('Entry reversed')->success()->send();
                     }),
             ])

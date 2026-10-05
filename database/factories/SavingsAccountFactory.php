@@ -2,11 +2,14 @@
 
 namespace Database\Factories;
 
+use App\Enums\TransactionType;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Services\Ledger\ChartOfAccounts;
+use App\Services\Ledger\EntryData;
+use App\Services\Ledger\LedgerService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -52,6 +55,31 @@ class SavingsAccountFactory extends Factory
                     'ledger_account_id' => app(ChartOfAccounts::class)->savingsLiability($account)->id,
                 ])->save();
             }
+        });
+    }
+
+    /**
+     * Give the account a balance backed by a real ledger entry (Dr branch
+     * cash / Cr savings liability), so ledger:verify-balances stays clean.
+     */
+    public function funded(int $amount): static
+    {
+        return $this->afterCreating(function (SavingsAccount $account) use ($amount): void {
+            $chart = app(ChartOfAccounts::class);
+            $account->refresh();
+
+            app(LedgerService::class)->post(new EntryData(
+                company: $account->company,
+                type: TransactionType::Adjustment,
+                lines: [
+                    ['account' => $chart->branchCash($account->branch), 'debit' => $amount],
+                    ['account' => $account->ledgerAccount, 'credit' => $amount],
+                ],
+                branch: $account->branch,
+                description: 'Opening balance (test)',
+            ));
+
+            $account->forceFill(['balance' => $account->balance + $amount])->save();
         });
     }
 }

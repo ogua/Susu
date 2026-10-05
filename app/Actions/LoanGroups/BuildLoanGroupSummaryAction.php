@@ -28,7 +28,7 @@ class BuildLoanGroupSummaryAction
             'active_loans' => (clone $loans)->where('status', GroupLoanStatus::Active)->count(),
             'draft_loans' => (clone $loans)->where('status', GroupLoanStatus::Draft)->count(),
             'total_disbursed' => (int) (clone $loans)->whereNotNull('activated_at')->sum('principal_amount'),
-            'total_paid' => (int) GroupLoanRepayment::whereIn('group_loan_id', (clone $loans)->select('id'))->sum('amount'),
+            'total_paid' => (int) GroupLoanRepayment::notReversed()->whereIn('group_loan_id', (clone $loans)->select('id'))->sum('amount'),
             'outstanding' => (int) (clone $loans)->where('status', GroupLoanStatus::Active)->sum('outstanding_balance'),
             'overdue' => (int) GroupLoanInstallment::query()
                 ->whereIn('group_loan_id', (clone $loans)->where('status', GroupLoanStatus::Active)->select('id'))

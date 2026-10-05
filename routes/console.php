@@ -12,3 +12,4 @@ Schedule::command('loans:flag-arrears')->dailyAt('01:00');
 Schedule::command('savings:mature-target-accounts')->dailyAt('01:30');
 Schedule::command('savings:mature-fixed-deposits')->dailyAt('01:35');
 Schedule::command('kyc:purge-expired')->dailyAt('02:00');
+Schedule::command('ledger:verify-balances')->dailyAt('02:30');

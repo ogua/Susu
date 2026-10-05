@@ -266,11 +266,10 @@ it('write-off applies chosen savings then bad-debts only the residual principal'
     $outstandingBeforeWriteOff = $disbursed->outstanding_balance;
     $principalOutstanding = $disbursed->receivableAccount->balance;
 
-    $savingsAccount = SavingsAccount::factory()->create([
+    $savingsAccount = SavingsAccount::factory()->funded(200_00)->create([
         'branch_id' => $this->branch->id,
         'company_id' => $this->branch->company_id,
         'customer_id' => $this->customer->id,
-        'balance' => 200_00,
     ]);
 
     $writtenOff = app(WriteOffLoanAction::class)->execute(
