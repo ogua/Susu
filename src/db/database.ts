@@ -10,7 +10,7 @@ import * as SQLite from 'expo-sqlite';
  */
 
 const DB_NAME = 'susuapp.db';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -53,6 +53,13 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     // Server's per-op result (e.g. a collection's ledger reference and the
     // account balance after it), shown on the receipt once synced.
     await db.execAsync(`ALTER TABLE outbox ADD COLUMN result TEXT;`);
+  }
+
+  if (current < 3) {
+    // Who recorded the op. Only the signed-in user's ops are drained, so a
+    // collection never syncs under another agent's token after a sign-out.
+    // Legacy rows (NULL) keep draining for whoever is signed in.
+    await db.execAsync(`ALTER TABLE outbox ADD COLUMN actor_id TEXT;`);
   }
 
   if (current !== SCHEMA_VERSION) {

@@ -20,6 +20,8 @@ import { Button, Icon, Input, Notice } from '@/components/ui';
 import { Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/stores/authStore';
+import { useOutboxStatus } from '@/stores/outboxStatusStore';
+import { drainOutbox } from '@/sync/engine';
 
 export default function LoginScreen() {
   const theme = useTheme();
@@ -50,6 +52,10 @@ export default function LoginScreen() {
       }
       const response = await login(loginId.trim(), password);
       await setSession(response.token, response.user);
+      // Outbox is scoped per user: show this user's counts and send any
+      // records they left unsynced last time.
+      void useOutboxStatus.getState().refresh();
+      void drainOutbox();
       router.replace(response.user.role === 'customer' ? '/(customer)' : '/(agent)');
     } catch (err) {
       const fieldError = apiFieldError(err, 'login');

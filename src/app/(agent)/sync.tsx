@@ -6,12 +6,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { Badge, Button, Card, EmptyState, Icon, OfflineBanner, type IconName } from '@/components/ui';
 import { Radii, Spacing } from '@/constants/theme';
-import { getDb } from '@/db/database';
 import { useOnline } from '@/hooks/use-network';
 import { useTheme } from '@/hooks/use-theme';
 import { useOutboxStatus } from '@/stores/outboxStatusStore';
 import { drainOutbox } from '@/sync/engine';
-import { retryRejected, type OutboxItem } from '@/sync/outbox';
+import { recentItems, retryRejected, type OutboxItem } from '@/sync/outbox';
 import { formatDateTime, formatRelative } from '@/utils/format';
 import { formatMoney } from '@/utils/money';
 
@@ -24,12 +23,6 @@ const OP_LABELS: Record<string, { label: string; icon: IconName }> = {
   'group_loan.write_off': { label: 'Group loan write-off', icon: 'savings' },
   'locations.record': { label: 'Route location update', icon: 'location' },
 };
-
-async function loadAllOps(): Promise<OutboxItem[]> {
-  const db = await getDb();
-
-  return db.getAllAsync<OutboxItem>('SELECT * FROM outbox ORDER BY created_at DESC LIMIT 200');
-}
 
 /** Human summary of a queued op from its own payload (amount, name). */
 function describe(item: OutboxItem): string | null {
@@ -65,7 +58,7 @@ export default function SyncQueueScreen() {
   const [retrying, setRetrying] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setItems(await loadAllOps());
+    setItems(await recentItems());
   }, []);
 
   useFocusEffect(

@@ -138,7 +138,7 @@ export default function AgentDashboard() {
     if (pending > 0) {
       Alert.alert(
         `${pending} record${pending === 1 ? '' : 's'} not synced yet`,
-        'Connect to the internet and sync before signing out. Unsynced records stay on this phone and are only sent the next time someone signs in on it.',
+        'Connect to the internet and sync before signing out if you can. Unsynced records stay safely on this phone and are sent the next time you sign in — never under another user.',
         [
           { text: 'Stay signed in', style: 'cancel' },
           { text: 'Sign out anyway', style: 'destructive', onPress: () => void signOut() },

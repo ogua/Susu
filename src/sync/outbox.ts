@@ -1,6 +1,14 @@
 import * as Crypto from 'expo-crypto';
 
 import { getDb } from '@/db/database';
+import { useAuthStore } from '@/stores/authStore';
+
+function currentActorId(): string | null {
+  return useAuthStore.getState().user?.id ?? null;
+}
+
+/** Ops this user may see/drain: their own, plus legacy rows with no owner. */
+const MINE = `(actor_id = ? OR actor_id IS NULL)`;
 
 export type OutboxStatus = 'pending' | 'synced' | 'rejected';
 
@@ -10,6 +18,7 @@ export interface OutboxItem {
   payload: string;
   recorded_at: string;
   status: OutboxStatus;
+  actor_id: string | null;
   attempts: number;
   last_error: string | null;
   /** JSON of the server's per-op result once synced (schema v2). */
@@ -26,11 +35,12 @@ export async function enqueue(opType: string, payload: Record<string, unknown>):
   const opId = Crypto.randomUUID();
 
   await db.runAsync(
-    `INSERT INTO outbox (op_id, op_type, payload, recorded_at) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO outbox (op_id, op_type, payload, recorded_at, actor_id) VALUES (?, ?, ?, ?, ?)`,
     opId,
     opType,
     JSON.stringify({ ...payload, client_reference: opId }),
     new Date().toISOString(),
+    currentActorId(),
   );
 
   return opId;
@@ -40,7 +50,8 @@ export async function pendingItems(limit = 100): Promise<OutboxItem[]> {
   const db = await getDb();
 
   return db.getAllAsync<OutboxItem>(
-    `SELECT * FROM outbox WHERE status = 'pending' ORDER BY created_at LIMIT ?`,
+    `SELECT * FROM outbox WHERE status = 'pending' AND ${MINE} ORDER BY created_at LIMIT ?`,
+    currentActorId(),
     limit,
   );
 }
@@ -48,7 +59,8 @@ export async function pendingItems(limit = 100): Promise<OutboxItem[]> {
 export async function pendingCount(): Promise<number> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM outbox WHERE status = 'pending'`,
+    `SELECT COUNT(*) AS n FROM outbox WHERE status = 'pending' AND ${MINE}`,
+    currentActorId(),
   );
 
   return row?.n ?? 0;
@@ -57,7 +69,8 @@ export async function pendingCount(): Promise<number> {
 export async function rejectedCount(): Promise<number> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM outbox WHERE status = 'rejected'`,
+    `SELECT COUNT(*) AS n FROM outbox WHERE status = 'rejected' AND ${MINE}`,
+    currentActorId(),
   );
 
   return row?.n ?? 0;
@@ -67,6 +80,17 @@ export async function getOutboxItem(opId: string): Promise<OutboxItem | null> {
   const db = await getDb();
 
   return db.getFirstAsync<OutboxItem>(`SELECT * FROM outbox WHERE op_id = ?`, opId);
+}
+
+/** Most recent ops for the Sync screen, scoped to the signed-in user. */
+export async function recentItems(limit = 200): Promise<OutboxItem[]> {
+  const db = await getDb();
+
+  return db.getAllAsync<OutboxItem>(
+    `SELECT * FROM outbox WHERE ${MINE} ORDER BY created_at DESC LIMIT ?`,
+    currentActorId(),
+    limit,
+  );
 }
 
 export async function markSynced(opId: string, result?: Record<string, unknown> | null): Promise<void> {

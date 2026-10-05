@@ -75,7 +75,7 @@ See the audit doc.
 3. ✅ Receipts show the server receipt number, commission and new savings balance. `/sync/batch` already returned them; the engine now stores each op's `result` (outbox schema v2).
 4. ✅ Transaction `direction` (credit/debit) on customer account history (backend `3957c9c`); mobile prefers it over the type-based fallback and labels interest, penalties, shares, deposit and savings-applied types.
 5. ✅ Rejected sync ops now show the server's real reason. The engine previously read `errors` from the wrong level and always showed a generic message.
-6. 🔧 Outbox ops should carry the recording user. Today an unsynced op drains under whoever signs in next (mobile warns on sign-out).
+6. ✅ Outbox ops carry the recording user (`actor_id`, schema v3). Only the signed-in user's ops are drained, counted and listed; the rest wait for their owner's next sign-in, which also triggers a drain. Rows queued before this change (no owner), and background location pings recorded before the session hydrates, still drain for whoever is signed in.
 7. 🔧🔁 Schedules/routes, missed-collection tracking, notifications, PIN unlock, password reset.
 8. 🔧🔁 Shareable/printable server receipt URL (mobile shares a text receipt today).
 9. 🔁 Parity: web (Filament) and desktop (JavaFX) can adopt `direction` and send `client_reference` on withdrawal requests; both fields are optional, so nothing breaks if they don't.
