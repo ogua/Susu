@@ -212,7 +212,7 @@ export interface LoanProduct {
   interest_method: 'flat' | 'reducing_balance';
   interest_rate_bps: number;
   term_period_count: number;
-  repayment_frequency: 'weekly' | 'monthly';
+  repayment_frequency: 'daily' | 'weekly' | 'monthly';
   origination_fee_amount: number;
   min_amount: number;
   min_amount_formatted: string;
@@ -265,6 +265,39 @@ export interface Loan {
   write_off_amount: number | null;
   write_off_savings_account_id: string | null;
   write_off_savings_applied: number | null;
+  // Loan application wizard (additive; older servers omit these).
+  origination_fee_amount?: number;
+  grace_period_days?: number;
+  first_repayment_date?: string | null;
+  purpose?: string | null;
+  charges?: LoanCharge[];
+  collaterals?: LoanCollateral[];
+  guarantors?: LoanGuarantor[];
+}
+
+export interface LoanCharge {
+  id: string;
+  name: string;
+  amount: number;
+}
+
+export interface LoanCollateral {
+  id?: string;
+  type: string;
+  description: string;
+  estimated_value?: number | null;
+  serial_number?: string | null;
+  notes?: string | null;
+}
+
+export interface LoanGuarantor {
+  id?: string;
+  customer_id?: string | null;
+  name: string;
+  phone?: string | null;
+  relationship?: string | null;
+  address?: string | null;
+  guaranteed_amount?: number | null;
 }
 
 export interface LoanEligibility {
@@ -338,6 +371,10 @@ export interface LoanGroupMember {
   id: string;
   customer_id: string;
   customer_name: string;
+  customer_code?: string | null;
+  customer_phone?: string | null;
+  /** Only on GET /loan-groups/{id}. */
+  savings_accounts?: SavingsAccount[];
   status: 'active' | 'left';
   joined_at: string | null;
   active_loan?: GroupLoan | null;
@@ -349,11 +386,53 @@ export interface LoanGroup {
   id: string;
   name: string;
   code: string;
+  branch_id?: string;
   is_active: boolean;
   member_count?: number;
   group_outstanding?: number;
   group_outstanding_formatted?: string;
   members?: LoanGroupMember[];
+}
+
+/** GET /loan-groups/{id} → top-level `summary` (pesewas). */
+export interface LoanGroupSummary {
+  active_members: number;
+  active_loans: number;
+  draft_loans: number;
+  total_disbursed: number;
+  total_paid: number;
+  outstanding: number;
+  overdue: number;
+  deposits_collected: number;
+}
+
+export interface LoanGroupHistoryEvent {
+  at: string;
+  type: string;
+  description: string;
+  member: string | null;
+  amount: number | null;
+  by: string | null;
+}
+
+/** One row of GET /collection-sheet — who is due, and where a deposit would go. */
+export interface CollectionSheetRow {
+  key: string;
+  customer_id: string;
+  customer_name: string;
+  customer_code: string | null;
+  phone: string | null;
+  loan_type: 'group' | 'individual' | null;
+  loan_id: string | null;
+  loan_number: string | null;
+  product: string | null;
+  outstanding: number;
+  amount_due: number;
+  overdue: number;
+  savings_account_id: string | null;
+  savings_account_number: string | null;
+  savings_balance: number | null;
+  contribution_amount: number | null;
 }
 
 export type GroupStatus = 'draft' | 'active' | 'completed';

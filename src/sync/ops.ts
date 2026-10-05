@@ -105,3 +105,15 @@ export async function enqueueLoanWriteOff(payload: {
 }): Promise<string> {
   return enqueue('loan.write_off', payload);
 }
+
+/**
+ * Loan repayments from the collection sheet go through the outbox so a sheet
+ * can be worked offline; op_id doubles as the server-side idempotency key.
+ */
+export async function enqueueLoanRepayment(payload: { loan_id: string; amount: number }): Promise<string> {
+  return enqueue('loan.repayment.record', payload);
+}
+
+export async function enqueueGroupLoanRepayment(payload: { group_loan_id: string; amount: number }): Promise<string> {
+  return enqueue('group_loan.repayment.record', payload);
+}

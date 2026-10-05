@@ -39,6 +39,7 @@ import { formatMoney } from '@/utils/money';
 
 const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; managersOnly?: boolean }[] = [
   { label: 'Track agents', hint: 'Live map & routes', icon: 'map', href: '/(agent)/tracking' as Href, managersOnly: true },
+  { label: 'Enter transaction', hint: 'Collection sheet', icon: 'receipt', href: '/(agent)/collection-sheet' as Href },
   { label: 'Register customer', hint: 'Works offline', icon: 'personAdd', href: '/(agent)/register-customer' },
   { label: 'Close my day', hint: 'Declare cash', icon: 'dayClose', href: '/(agent)/day-close' },
   { label: 'Loans', hint: 'Repayments', icon: 'loan', href: '/(agent)/loans' },
