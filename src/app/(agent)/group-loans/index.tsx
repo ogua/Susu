@@ -1,84 +1,75 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getGroupLoans } from '@/api/groupLoans';
 import { ThemedText } from '@/components/themed-text';
+import { Avatar, Badge, Button, EmptyState, ErrorState, ListRow, LoadingState } from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import type { GroupLoan } from '@/types/api';
-import { Palette } from '@/constants/theme';
-
-const STATUS_COLORS: Record<GroupLoan['status'], string> = {
-  draft: '#a16207',
-  active: Palette.success,
-  closed: Palette.neutral,
-  written_off: Palette.neutral,
-};
+import { displayFormatted } from '@/utils/money';
 
 export default function AgentGroupLoansScreen() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const groupLoans = useQuery({
     queryKey: ['agent', 'groupLoans'],
     queryFn: () => getGroupLoans(),
   });
 
   function renderItem({ item }: { item: GroupLoan }) {
+    const name = item.customer_name ?? item.loan_group?.name ?? item.loan_number;
+
     return (
-      <Pressable
-        style={styles.row}
+      <ListRow
+        left={<Avatar name={name} />}
+        title={name}
+        subtitle={`${item.loan_number}${item.loan_group?.name && item.customer_name ? ` · ${item.loan_group.name}` : ''}`}
         onPress={() => router.push({ pathname: '/(agent)/group-loans/[groupLoanId]', params: { groupLoanId: item.id } })}
-      >
-        <View style={{ flex: 1 }}>
-          <ThemedText type="smallBold">{item.loan_number}</ThemedText>
-          <ThemedText type="small">
-            {item.customer_name ?? item.loan_group?.name}
-            {item.customer_name && item.loan_group?.name ? ` · ${item.loan_group.name}` : ''}
-          </ThemedText>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <ThemedText>{item.outstanding_balance_formatted}</ThemedText>
-          <ThemedText type="small" style={{ color: STATUS_COLORS[item.status] }}>
-            {item.status.replaceAll('_', ' ')}
-          </ThemedText>
-        </View>
-      </Pressable>
+        accessibilityLabel={`${name}, ${item.loan_number}, outstanding ${displayFormatted(item.outstanding_balance_formatted)}, ${item.status}`}
+        right={
+          <View style={styles.right}>
+            <ThemedText type="caption" themeColor="textMuted">
+              Outstanding
+            </ThemedText>
+            <ThemedText type="money">{displayFormatted(item.outstanding_balance_formatted)}</ThemedText>
+            <Badge label={item.status} />
+          </View>
+        }
+      />
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Pressable style={styles.applyButton} onPress={() => router.push('/(agent)/group-loans/apply')}>
-        <ThemedText style={styles.applyButtonText}>+ Issue Member Loan</ThemedText>
-      </Pressable>
-
-      {groupLoans.isLoading ? (
-        <ActivityIndicator style={{ marginTop: 24 }} />
-      ) : groupLoans.isError ? (
-        <ThemedText style={styles.empty}>Could not load group loans. Pull down to retry.</ThemedText>
-      ) : (
-        <FlatList
-          data={groupLoans.data?.data ?? []}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          onRefresh={() => groupLoans.refetch()}
-          refreshing={groupLoans.isRefetching}
-          ListEmptyComponent={<ThemedText style={styles.empty}>No group loans yet.</ThemedText>}
-        />
-      )}
-    </View>
+    <FlatList
+      style={{ backgroundColor: theme.background }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.four }}
+      data={groupLoans.data?.data ?? []}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      onRefresh={() => void groupLoans.refetch()}
+      refreshing={groupLoans.isRefetching}
+      ListHeaderComponent={
+        <View style={styles.header}>
+          <Button title="Issue a member loan" icon="add" onPress={() => router.push('/(agent)/group-loans/apply')} />
+        </View>
+      }
+      ListEmptyComponent={
+        groupLoans.isLoading ? (
+          <LoadingState label="Loading group loans…" />
+        ) : groupLoans.isError ? (
+          <ErrorState title="Couldn't load group loans" onRetry={() => void groupLoans.refetch()} />
+        ) : (
+          <EmptyState icon="savings" title="No group loans yet" hint="Issue a loan to a member of one of your loan groups to get started." />
+        )
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  applyButton: {
-    backgroundColor: Palette.primary500,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  applyButtonText: { color: '#ffffff', fontWeight: '700' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  separator: { height: 1, backgroundColor: Palette.border },
-  empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
+  header: { padding: Spacing.three },
+  right: { alignItems: 'flex-end', gap: 3 },
 });

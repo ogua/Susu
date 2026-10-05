@@ -1,21 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
 
 import { apiErrorMessage } from '@/api/client';
 import { chargeMobileMoney } from '@/api/payments';
-import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Input, Screen } from '@/components/ui';
-import { Palette, Radii } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { MomoFields } from '@/components/momo-fields';
+import { Button, Card, Input, KeyValueRow, Notice, Screen } from '@/components/ui';
+import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
+import { useOnline } from '@/hooks/use-network';
+import { useAuthStore } from '@/stores/authStore';
 import type { MobileMoneyProvider } from '@/types/api';
+import { momoPhoneError, normalizeMomoPhone } from '@/utils/momo';
 import { formatMoney } from '@/utils/money';
-
-const PROVIDERS: { value: MobileMoneyProvider; label: string }[] = [
-  { value: 'mtn', label: 'MTN' },
-  { value: 'vod', label: 'Telecel' },
-  { value: 'atl', label: 'AirtelTigo' },
-];
 
 /**
  * Self-service share purchase: routed server-side to BuySharesAction
@@ -23,41 +18,57 @@ const PROVIDERS: { value: MobileMoneyProvider; label: string }[] = [
  * Shares — see App\Actions\Payments\VerifyPaymentIntentAction::complete().
  */
 export default function BuySharesScreen() {
-  const theme = useTheme();
-  const { accountId, parValue } = useLocalSearchParams<{
-    accountId: string;
-    parValue?: string;
-  }>();
+  const online = useOnline();
+  const userPhone = useAuthStore((state) => state.user?.phone);
+  const { accountId, parValue } = useLocalSearchParams<{ accountId: string; parValue?: string }>();
   const parValueMinorUnits = Number(parValue) || 0;
 
   const [shares, setShares] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(userPhone ?? '');
   const [provider, setProvider] = useState<MobileMoneyProvider>('mtn');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const { key, rotate } = useIdempotencyKey();
 
-  const sharesCount = Number(shares) || 0;
-  const totalAmount = sharesCount > 0 ? sharesCount * parValueMinorUnits : 0;
+  const sharesCount = /^\d+$/.test(shares) ? Number(shares) : 0;
+  const totalAmount = sharesCount * parValueMinorUnits;
+
+  function changed<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      rotate();
+    };
+  }
 
   async function handleSubmit() {
-    setError(null);
-    if (!Number.isInteger(sharesCount) || sharesCount <= 0) {
-      setError('Enter a valid number of shares.');
+    if (submittingRef.current) {
       return;
     }
-    if (!phone.trim()) {
-      setError('Enter your mobile money number.');
+    setError(null);
+    setPhoneError(null);
+    if (sharesCount <= 0) {
+      setError('Enter how many whole shares you want to buy.');
+      return;
+    }
+    const invalidPhone = momoPhoneError(phone);
+    if (invalidPhone) {
+      setPhoneError(invalidPhone);
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const intent = await chargeMobileMoney({
         savings_account_id: accountId,
         amount: totalAmount,
-        phone: phone.trim(),
+        phone: normalizeMomoPhone(phone),
         provider,
+        client_reference: key,
       });
+      rotate();
 
       router.push({
         pathname: '/(customer)/payment-verify',
@@ -66,80 +77,48 @@ export default function BuySharesScreen() {
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
   return (
-    <Screen>
-      <Card style={styles.form}>
-        <Input
-          label="Number of shares"
-          keyboardType="number-pad"
-          value={shares}
-          onChangeText={setShares}
-          placeholder="0"
-          autoFocus
-          error={error}
+    <Screen
+      footer={
+        <Button
+          title={sharesCount > 0 ? `Pay ${formatMoney(totalAmount)}` : 'Buy shares'}
+          icon="phone"
+          size="lg"
+          loading={submitting}
+          loadingTitle="Contacting network…"
+          disabled={!online}
+          onPress={handleSubmit}
         />
-
-        {sharesCount > 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {sharesCount} shares × {formatMoney(parValueMinorUnits)} = {formatMoney(totalAmount)}
-          </ThemedText>
-        ) : null}
-
-        <Input
-          label="Mobile money number"
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-          placeholder="024xxxxxxx"
-        />
-
-        <View style={styles.providerRow}>
-          {PROVIDERS.map((option) => {
-            const active = provider === option.value;
-
-            return (
-              <Pressable
-                key={option.value}
-                style={[
-                  styles.provider,
-                  { borderColor: active ? Palette.primary500 : theme.border },
-                  active && styles.providerActive,
-                ]}
-                onPress={() => setProvider(option.value)}
-              >
-                <ThemedText type="smallBold" style={active ? styles.providerTextActive : undefined}>
-                  {option.label}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Button title="Buy Shares" loading={submitting} onPress={handleSubmit} />
-
-        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-          You&apos;ll get a PIN prompt on your phone to approve the payment.
-        </ThemedText>
+      }
+    >
+      {!online ? <Notice tone="warning" message="Buying shares needs an internet connection." /> : null}
+      <Input
+        label="Number of shares"
+        icon="chart"
+        keyboardType="number-pad"
+        value={shares}
+        onChangeText={changed((text: string) => setShares(text.replace(/\D/g, '')))}
+        placeholder="0"
+        error={error}
+      />
+      <Card>
+        <KeyValueRow label="Price per share" value={formatMoney(parValueMinorUnits)} />
+        <KeyValueRow label="Shares" value={String(sharesCount)} />
+        <KeyValueRow label="Total to pay" value={formatMoney(totalAmount)} emphasis />
       </Card>
+      <MomoFields
+        phone={phone}
+        onPhoneChange={changed(setPhone)}
+        provider={provider}
+        onProviderChange={changed(setProvider)}
+        phoneError={phoneError}
+      />
+      <Notice tone="info" icon="lock" message="You'll get a prompt on your phone. Approve it with your mobile money PIN." />
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  form: { gap: 12 },
-  providerRow: { flexDirection: 'row', gap: 8 },
-  provider: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: Radii.sm,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  providerActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
-  providerTextActive: { color: '#ffffff' },
-  hint: { textAlign: 'center' },
-});

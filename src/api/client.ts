@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import { AxiosError, create, isAxiosError } from 'axios';
 
 import { useAuthStore } from '@/stores/authStore';
 
@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
  * request from the auth store so they can change at runtime (cloud vs
  * on-prem/LAN backends, login/logout) without rebuilding the client.
  */
-export const api = axios.create({
+export const api = create({
   timeout: 20_000,
   headers: { Accept: 'application/json' },
 });
@@ -35,21 +35,51 @@ api.interceptors.response.use(
   },
 );
 
-/** Extract a human-readable message from an API error. */
+/**
+ * Turn an API error into a message safe to show a customer or agent.
+ * 4xx validation/business messages are written for users by the backend and
+ * are passed through; 5xx bodies, transport errors and stack traces never are.
+ */
 export function apiErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
+  if (isAxiosError(error)) {
+    const status = error.response?.status;
     const data = error.response?.data as
       | { message?: string; errors?: Record<string, string[]> }
       | undefined;
+
+    if (!error.response) {
+      if (error.code === 'ECONNABORTED') {
+        return 'The server took too long to respond. Check whether it went through before trying again.';
+      }
+
+      return 'No connection to the server. Check your internet or the server address and try again.';
+    }
+
+    if (status === 401) return 'Your session has ended. Please sign in again.';
+    if (status === 403) return "You don't have permission to do this.";
+    if (status === 404) return "We couldn't find that record. It may have been removed.";
+    if (status === 429) return 'Too many attempts. Please wait a moment and try again.';
+    if (status !== undefined && status >= 500) {
+      return "The server couldn't complete this request. Please try again shortly.";
+    }
 
     if (data?.errors) {
       const first = Object.values(data.errors)[0];
       if (first?.length) return first[0];
     }
-    if (data?.message) return data.message;
-    if (error.code === 'ECONNABORTED') return 'The server took too long to respond.';
-    if (!error.response) return 'Could not reach the server. Check the server address and your connection.';
+    if (data?.message && data.message.length < 200) return data.message;
   }
 
   return 'Something went wrong. Please try again.';
+}
+
+/** First validation message for a given field, for inline field errors. */
+export function apiFieldError(error: unknown, field: string): string | null {
+  if (isAxiosError(error) && error.response?.status === 422) {
+    const data = error.response.data as { errors?: Record<string, string[]> } | undefined;
+
+    return data?.errors?.[field]?.[0] ?? null;
+  }
+
+  return null;
 }

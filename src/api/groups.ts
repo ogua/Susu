@@ -16,10 +16,11 @@ export async function getGroup(groupId: string): Promise<Group> {
 export async function recordGroupContribution(
   groupId: string,
   groupMemberId: string,
+  clientReference?: string,
 ): Promise<{ contribution_id: string; amount: number }> {
   const { data } = await api.post<{ contribution_id: string; amount: number }>(
     `/groups/${groupId}/contributions`,
-    { group_member_id: groupMemberId },
+    { group_member_id: groupMemberId, client_reference: clientReference },
   );
 
   return data;

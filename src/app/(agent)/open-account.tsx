@@ -1,27 +1,45 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { getSavingsProducts } from '@/api/products';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, EmptyState, Input, Screen } from '@/components/ui';
-import { Palette, Radii } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import {
+  AmountInput,
+  Avatar,
+  Button,
+  Card,
+  ChipSelect,
+  ErrorState,
+  Field,
+  Input,
+  KeyValueRow,
+  LoadingState,
+  Notice,
+  ResultView,
+  Screen,
+} from '@/components/ui';
+import { Spacing } from '@/constants/theme';
 import { drainOutbox } from '@/sync/engine';
 import { enqueueOpenAccount } from '@/sync/ops';
-import type { SavingsProduct } from '@/types/api';
+import type { SavingsProductType } from '@/types/api';
+import { humanize, isValidIsoDate, maskDateInput } from '@/utils/format';
+import { formatMoney, parseAmountToMinor } from '@/utils/money';
 
-function isValidFutureDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return false;
-  return parsed.getTime() > Date.now();
+const PRODUCT_TYPE_LABELS: Record<SavingsProductType, string> = {
+  daily_susu: 'Daily susu',
+  target: 'Target savings',
+  fixed_deposit: 'Fixed deposit',
+  shares: 'Shares',
+};
+
+function isFutureIsoDate(value: string): boolean {
+  return isValidIsoDate(value) && new Date(value).getTime() > Date.now();
 }
 
 /** Mirrors App\Http\Requests\Api\V1\StoreSavingsAccountRequest::payloadRules(). */
 export default function OpenAccountScreen() {
-  const theme = useTheme();
   const { customerId, customerName } = useLocalSearchParams<{ customerId: string; customerName?: string }>();
 
   const products = useQuery({
@@ -35,46 +53,47 @@ export default function OpenAccountScreen() {
   const [targetAmount, setTargetAmount] = useState('');
   const [maturesAt, setMaturesAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ product?: string; contribution?: string; target?: string; maturity?: string }>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const submittingRef = useRef(false);
 
   const activeProducts = (products.data ?? []).filter((product) => product.is_active);
   const selectedProduct = activeProducts.find((product) => product.id === selectedProductId) ?? null;
+  const needsMaturity = selectedProduct?.type === 'target' || selectedProduct?.type === 'fixed_deposit';
 
   async function handleSubmit() {
-    setError(null);
-    if (!selectedProduct) {
-      setError('Select a product first.');
+    if (submittingRef.current || saved) {
       return;
     }
+    setSaveError(null);
+    const next: typeof errors = {};
+    if (!selectedProduct) next.product = 'Choose a savings product.';
 
     let parsedContribution: number | undefined;
     if (contributionAmount.trim()) {
-      const parsed = Number(contributionAmount);
-      if (!parsed || parsed <= 0) {
-        setError('Enter a valid amount.');
-        return;
-      }
-      parsedContribution = Math.round(parsed * 100);
+      const parsed = parseAmountToMinor(contributionAmount);
+      if (!parsed) next.contribution = 'Enter an amount above zero, or leave it empty to use the product default.';
+      else parsedContribution = parsed;
     }
 
     let parsedTarget: number | undefined;
-    if (selectedProduct.type === 'target') {
-      const parsed = Number(targetAmount);
-      if (!parsed || parsed <= 0) {
-        setError('Target accounts require a target amount.');
-        return;
-      }
-      parsedTarget = Math.round(parsed * 100);
+    if (selectedProduct?.type === 'target') {
+      const parsed = parseAmountToMinor(targetAmount);
+      if (!parsed) next.target = 'Target accounts need a target amount.';
+      else parsedTarget = parsed;
     }
 
-    if (selectedProduct.type === 'target' || selectedProduct.type === 'fixed_deposit') {
-      if (!isValidFutureDate(maturesAt.trim())) {
-        setError('Enter a valid future maturity date (YYYY-MM-DD).');
-        return;
-      }
+    if (needsMaturity && !isFutureIsoDate(maturesAt.trim())) {
+      next.maturity = 'Enter a future date, e.g. 2027-01-31.';
     }
 
+    setErrors(next);
+    if (Object.keys(next).length > 0 || !selectedProduct) {
+      return;
+    }
+
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await enqueueOpenAccount({
@@ -82,125 +101,129 @@ export default function OpenAccountScreen() {
         savings_product_id: selectedProduct.id,
         contribution_amount: parsedContribution,
         target_amount: parsedTarget,
-        matures_at:
-          selectedProduct.type === 'target' || selectedProduct.type === 'fixed_deposit'
-            ? maturesAt.trim()
-            : undefined,
+        matures_at: needsMaturity ? maturesAt.trim() : undefined,
       });
 
-      setSavedMessage('Account saved. It will sync automatically.');
+      setSaved(true);
       void drainOutbox();
-
-      setTimeout(() => router.back(), 900);
     } catch {
-      setError('Could not save the account locally. Please try again.');
+      setSaveError("The account couldn't be saved on the phone. Nothing was recorded — please try again.");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
-  function productLabel(product: SavingsProduct): string {
-    return product.name;
-  }
-
-  function contributionLabel(): string {
-    return selectedProduct?.type === 'fixed_deposit' ? 'Principal amount (GHS)' : 'Daily contribution (GHS)';
+  if (saved && selectedProduct) {
+    return (
+      <Screen footer={<Button title="Done" size="lg" onPress={() => router.back()} />}>
+        <ResultView
+          tone="pending"
+          title="Account saved"
+          message="Saved on this phone. The account number is assigned when it syncs — it will then appear in your accounts list for collections."
+        >
+          <Card>
+            <KeyValueRow label="Customer" value={customerName || '—'} />
+            <KeyValueRow label="Product" value={selectedProduct.name} />
+            {contributionAmount ? (
+              <KeyValueRow label="Contribution" value={formatMoney(parseAmountToMinor(contributionAmount) ?? 0)} />
+            ) : null}
+          </Card>
+        </ResultView>
+      </Screen>
+    );
   }
 
   return (
-    <Screen>
-      <Card style={styles.form}>
-        <ThemedText type="subtitle">Customer</ThemedText>
-        <ThemedText>{customerName || customerId}</ThemedText>
+    <Screen
+      footer={<Button title="Open account" icon="wallet" size="lg" loading={submitting} loadingTitle="Saving…" onPress={handleSubmit} />}
+    >
+      <Card style={styles.customer}>
+        <Avatar name={customerName || '?'} size={44} />
+        <View style={styles.flex}>
+          <ThemedText type="caption" themeColor="textMuted">
+            Opening an account for
+          </ThemedText>
+          <ThemedText type="heading">{customerName || 'Customer'}</ThemedText>
+        </View>
       </Card>
 
-      <Card style={styles.form}>
-        <ThemedText type="subtitle">Product</ThemedText>
+      <Field label="Savings product">
         {products.isLoading ? (
-          <ActivityIndicator />
+          <LoadingState label="Loading products…" />
         ) : products.isError ? (
-          <EmptyState title="Could not load products" hint="Check your connection and try again." />
+          <ErrorState
+            title="Couldn't load products"
+            hint="The product list needs a connection the first time. Try again when online."
+            onRetry={() => void products.refetch()}
+          />
         ) : activeProducts.length === 0 ? (
-          <EmptyState title="No active products" />
+          <Notice tone="warning" message="No active savings products. Ask your branch to set one up." />
         ) : (
-          <View style={styles.segmentWrapRow}>
-            {activeProducts.map((product) => {
-              const active = selectedProductId === product.id;
-
-              return (
-                <Pressable
-                  key={product.id}
-                  style={[
-                    styles.segmentWrapChip,
-                    { borderColor: active ? Palette.primary500 : theme.border },
-                    active && styles.segmentActive,
-                  ]}
-                  onPress={() => setSelectedProductId(product.id)}
-                >
-                  <ThemedText type="smallBold" style={active ? styles.segmentTextActive : undefined}>
-                    {productLabel(product)}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <ChipSelect
+            accessibilityLabel="Savings product"
+            options={activeProducts.map((product) => ({
+              value: product.id,
+              label: product.name,
+              description: PRODUCT_TYPE_LABELS[product.type] ?? humanize(product.type),
+            }))}
+            value={selectedProductId}
+            onChange={setSelectedProductId}
+          />
         )}
-      </Card>
+        {errors.product ? (
+          <ThemedText type="small" themeColor="danger">
+            {errors.product}
+          </ThemedText>
+        ) : null}
+      </Field>
 
       {selectedProduct && selectedProduct.type !== 'shares' ? (
-        <Card style={styles.form}>
-          <Input
-            label={contributionLabel()}
-            keyboardType="decimal-pad"
+        <Card style={styles.section}>
+          <AmountInput
+            size="md"
+            label={selectedProduct.type === 'fixed_deposit' ? 'Principal amount' : 'Agreed contribution'}
             value={contributionAmount}
             onChangeText={setContributionAmount}
-            placeholder="5.00"
+            error={errors.contribution}
+            hint={
+              selectedProduct.contribution_amount > 0
+                ? `Leave empty to use the product default of ${formatMoney(selectedProduct.contribution_amount)}.`
+                : undefined
+            }
           />
 
           {selectedProduct.type === 'target' ? (
-            <Input
-              label="Target amount (GHS)"
-              keyboardType="decimal-pad"
-              value={targetAmount}
-              onChangeText={setTargetAmount}
-              placeholder="5000.00"
-            />
+            <AmountInput size="md" label="Target amount" value={targetAmount} onChangeText={setTargetAmount} error={errors.target} />
           ) : null}
 
-          {selectedProduct.type === 'target' || selectedProduct.type === 'fixed_deposit' ? (
+          {needsMaturity ? (
             <Input
-              label="Maturity date (YYYY-MM-DD)"
+              label="Maturity date"
+              icon="calendar"
               value={maturesAt}
-              onChangeText={setMaturesAt}
+              onChangeText={(text) => setMaturesAt(maskDateInput(text))}
               placeholder="YYYY-MM-DD"
-              keyboardType="numbers-and-punctuation"
+              keyboardType="number-pad"
+              maxLength={10}
+              error={errors.maturity}
+              hint={selectedProduct.type === 'fixed_deposit' ? 'Funds cannot be withdrawn before this date.' : undefined}
             />
           ) : null}
         </Card>
       ) : null}
 
-      {error ? <ThemedText style={{ color: Palette.danger }}>{error}</ThemedText> : null}
-      {savedMessage ? <ThemedText style={{ color: Palette.success }}>{savedMessage}</ThemedText> : null}
+      {selectedProduct?.type === 'shares' ? (
+        <Notice tone="info" message="Shares accounts have no contribution amount. The customer buys shares at the product's par value." />
+      ) : null}
 
-      <Button title="Open Account" loading={submitting} onPress={handleSubmit} />
-
-      <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-        Works offline — the account is saved on your device and synced automatically.
-      </ThemedText>
+      {saveError ? <Notice tone="danger" message={saveError} /> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  form: { gap: 10 },
-  hint: { textAlign: 'center' },
-  segmentWrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  segmentWrapChip: {
-    borderWidth: 1,
-    borderRadius: Radii.sm,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  segmentActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
-  segmentTextActive: { color: '#ffffff' },
+  flex: { flex: 1 },
+  customer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  section: { gap: Spacing.three },
 });

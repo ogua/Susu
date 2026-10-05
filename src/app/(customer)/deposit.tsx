@@ -1,52 +1,68 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
 
 import { apiErrorMessage } from '@/api/client';
 import { chargeMobileMoney } from '@/api/payments';
-import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Input, Screen } from '@/components/ui';
-import { Palette, Radii } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { MomoFields } from '@/components/momo-fields';
+import { AmountInput, Button, Notice, Screen } from '@/components/ui';
+import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
+import { useOnline } from '@/hooks/use-network';
+import { useAuthStore } from '@/stores/authStore';
 import type { MobileMoneyProvider } from '@/types/api';
-
-const PROVIDERS: { value: MobileMoneyProvider; label: string }[] = [
-  { value: 'mtn', label: 'MTN' },
-  { value: 'vod', label: 'Telecel' },
-  { value: 'atl', label: 'AirtelTigo' },
-];
+import { momoPhoneError, normalizeMomoPhone } from '@/utils/momo';
+import { formatMoney, parseAmountToMinor } from '@/utils/money';
 
 /** Self-service deposit: RecordCollectionAction allows a customer to pay into their own account. */
 export default function DepositScreen() {
-  const theme = useTheme();
-  const { accountId } = useLocalSearchParams<{ accountId: string }>();
+  const online = useOnline();
+  const userPhone = useAuthStore((state) => state.user?.phone);
+  const { accountId, accountNumber } = useLocalSearchParams<{ accountId: string; accountNumber?: string }>();
 
   const [amount, setAmount] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(userPhone ?? '');
   const [provider, setProvider] = useState<MobileMoneyProvider>('mtn');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const { key, rotate } = useIdempotencyKey();
+
+  const amountMinor = parseAmountToMinor(amount);
+
+  function changed<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      rotate();
+    };
+  }
 
   async function handleSubmit() {
-    setError(null);
-    const parsed = Number(amount);
-    if (!parsed || parsed <= 0) {
-      setError('Enter a valid amount.');
+    if (submittingRef.current) {
       return;
     }
-    if (!phone.trim()) {
-      setError('Enter your mobile money number.');
+    setError(null);
+    setPhoneError(null);
+    if (amountMinor === null || amountMinor <= 0) {
+      setError('Enter the amount you want to deposit.');
+      return;
+    }
+    const invalidPhone = momoPhoneError(phone);
+    if (invalidPhone) {
+      setPhoneError(invalidPhone);
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const intent = await chargeMobileMoney({
         savings_account_id: accountId,
-        amount: Math.round(parsed * 100),
-        phone: phone.trim(),
+        amount: amountMinor,
+        phone: normalizeMomoPhone(phone),
         provider,
+        client_reference: key,
       });
+      rotate();
 
       router.push({
         pathname: '/(customer)/payment-verify',
@@ -55,75 +71,36 @@ export default function DepositScreen() {
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
   return (
-    <Screen>
-      <Card style={styles.form}>
-        <Input
-          label="Amount (GHS)"
-          keyboardType="decimal-pad"
-          value={amount}
-          onChangeText={setAmount}
-          placeholder="0.00"
-          autoFocus
-          style={styles.amountInput}
-          error={error}
+    <Screen
+      footer={
+        <Button
+          title={amountMinor ? `Pay ${formatMoney(amountMinor)}` : 'Pay with mobile money'}
+          icon="phone"
+          size="lg"
+          loading={submitting}
+          loadingTitle="Contacting network…"
+          disabled={!online}
+          onPress={handleSubmit}
         />
-        <Input
-          label="Mobile money number"
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-          placeholder="024xxxxxxx"
-        />
-
-        <View style={styles.providerRow}>
-          {PROVIDERS.map((option) => {
-            const active = provider === option.value;
-
-            return (
-              <Pressable
-                key={option.value}
-                style={[
-                  styles.provider,
-                  { borderColor: active ? Palette.primary500 : theme.border },
-                  active && styles.providerActive,
-                ]}
-                onPress={() => setProvider(option.value)}
-              >
-                <ThemedText type="smallBold" style={active ? styles.providerTextActive : undefined}>
-                  {option.label}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Button title="Pay Now" loading={submitting} onPress={handleSubmit} />
-
-        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-          You&apos;ll get a PIN prompt on your phone to approve the payment.
-        </ThemedText>
-      </Card>
+      }
+    >
+      {accountNumber ? <Notice tone="info" message={`Depositing into account ${accountNumber}.`} icon="wallet" /> : null}
+      {!online ? <Notice tone="warning" message="Mobile money payments need an internet connection." /> : null}
+      <AmountInput label="Amount to deposit" value={amount} onChangeText={changed(setAmount)} error={error} />
+      <MomoFields
+        phone={phone}
+        onPhoneChange={changed(setPhone)}
+        provider={provider}
+        onProviderChange={changed(setProvider)}
+        phoneError={phoneError}
+      />
+      <Notice tone="info" icon="lock" message="You'll get a prompt on your phone. Approve it with your mobile money PIN — never share your PIN with anyone." />
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  form: { gap: 12 },
-  amountInput: { fontSize: 22, fontWeight: '600' },
-  providerRow: { flexDirection: 'row', gap: 8 },
-  provider: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: Radii.sm,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  providerActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
-  providerTextActive: { color: '#ffffff' },
-  hint: { textAlign: 'center' },
-});

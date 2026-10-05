@@ -26,6 +26,7 @@ export async function issueGroupMemberLoan(payload: {
   repayment_frequency: RepaymentFrequency;
   start_date: string;
   notes?: string;
+  client_reference?: string;
 }): Promise<GroupLoan> {
   const { data } = await api.post<{ data: GroupLoan }>('/group-loans', payload);
 
@@ -37,10 +38,12 @@ export async function recordGroupLoanDeposit(
   groupLoanId: string,
   amount: number,
   savingsAccountId: string,
+  clientReference?: string,
 ): Promise<GroupLoan> {
   const { data } = await api.post<{ group_loan: GroupLoan }>(`/group-loans/${groupLoanId}/deposit`, {
     amount,
     savings_account_id: savingsAccountId,
+    client_reference: clientReference,
   });
 
   return data.group_loan;
@@ -54,8 +57,15 @@ export async function activateGroupLoan(groupLoanId: string): Promise<GroupLoan>
 }
 
 /** Record a cash repayment against the member's loan (in minor units). */
-export async function recordGroupLoanRepayment(groupLoanId: string, amount: number): Promise<GroupLoan> {
-  const { data } = await api.post<{ group_loan: GroupLoan }>(`/group-loans/${groupLoanId}/repayments`, { amount });
+export async function recordGroupLoanRepayment(
+  groupLoanId: string,
+  amount: number,
+  clientReference?: string,
+): Promise<GroupLoan> {
+  const { data } = await api.post<{ group_loan: GroupLoan }>(`/group-loans/${groupLoanId}/repayments`, {
+    amount,
+    client_reference: clientReference,
+  });
 
   return data.group_loan;
 }

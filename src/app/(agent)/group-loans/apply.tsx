@@ -1,41 +1,63 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { StyleSheet } from 'react-native';
 
 import { apiErrorMessage } from '@/api/client';
 import { issueGroupMemberLoan } from '@/api/groupLoans';
 import { getLoanGroup, getLoanGroups } from '@/api/loanGroups';
 import { ThemedText } from '@/components/themed-text';
-import type { LoanGroup, LoanGroupMember, RepaymentFrequency } from '@/types/api';
-import { Palette } from '@/constants/theme';
+import {
+  AmountInput,
+  Button,
+  Card,
+  ChipSelect,
+  confirmAction,
+  ErrorState,
+  Field,
+  Input,
+  LoadingState,
+  Notice,
+  ResultView,
+  Screen,
+  SegmentedControl,
+  type Option,
+} from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
+import type { RepaymentFrequency } from '@/types/api';
+import { isValidIsoDate, maskDateInput } from '@/utils/format';
+import { formatMoney, parseAmountToMinor } from '@/utils/money';
 
-const FREQUENCIES: RepaymentFrequency[] = ['daily', 'weekly', 'monthly'];
+const FREQUENCIES: Option<RepaymentFrequency>[] = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+];
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
 /** Mirrors the backend PeriodicScheduleGenerator so the agent sees the spread before submitting. */
-function previewSchedule(principalMinor: number, periodicMinor: number, frequency: RepaymentFrequency): string {
+function previewSchedule(principalMinor: number, periodicMinor: number, frequency: RepaymentFrequency): string | null {
   if (principalMinor <= 0 || periodicMinor <= 0) {
-    return 'Enter a loan amount and a periodic amount to preview the schedule.';
+    return null;
   }
   const count =
     periodicMinor >= principalMinor
       ? 1
       : Math.floor(principalMinor / periodicMinor) + (principalMinor % periodicMinor > 0 ? 1 : 0);
   const last = principalMinor - periodicMinor * (count - 1);
-  const fmt = (m: number) => `GHS ${(m / 100).toFixed(2)}`;
 
-  return `${count} ${frequency} payment${count === 1 ? '' : 's'} of ${fmt(periodicMinor)}; final payment ${fmt(last)}.`;
+  return `${count} ${frequency} payment${count === 1 ? '' : 's'} of ${formatMoney(periodicMinor)}${count > 1 ? `; final payment ${formatMoney(last)}` : ''}.`;
 }
 
 export default function IssueGroupMemberLoanScreen() {
   const loanGroups = useQuery({ queryKey: ['loan-groups'], queryFn: () => getLoanGroups() });
 
-  const [selectedGroup, setSelectedGroup] = useState<LoanGroup | null>(null);
-  const [selectedMember, setSelectedMember] = useState<LoanGroupMember | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [memberId, setMemberId] = useState<string | null>(null);
   const [principal, setPrincipal] = useState('');
   const [deposit, setDeposit] = useState('');
   const [periodic, setPeriodic] = useState('');
@@ -44,176 +66,173 @@ export default function IssueGroupMemberLoanScreen() {
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [issued, setIssued] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const { key, rotate } = useIdempotencyKey();
 
   const groupDetail = useQuery({
-    queryKey: ['loan-group', selectedGroup?.id],
-    queryFn: () => getLoanGroup(selectedGroup!.id),
-    enabled: !!selectedGroup,
+    queryKey: ['loan-group', groupId],
+    queryFn: () => getLoanGroup(groupId as string),
+    enabled: !!groupId,
   });
 
   const members = (groupDetail.data?.members ?? []).filter((m) => m.status === 'active' && !m.active_loan);
+  const member = members.find((m) => m.id === memberId) ?? null;
+  const principalMinor = parseAmountToMinor(principal) ?? 0;
+  const periodicMinor = parseAmountToMinor(periodic) ?? 0;
+  const schedule = previewSchedule(principalMinor, periodicMinor, frequency);
 
-  const schedule = useMemo(
-    () => previewSchedule(Math.round(Number(principal) * 100), Math.round(Number(periodic) * 100), frequency),
-    [principal, periodic, frequency],
-  );
+  function changed<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      rotate();
+    };
+  }
 
-  async function handleSubmit() {
-    setError(null);
-    if (!selectedGroup) return setError('Select a loan group.');
-    if (!selectedMember) return setError('Select a member.');
-    const principalMinor = Math.round(Number(principal) * 100);
-    const periodicMinor = Math.round(Number(periodic) * 100);
-    const depositMinor = Math.round(Number(deposit || '0') * 100);
-    if (!principalMinor || principalMinor <= 0) return setError('Enter a valid loan amount.');
-    if (!periodicMinor || periodicMinor <= 0) return setError('Enter a valid periodic amount.');
-
+  async function submit(depositMinor: number) {
+    if (submittingRef.current || issued || !groupId || !member) return;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await issueGroupMemberLoan({
-        loan_group_id: selectedGroup.id,
-        customer_id: selectedMember.customer_id,
+        loan_group_id: groupId,
+        customer_id: member.customer_id,
         principal_amount: principalMinor,
         security_deposit_amount: depositMinor,
         periodic_amount: periodicMinor,
         repayment_frequency: frequency,
         start_date: startDate,
         notes: notes.trim() || undefined,
+        client_reference: key,
       });
-
-      router.replace('/(agent)/group-loans');
+      setIssued(member.customer_name);
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <ThemedText type="small">Loan group</ThemedText>
-      {loanGroups.isLoading ? (
-        <ActivityIndicator />
-      ) : (
-        <View style={styles.chipRow}>
-          {(loanGroups.data?.data ?? []).map((group) => (
-            <Pressable
-              key={group.id}
-              style={[styles.chip, selectedGroup?.id === group.id && styles.chipActive]}
-              onPress={() => {
-                setSelectedGroup(group);
-                setSelectedMember(null);
-              }}
-            >
-              <ThemedText style={selectedGroup?.id === group.id ? styles.chipTextActive : undefined}>
-                {group.name}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-      )}
+  function handleSubmit() {
+    setError(null);
+    if (!groupId) return setError('Choose a loan group.');
+    if (!member) return setError('Choose the member receiving the loan.');
+    if (!principalMinor) return setError('Enter the loan amount.');
+    if (!periodicMinor) return setError('Enter the amount to repay each period.');
+    if (!isValidIsoDate(startDate)) return setError('Enter a real first payment date, e.g. 2026-11-01.');
+    const depositMinor = deposit.trim() ? parseAmountToMinor(deposit) : 0;
+    if (depositMinor === null) return setError('Enter a valid security deposit, or leave it empty.');
 
-      {selectedGroup ? (
-        <>
-          <ThemedText type="small">Member</ThemedText>
+    confirmAction({
+      title: 'Issue this loan?',
+      message: `${formatMoney(principalMinor)} to ${member.customer_name}. ${schedule ?? ''} The loan stays in draft until the deposit is recorded and it is activated.`,
+      confirmLabel: `Issue ${formatMoney(principalMinor)}`,
+      onConfirm: () => void submit(depositMinor),
+    });
+  }
+
+  if (issued) {
+    return (
+      <Screen footer={<Button title="View group loans" size="lg" onPress={() => router.replace('/(agent)/group-loans')} />}>
+        <ResultView
+          tone="success"
+          title="Loan created as draft"
+          amount={formatMoney(principalMinor)}
+          message={`Next: record ${issued}'s security deposit, then activate the loan to disburse it.`}
+        />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen
+      footer={
+        <Button
+          title={principalMinor ? `Issue ${formatMoney(principalMinor)}` : 'Issue loan'}
+          icon="send"
+          size="lg"
+          loading={submitting}
+          loadingTitle="Issuing…"
+          onPress={handleSubmit}
+        />
+      }
+    >
+      <Field label="Loan group">
+        {loanGroups.isLoading ? (
+          <LoadingState label="Loading loan groups…" />
+        ) : loanGroups.isError ? (
+          <ErrorState title="Couldn't load loan groups" onRetry={() => void loanGroups.refetch()} />
+        ) : (
+          <ChipSelect
+            accessibilityLabel="Loan group"
+            options={(loanGroups.data?.data ?? []).map((group) => ({ value: group.id, label: group.name }))}
+            value={groupId}
+            onChange={(value) => {
+              setGroupId(value);
+              setMemberId(null);
+              rotate();
+            }}
+          />
+        )}
+      </Field>
+
+      {groupId ? (
+        <Field label="Member">
           {groupDetail.isLoading ? (
-            <ActivityIndicator />
+            <LoadingState label="Loading members…" />
           ) : members.length === 0 ? (
-            <ThemedText type="small" style={{ opacity: 0.6 }}>
-              No members without an active loan. Add members from the web or desktop app.
-            </ThemedText>
+            <Notice tone="info" message="Every active member already has a loan. Add members from the web or desktop app." />
           ) : (
-            <View style={styles.chipRow}>
-              {members.map((member) => (
-                <Pressable
-                  key={member.id}
-                  style={[styles.chip, selectedMember?.id === member.id && styles.chipActive]}
-                  onPress={() => setSelectedMember(member)}
-                >
-                  <ThemedText style={selectedMember?.id === member.id ? styles.chipTextActive : undefined}>
-                    {member.customer_name}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
+            <ChipSelect
+              accessibilityLabel="Member"
+              options={members.map((m) => ({ value: m.id, label: m.customer_name }))}
+              value={memberId}
+              onChange={changed(setMemberId)}
+            />
           )}
-        </>
+        </Field>
       ) : null}
 
-      <ThemedText type="small">Loan amount (GHS)</ThemedText>
-      <TextInput style={styles.input} keyboardType="decimal-pad" value={principal} onChangeText={setPrincipal} placeholder="0.00" />
+      <Card style={styles.section}>
+        <AmountInput size="md" label="Loan amount" value={principal} onChangeText={changed(setPrincipal)} />
+        <AmountInput size="md" label="Security deposit" value={deposit} onChangeText={changed(setDeposit)} hint="Leave empty if no deposit is required." />
+        <AmountInput size="md" label="Repayment each period" value={periodic} onChangeText={changed(setPeriodic)} />
+        <Field label="Repayment frequency">
+          <SegmentedControl accessibilityLabel="Repayment frequency" options={FREQUENCIES} value={frequency} onChange={changed(setFrequency)} />
+        </Field>
+        <Input
+          label="First payment date"
+          icon="calendar"
+          value={startDate}
+          onChangeText={(text) => {
+            setStartDate(maskDateInput(text));
+            rotate();
+          }}
+          placeholder="YYYY-MM-DD"
+          keyboardType="number-pad"
+          maxLength={10}
+        />
+      </Card>
 
-      <ThemedText type="small">Security deposit (GHS)</ThemedText>
-      <TextInput style={styles.input} keyboardType="decimal-pad" value={deposit} onChangeText={setDeposit} placeholder="0.00" />
+      <Notice
+        tone="info"
+        icon="calendar"
+        title="Payment schedule"
+        message={schedule ?? 'Enter a loan amount and a repayment amount to preview the schedule.'}
+      />
 
-      <ThemedText type="small">Amount to be paid each period (GHS)</ThemedText>
-      <TextInput style={styles.input} keyboardType="decimal-pad" value={periodic} onChangeText={setPeriodic} placeholder="0.00" />
+      <Input label="Notes" optional value={notes} onChangeText={setNotes} multiline />
 
-      <ThemedText type="small">Frequency</ThemedText>
-      <View style={styles.chipRow}>
-        {FREQUENCIES.map((f) => (
-          <Pressable key={f} style={[styles.chip, frequency === f && styles.chipActive]} onPress={() => setFrequency(f)}>
-            <ThemedText style={frequency === f ? styles.chipTextActive : undefined}>{f}</ThemedText>
-          </Pressable>
-        ))}
-      </View>
-
-      <ThemedText type="small">First payment date (YYYY-MM-DD)</ThemedText>
-      <TextInput style={styles.input} value={startDate} onChangeText={setStartDate} placeholder="2026-01-01" />
-
-      <View style={styles.previewCard}>
-        <ThemedText type="smallBold">Payment schedule</ThemedText>
-        <ThemedText type="small">{schedule}</ThemedText>
-      </View>
-
-      <ThemedText type="small">Notes (optional)</ThemedText>
-      <TextInput style={styles.input} value={notes} onChangeText={setNotes} multiline />
-
-      {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-
-      <Pressable style={[styles.button, submitting && styles.buttonDisabled]} onPress={handleSubmit} disabled={submitting}>
-        {submitting ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Issue Loan</ThemedText>}
-      </Pressable>
-    </ScrollView>
+      {error ? <Notice tone="danger" message={error} /> : null}
+      <ThemedText type="caption" themeColor="textMuted" style={styles.center}>
+        The loan is created as a draft. No money moves until the deposit is recorded and the loan is activated.
+      </ThemedText>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 10 },
-  input: {
-    borderWidth: 1,
-    borderColor: Palette.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderColor: Palette.border,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  chipActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
-  chipTextActive: { color: '#ffffff', fontWeight: '700' },
-  previewCard: {
-    borderWidth: 1,
-    borderColor: Palette.border,
-    borderRadius: 10,
-    padding: 12,
-    gap: 4,
-    backgroundColor: '#f8fafc',
-  },
-  button: {
-    backgroundColor: Palette.primary500,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  error: { color: Palette.danger },
+  section: { gap: Spacing.three },
+  center: { textAlign: 'center' },
 });

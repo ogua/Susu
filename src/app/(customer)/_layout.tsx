@@ -1,10 +1,11 @@
 import { Redirect, Stack } from 'expo-router';
 
-import { Palette } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/stores/authStore';
 
 /** Customer experience (online-first: balances, history, requests). */
 export default function CustomerLayout() {
+  const theme = useTheme();
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
 
@@ -19,12 +20,15 @@ export default function CustomerLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: Palette.primary500 },
-        headerTintColor: '#ffffff',
-        headerTitleStyle: { fontWeight: '600' },
+        headerStyle: { backgroundColor: theme.background },
+        headerTintColor: theme.text,
+        headerTitleStyle: { fontWeight: '600', color: theme.text },
+        headerShadowVisible: false,
+        headerBackButtonDisplayMode: 'minimal',
+        contentStyle: { backgroundColor: theme.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'OguaFinance' }} />
+      <Stack.Screen name="index" options={{ title: 'Home', headerShown: false }} />
       <Stack.Screen name="account/[accountId]" options={{ title: 'Account' }} />
       <Stack.Screen name="withdraw" options={{ title: 'Request Withdrawal' }} />
       <Stack.Screen name="deposit" options={{ title: 'Deposit' }} />

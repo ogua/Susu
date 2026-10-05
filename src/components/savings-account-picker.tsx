@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { getCustomer } from '@/api/customers';
-import { ThemedText } from '@/components/themed-text';
-import { Palette } from '@/constants/theme';
+import { ChipSelect, LoadingState, Notice } from '@/components/ui';
+import { displayFormatted } from '@/utils/money';
 
 /**
  * Lets the agent pick which of a customer's savings accounts a deposit or
@@ -14,10 +13,12 @@ export function SavingsAccountPicker({
   customerId,
   value,
   onChange,
+  label = 'Savings account',
 }: {
   customerId: string;
   value: string | null;
   onChange: (accountId: string) => void;
+  label?: string;
 }) {
   const customer = useQuery({
     queryKey: ['customer', customerId],
@@ -26,46 +27,25 @@ export function SavingsAccountPicker({
   });
 
   if (customer.isLoading) {
-    return <ActivityIndicator />;
+    return <LoadingState label="Loading savings accounts…" />;
   }
 
   const accounts = customer.data?.savings_accounts ?? [];
 
   if (accounts.length === 0) {
-    return (
-      <ThemedText type="small" style={styles.empty}>
-        This customer has no savings accounts — open one first.
-      </ThemedText>
-    );
+    return <Notice tone="warning" message="This customer has no savings accounts. Open one first." />;
   }
 
   return (
-    <View style={styles.chipRow}>
-      {accounts.map((account) => (
-        <Pressable
-          key={account.id}
-          style={[styles.chip, value === account.id && styles.chipActive]}
-          onPress={() => onChange(account.id)}
-        >
-          <ThemedText style={value === account.id ? styles.chipTextActive : undefined}>
-            {account.account_number} · {account.balance_formatted}
-          </ThemedText>
-        </Pressable>
-      ))}
-    </View>
+    <ChipSelect
+      accessibilityLabel={label}
+      options={accounts.map((account) => ({
+        value: account.id,
+        label: account.account_number,
+        description: `Balance ${displayFormatted(account.balance_formatted)}`,
+      }))}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderColor: Palette.border,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  chipActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
-  chipTextActive: { color: '#ffffff', fontWeight: '700' },
-  empty: { opacity: 0.6 },
-});

@@ -35,14 +35,18 @@ export async function applyForLoan(payload: {
   guarantor_name?: string;
   guarantor_phone?: string;
   notes?: string;
+  client_reference?: string;
 }): Promise<Loan> {
   const { data } = await api.post<{ data: Loan }>('/loans', payload);
 
   return data.data;
 }
 
-export async function recordLoanRepayment(loanId: string, amount: number): Promise<Loan> {
-  const { data } = await api.post<{ loan: Loan }>(`/loans/${loanId}/repayments`, { amount });
+export async function recordLoanRepayment(loanId: string, amount: number, clientReference?: string): Promise<Loan> {
+  const { data } = await api.post<{ loan: Loan }>(`/loans/${loanId}/repayments`, {
+    amount,
+    client_reference: clientReference,
+  });
 
   return data.loan;
 }

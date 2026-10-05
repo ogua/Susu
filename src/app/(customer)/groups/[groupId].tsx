@@ -1,12 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLayoutEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { getGroup } from '@/api/groups';
 import { ThemedText } from '@/components/themed-text';
-import { Palette } from '@/constants/theme';
+import {
+  Avatar,
+  Badge,
+  Card,
+  ErrorState,
+  KeyValueRow,
+  ListRow,
+  LoadingState,
+  ProgressBar,
+  Screen,
+  SectionHeader,
+} from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { formatDate } from '@/utils/format';
+import { displayFormatted } from '@/utils/money';
 
 export default function CustomerGroupDetailScreen() {
+  const navigation = useNavigation();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
 
   const group = useQuery({
@@ -15,57 +31,74 @@ export default function CustomerGroupDetailScreen() {
     enabled: !!groupId,
   });
 
+  useLayoutEffect(() => {
+    if (group.data?.name) {
+      navigation.setOptions({ title: group.data.name });
+    }
+  }, [navigation, group.data?.name]);
+
   if (group.isLoading) {
-    return <ActivityIndicator style={{ marginTop: 24 }} />;
+    return <LoadingState label="Loading group…" />;
   }
   if (group.isError || !group.data) {
-    return <ThemedText style={styles.empty}>Could not load this group.</ThemedText>;
+    return <ErrorState title="Couldn't load this group" onRetry={() => void group.refetch()} />;
   }
 
+  const data = group.data;
+  const members = data.members ?? [];
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.card}>
-        <ThemedText type="subtitle">{group.data.name}</ThemedText>
-        <ThemedText type="small">{group.data.contribution_amount_formatted} per {group.data.frequency.replace('ly', '')}</ThemedText>
-        <ThemedText type="small" style={styles.status}>{group.data.status}</ThemedText>
-      </View>
-
-      <ThemedText type="subtitle" style={styles.sectionTitle}>Rotation Order</ThemedText>
-      {(group.data.members ?? []).map((member) => (
-        <View key={member.id} style={styles.row}>
-          <ThemedText>#{member.rotation_position} {member.customer_name}</ThemedText>
+    <Screen>
+      <Card>
+        <View style={styles.rowBetween}>
+          <ThemedText type="heading">{data.name}</ThemedText>
+          <Badge label={data.status} />
         </View>
-      ))}
+        <KeyValueRow label="Contribution" value={`${displayFormatted(data.contribution_amount_formatted)} per ${data.frequency === 'weekly' ? 'week' : 'month'}`} />
+        <KeyValueRow label="Members" value={String(members.length)} />
+      </Card>
 
-      <ThemedText type="subtitle" style={styles.sectionTitle}>Rounds</ThemedText>
-      {(group.data.rounds ?? []).map((round) => (
-        <View key={round.id} style={styles.card}>
-          <ThemedText type="smallBold">Round {round.round_number} — {round.payout_member?.customer_name}</ThemedText>
-          <ThemedText type="small">Due {new Date(round.due_date).toLocaleDateString()}</ThemedText>
-          <ThemedText>{round.total_collected_formatted} / {round.total_expected_formatted} collected</ThemedText>
-          <ThemedText type="small" style={styles.status}>{round.status}</ThemedText>
-        </View>
-      ))}
-    </ScrollView>
+      <SectionHeader title="Rounds" />
+      {(data.rounds ?? []).map((round) => {
+        const progress = round.total_expected > 0 ? round.total_collected / round.total_expected : 0;
+
+        return (
+          <Card key={round.id} style={styles.round}>
+            <View style={styles.rowBetween}>
+              <ThemedText type="label">
+                Round {round.round_number} · {round.payout_member?.customer_name ?? '—'}
+              </ThemedText>
+              <Badge label={round.status} />
+            </View>
+            <ThemedText type="caption" themeColor="textMuted">
+              Due {formatDate(round.due_date)}
+              {round.paid_out_at ? ` · paid out ${formatDate(round.paid_out_at)}` : ''}
+            </ThemedText>
+            <ThemedText type="small">
+              {displayFormatted(round.total_collected_formatted)} of {displayFormatted(round.total_expected_formatted)} collected
+            </ThemedText>
+            <ProgressBar progress={progress} accessibilityLabel={`Round ${round.round_number}, ${Math.round(progress * 100)}% collected`} />
+          </Card>
+        );
+      })}
+
+      <SectionHeader title="Rotation order" />
+      <Card padded={false}>
+        {members.map((member, index) => (
+          <ListRow
+            key={member.id}
+            left={<Avatar name={member.customer_name} size={36} />}
+            title={member.customer_name}
+            subtitle={`Position ${member.rotation_position}`}
+            divider={index < members.length - 1}
+          />
+        ))}
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 10 },
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    padding: 16,
-    gap: 4,
-    backgroundColor: '#ffffff',
-  },
-  status: { textTransform: 'capitalize', opacity: 0.7 },
-  sectionTitle: { marginTop: 8 },
-  row: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Palette.border,
-  },
-  empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
+  round: { gap: 6 },
 });

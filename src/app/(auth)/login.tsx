@@ -1,139 +1,239 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+  type TextInput,
+} from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { login } from "@/api/auth";
-import { apiErrorMessage } from "@/api/client";
-import { ThemedText } from "@/components/themed-text";
-import { Button, Card, Input } from "@/components/ui";
-import { Palette, Radii } from "@/constants/theme";
-import { useTheme } from "@/hooks/use-theme";
-import { useAuthStore } from "@/stores/authStore";
+import { login } from '@/api/auth';
+import { apiErrorMessage, apiFieldError } from '@/api/client';
+import { ThemedText } from '@/components/themed-text';
+import { Button, Icon, Input, Notice } from '@/components/ui';
+import { Radii, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const baseUrl = useAuthStore((state) => state.baseUrl);
   const setBaseUrl = useAuthStore((state) => state.setBaseUrl);
   const setSession = useAuthStore((state) => state.setSession);
 
-  const [loginId, setLoginId] = useState("");
-  const [password, setPassword] = useState("");
+  const passwordRef = useRef<TextInput>(null);
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState(baseUrl);
   const [showServer, setShowServer] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   async function handleLogin() {
+    if (busy || !loginId.trim() || !password) {
+      return;
+    }
     setBusy(true);
     setError(null);
+    setLoginError(null);
     try {
-      if (serverUrl !== baseUrl) {
-        await setBaseUrl(serverUrl);
+      if (serverUrl.trim() !== baseUrl) {
+        await setBaseUrl(serverUrl.trim());
       }
       const response = await login(loginId.trim(), password);
       await setSession(response.token, response.user);
-      router.replace(
-        response.user.role === "customer" ? "/(customer)" : "/(agent)",
-      );
+      router.replace(response.user.role === 'customer' ? '/(customer)' : '/(agent)');
     } catch (err) {
-      setError(apiErrorMessage(err));
+      const fieldError = apiFieldError(err, 'login');
+      if (fieldError) {
+        setLoginError(fieldError);
+      } else {
+        setError(apiErrorMessage(err));
+      }
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.container}
-      >
-        <View style={styles.header}>
-          <View style={styles.logoMark}>
-            <ThemedText type="title" style={styles.logoText}>
-              O
-            </ThemedText>
-          </View>
-          <ThemedText type="title">OguaFinance</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Susu savings, loans &amp; groups
-          </ThemedText>
-        </View>
+    <View style={[styles.flex, { backgroundColor: theme.background }]}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + Spacing.four }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <LinearGradient
+            colors={[theme.heroStart, theme.heroEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.brand, { paddingTop: insets.top + Spacing.five }]}
+          >
+            <Animated.View entering={FadeInDown.duration(300)} style={styles.brandInner}>
+              <View style={styles.logoMark}>
+                <Icon name="bank" size={30} color="#FFFFFF" />
+              </View>
+              <ThemedText type="title" style={styles.brandTitle}>
+                OguaFinance
+              </ThemedText>
+              <ThemedText type="small" style={styles.brandSubtitle}>
+                Susu savings, loans and groups — recorded securely.
+              </ThemedText>
+            </Animated.View>
+          </LinearGradient>
 
-        <Card style={styles.form}>
-          <Input
-            label="Email or phone"
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            value={loginId}
-            onChangeText={setLoginId}
-          />
-          <Input
-            label="Password"
-            placeholder="••••••••"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            error={error}
-          />
+          <Animated.View
+            entering={FadeInDown.duration(320).delay(80)}
+            style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          >
+            <View style={styles.formHeader}>
+              <ThemedText type="heading" accessibilityRole="header">
+                Sign in
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Use the email or phone number your branch registered.
+              </ThemedText>
+            </View>
 
-          {showServer ? (
+            {error ? <Notice tone="danger" message={error} /> : null}
+
             <Input
-              label="Server address"
-              placeholder="https://susu.example.com"
+              label="Email or phone number"
+              icon="person"
+              placeholder="you@example.com or 024…"
               autoCapitalize="none"
               autoCorrect={false}
-              keyboardType="url"
-              value={serverUrl}
-              onChangeText={setServerUrl}
+              autoComplete="username"
+              textContentType="username"
+              keyboardType="email-address"
+              returnKeyType="next"
+              value={loginId}
+              onChangeText={(text) => {
+                setLoginId(text);
+                setLoginError(null);
+              }}
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              submitBehavior="submit"
+              error={loginError}
             />
-          ) : null}
+            <Input
+              ref={passwordRef}
+              label="Password"
+              icon="lock"
+              placeholder="Your password"
+              password
+              autoComplete="current-password"
+              textContentType="password"
+              returnKeyType="go"
+              value={password}
+              onChangeText={setPassword}
+              onSubmitEditing={handleLogin}
+            />
 
-          <Button
-            title="Sign in"
-            loading={busy}
-            disabled={!loginId || !password}
-            onPress={handleLogin}
-          />
+            {showServer ? (
+              <Input
+                label="Server address"
+                icon="server"
+                placeholder="https://susu.example.com"
+                hint="Only change this if your branch gave you a different address."
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                value={serverUrl}
+                onChangeText={setServerUrl}
+              />
+            ) : null}
 
-          <Pressable onPress={() => setShowServer((visible) => !visible)}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.serverToggle}>
-              {showServer ? "Hide server settings" : "Change server"}
+            <Button
+              title="Sign in"
+              loadingTitle="Signing in…"
+              size="lg"
+              loading={busy}
+              disabled={!loginId.trim() || !password}
+              onPress={handleLogin}
+            />
+
+            <View style={styles.trustRow}>
+              <Icon name="shield" size={16} color={theme.success} />
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.flex}>
+                Your session is encrypted and stored only on this device.
+              </ThemedText>
+            </View>
+          </Animated.View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showServer }}
+            onPress={() => setShowServer((visible) => !visible)}
+            style={styles.serverToggle}
+            hitSlop={8}
+          >
+            <Icon name="server" size={14} color={theme.textMuted} />
+            <ThemedText type="caption" themeColor="textMuted">
+              {showServer ? 'Hide server settings' : `Server: ${baseUrl.replace(/^https?:\/\//, '')}`}
             </ThemedText>
           </Pressable>
-        </Card>
+        </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  container: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
-  header: { alignItems: "center", marginBottom: 24, gap: 4 },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1 },
+  brand: {
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.six,
+    borderBottomLeftRadius: Radii.xl,
+    borderBottomRightRadius: Radii.xl,
+  },
+  brandInner: { alignItems: 'center', gap: Spacing.two },
   logoMark: {
     width: 64,
     height: 64,
     borderRadius: Radii.lg,
-    backgroundColor: Palette.primary500,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.one,
   },
-  logoText: { color: "#ffffff" },
-  form: { gap: 14 },
+  brandTitle: { color: '#FFFFFF' },
+  brandSubtitle: { color: 'rgba(255,255,255,0.82)', textAlign: 'center' },
+  formCard: {
+    marginTop: -Spacing.five,
+    marginHorizontal: Spacing.three,
+    borderRadius: Radii.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.four,
+    gap: Spacing.three,
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  formHeader: { gap: 2 },
+  trustRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   serverToggle: {
-    textAlign: "center",
-    marginTop: 4,
-    textDecorationLine: "underline",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.three,
+    marginTop: Spacing.two,
   },
 });

@@ -1,82 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
-import { getLoans } from '@/api/loans';
-import { ThemedText } from '@/components/themed-text';
-import type { Loan } from '@/types/api';
-import { Palette } from '@/constants/theme';
-
-const STATUS_COLORS: Record<Loan['status'], string> = {
-  applied: '#a16207',
-  approved: Palette.primary500,
-  rejected: Palette.danger,
-  disbursed: Palette.success,
-  closed: Palette.neutral,
-  written_off: Palette.neutral,
-};
+import { LoanList } from '@/components/loan-list';
+import { Button } from '@/components/ui';
 
 export default function CustomerLoansScreen() {
-  const loans = useQuery({
-    queryKey: ['customer', 'loans'],
-    queryFn: () => getLoans(),
-  });
-
-  function renderItem({ item }: { item: Loan }) {
-    return (
-      <Pressable
-        style={styles.row}
-        onPress={() => router.push({ pathname: '/(customer)/loans/[loanId]', params: { loanId: item.id } })}
-      >
-        <View style={{ flex: 1 }}>
-          <ThemedText type="smallBold">{item.loan_number}</ThemedText>
-          <ThemedText type="small">{item.loan_product?.name}</ThemedText>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <ThemedText>{item.outstanding_balance_formatted}</ThemedText>
-          <ThemedText type="small" style={{ color: STATUS_COLORS[item.status] }}>
-            {item.status.replaceAll('_', ' ')}
-          </ThemedText>
-        </View>
-      </Pressable>
-    );
-  }
-
   return (
-    <View style={styles.container}>
-      <Pressable style={styles.button} onPress={() => router.push('/(customer)/loans/apply')}>
-        <ThemedText style={styles.buttonText}>Apply for a Loan</ThemedText>
-      </Pressable>
-
-      {loans.isLoading ? (
-        <ActivityIndicator style={{ marginTop: 24 }} />
-      ) : loans.isError ? (
-        <ThemedText style={styles.empty}>Could not load loans. Pull down to retry.</ThemedText>
-      ) : (
-        <FlatList
-          data={loans.data?.data ?? []}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          onRefresh={() => loans.refetch()}
-          refreshing={loans.isRefetching}
-          ListEmptyComponent={<ThemedText style={styles.empty}>No loans yet.</ThemedText>}
-        />
-      )}
-    </View>
+    <LoanList
+      queryKey={['customer', 'loans']}
+      onOpen={(loan) => router.push({ pathname: '/(customer)/loans/[loanId]', params: { loanId: loan.id } })}
+      header={<Button title="Apply for a loan" icon="add" onPress={() => router.push('/(customer)/loans/apply')} />}
+      emptyHint="Loans you apply for, and their repayment progress, will appear here."
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  separator: { height: 1, backgroundColor: Palette.border },
-  empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
-  button: {
-    backgroundColor: Palette.primary500,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  buttonText: { color: '#ffffff', fontWeight: '600' },
-});

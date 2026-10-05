@@ -1,139 +1,163 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { openBrowserAsync } from 'expo-web-browser';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 
-import { getAgentAccounts, getAgentStatementUrl } from '@/api/accounts';
-import { apiErrorMessage } from '@/api/client';
+import { getAgentAccounts } from '@/api/accounts';
 import { ThemedText } from '@/components/themed-text';
-import { EmptyState, Input, ListRow, Screen } from '@/components/ui';
-import { Palette, Radii } from '@/constants/theme';
+import { Avatar, Badge, EmptyState, ErrorState, Input, ListRow, LoadingState, OfflineBanner } from '@/components/ui';
+import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { SavingsAccount } from '@/types/api';
+import { customerDisplayName } from '@/utils/customer';
+import { displayFormatted } from '@/utils/money';
 
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** Collector's customer finder: search by name, account number or phone, tap to collect. */
 export default function AgentAccountsScreen() {
   const theme = useTheme();
   const [search, setSearch] = useState('');
-  const [statementAccountId, setStatementAccountId] = useState<string | null>(null);
+  const [debounced, setDebounced] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(search.trim()), SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const accounts = useQuery({
-    queryKey: ['agent', 'accounts', search],
-    queryFn: () => getAgentAccounts(search || undefined),
+    queryKey: ['agent', 'accounts', debounced],
+    queryFn: () => getAgentAccounts(debounced || undefined),
+    placeholderData: keepPreviousData,
   });
 
-  async function handleDownloadStatement(accountId: string) {
-    setStatementAccountId(accountId);
-    try {
-      const url = await getAgentStatementUrl(accountId);
-      await openBrowserAsync(url);
-    } catch (err) {
-      Alert.alert('Could not open statement', apiErrorMessage(err));
-    } finally {
-      setStatementAccountId(null);
-    }
+  const items = accounts.data?.data ?? [];
+  const searching = search.trim() !== debounced || (accounts.isFetching && !accounts.isRefetching);
+
+  function openCollect(item: SavingsAccount) {
+    router.push({
+      pathname: '/(agent)/collect/[accountId]',
+      params: {
+        accountId: item.id,
+        accountNumber: item.account_number,
+        customerName: customerDisplayName(item.customer),
+        customerId: item.customer_id,
+        customerPhone: item.customer?.phone ?? '',
+        productName: item.product?.name ?? '',
+        contributionAmount: String(item.contribution_amount),
+        balanceFormatted: item.balance_formatted,
+        status: item.status,
+      },
+    });
   }
 
   function renderItem({ item }: { item: SavingsAccount }) {
-    const customerName = item.customer ? `${item.customer.first_name} ${item.customer.last_name}` : '';
+    const name = customerDisplayName(item.customer) || item.account_number;
+    const product = item.product?.name;
+    const target =
+      item.target_amount !== null && item.target_progress_percent !== null
+        ? ` · ${item.target_progress_percent}% of target`
+        : '';
 
     return (
       <ListRow
-        title={customerName || item.account_number}
-        subtitle={`${item.account_number}${
-          item.target_amount !== null
-            ? ` · ${item.target_progress_percent}% of ${item.target_amount_formatted} target`
-            : ''
-        }`}
-        onPress={() =>
-          router.push({
-            pathname: '/(agent)/collect/[accountId]',
-            params: {
-              accountId: item.id,
-              accountNumber: item.account_number,
-              customerName,
-              contributionAmount: String(item.contribution_amount),
-              balanceFormatted: item.balance_formatted,
-            },
-          })
-        }
+        left={<Avatar name={name} />}
+        title={name}
+        subtitle={`${item.account_number}${product ? ` · ${product}` : ''}${target}`}
+        valueLabel="Savings balance"
+        value={displayFormatted(item.balance_formatted)}
+        subvalue={item.status !== 'active' ? undefined : `Agreed ${displayFormatted(item.contribution_formatted)}`}
         right={
-          <View style={styles.rowRight}>
-            <View style={styles.rowValue}>
-              <ThemedText>{item.balance_formatted}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {item.status}
-              </ThemedText>
+          item.status !== 'active' ? (
+            <View style={styles.right}>
+              <ThemedText type="money">{displayFormatted(item.balance_formatted)}</ThemedText>
+              <Badge label={item.status} />
             </View>
-            <Pressable
-              style={[styles.pillButton, { borderColor: Palette.primary500 }]}
-              onPress={() =>
-                router.push({
-                  pathname: '/(agent)/loans/apply/[accountId]',
-                  params: { accountId: item.id, customerId: item.customer_id, customerName },
-                })
-              }
-            >
-              <ThemedText type="smallBold" style={{ color: Palette.primary600 }}>
-                Loan
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.pillButton, { borderColor: theme.border }]}
-              disabled={statementAccountId === item.id}
-              onPress={() => handleDownloadStatement(item.id)}
-            >
-              <ThemedText type="smallBold" themeColor="textSecondary">
-                {statementAccountId === item.id ? 'Opening…' : 'Statement'}
-              </ThemedText>
-            </Pressable>
-          </View>
+          ) : undefined
         }
+        onPress={() => openCollect(item)}
+        accessibilityLabel={`${name}, account ${item.account_number}, savings balance ${displayFormatted(item.balance_formatted)}${item.status !== 'active' ? `, ${item.status}` : ''}. Record collection.`}
       />
     );
   }
 
   return (
-    <Screen scroll={false}>
-      <Input
-        placeholder="Search by name, account, or phone"
-        value={search}
-        onChangeText={setSearch}
-        autoCapitalize="none"
-      />
+    <View style={[styles.flex, { backgroundColor: theme.background }]}>
+      <View style={styles.searchBar}>
+        <Input
+          icon="search"
+          placeholder="Name, account number or phone"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search customers"
+        />
+        <OfflineBanner mode="agent" />
+        <View style={styles.metaRow}>
+          <ThemedText type="caption" themeColor="textMuted">
+            {accounts.data
+              ? `${accounts.data.meta.total} account${accounts.data.meta.total === 1 ? '' : 's'}${debounced ? ` matching “${debounced}”` : ' assigned to you'}`
+              : ' '}
+          </ThemedText>
+          {searching ? <ActivityIndicator size="small" color={theme.primary} /> : null}
+        </View>
+      </View>
 
       {accounts.isLoading ? (
-        <ActivityIndicator style={{ marginTop: 24 }} />
-      ) : accounts.isError ? (
-        <EmptyState
-          title="Could not load accounts"
-          hint="Check your connection and pull to retry."
+        <LoadingState label="Loading your accounts…" />
+      ) : accounts.isError && !accounts.data ? (
+        <ErrorState
+          title="Couldn't load accounts"
+          hint="Searching needs a connection. Check your internet and try again."
+          onRetry={() => void accounts.refetch()}
         />
       ) : (
         <FlatList
-          data={accounts.data?.data ?? []}
+          data={items}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          onRefresh={() => accounts.refetch()}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onRefresh={() => void accounts.refetch()}
           refreshing={accounts.isRefetching}
-          ListEmptyComponent={<EmptyState title="No accounts found" />}
+          initialNumToRender={12}
+          windowSize={7}
+          style={[styles.list, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          contentContainerStyle={items.length === 0 ? styles.emptyContainer : undefined}
+          ListEmptyComponent={
+            debounced ? (
+              <EmptyState
+                icon="search"
+                title={`No accounts match “${debounced}”`}
+                hint="Check the spelling, or search by account number or phone. New customers need registering first."
+                actionLabel="Register a customer"
+                onAction={() => router.push('/(agent)/register-customer')}
+              />
+            ) : (
+              <EmptyState
+                icon="wallet"
+                title="No accounts assigned yet"
+                hint="Register a customer and open a savings account to start collecting."
+                actionLabel="Register a customer"
+                onAction={() => router.push('/(agent)/register-customer')}
+              />
+            )
+          }
         />
       )}
-    </Screen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  rowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rowValue: { alignItems: 'flex-end', gap: 2 },
-  pillButton: {
-    borderWidth: 1,
-    borderRadius: Radii.sm,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
+  flex: { flex: 1 },
+  searchBar: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, gap: Spacing.two },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 20 },
+  list: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, marginTop: Spacing.two },
+  emptyContainer: { flexGrow: 1 },
+  right: { alignItems: 'flex-end', gap: 4 },
 });

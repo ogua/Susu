@@ -13,6 +13,8 @@ export async function chargeMobileMoney(payload: {
   amount: number;
   phone: string;
   provider: MobileMoneyProvider;
+  /** Idempotency key: a retry with the same key returns the same intent. */
+  client_reference?: string;
 }): Promise<PaymentIntent> {
   const { data } = await api.post<{ intent: PaymentIntent }>('/payments/charge', payload);
 

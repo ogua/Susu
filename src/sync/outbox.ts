@@ -52,6 +52,21 @@ export async function pendingCount(): Promise<number> {
   return row?.n ?? 0;
 }
 
+export async function rejectedCount(): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM outbox WHERE status = 'rejected'`,
+  );
+
+  return row?.n ?? 0;
+}
+
+export async function getOutboxItem(opId: string): Promise<OutboxItem | null> {
+  const db = await getDb();
+
+  return db.getFirstAsync<OutboxItem>(`SELECT * FROM outbox WHERE op_id = ?`, opId);
+}
+
 export async function markSynced(opId: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(`UPDATE outbox SET status = 'synced' WHERE op_id = ?`, opId);

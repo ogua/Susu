@@ -1,4 +1,13 @@
-import { enqueue } from '@/sync/outbox';
+import { useOutboxStatus } from '@/stores/outboxStatusStore';
+import { enqueue as enqueueRaw } from '@/sync/outbox';
+
+/** Queue + refresh the shared pending count so badges update immediately. */
+async function enqueue(opType: string, payload: Record<string, unknown>): Promise<string> {
+  const opId = await enqueueRaw(opType, payload);
+  void useOutboxStatus.getState().refresh();
+
+  return opId;
+}
 
 /**
  * Typed wrappers around the outbox for each offline-capable operation.

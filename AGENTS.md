@@ -7,7 +7,8 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 This is the mobile client of **SusuApp**, a susu (rotating savings / micro-finance collection) application. It is a thin client: all business logic, validation, and data live in the Laravel backend. SusuApp ships on three platforms total that must stay in feature parity.
 
 - **Backend / web application** — `c:\xampp\htdocs\Projects\SusuApp`. Laravel 12 + Filament v5 + Livewire. Single source of truth.
-- **This app** — Expo / React Native (TypeScript, expo-router). Consumes the backend's versioned REST API (`/api/v1/...`, Sanctum token auth). Always-online; no local database.
+- **This app** — Expo / React Native (TypeScript, expo-router). Consumes the backend's versioned REST API (`/api/v1/...`, Sanctum token auth). **Hybrid:** reads are online (dashboards cached for offline display), while field-agent writes (cash collections, customer registration, account opening, day close, loan write-off, location pings) are queued in a local SQLite outbox (`src/sync`) and drained to `POST /sync/batch` with client UUIDs as idempotency keys. No local mirror of business data.
+- **UI/UX:** design tokens in `src/constants/theme.ts`, shared components in `src/components/ui`. Follow `.claude/reference/susu-mobile-ui-redesign-plan.md` (financial-safety rules: double-submit guards, `client_reference` on online money writes, confirmations naming amount + consequence, never claim server success for outbox writes).
 - **Desktop application (offline)** — `D:\Desktop App\susuDesktop`. JavaFX (Java 25, Maven). Unlike this app, it keeps a local database for offline use and syncs with the same backend API when reconnected.
 
 ## Cross-Platform Parity Rules

@@ -7,6 +7,7 @@ import {
   markSynced,
   pendingItems,
 } from '@/sync/outbox';
+import { useOutboxStatus } from '@/stores/outboxStatusStore';
 import { useSyncToastStore } from '@/stores/syncToastStore';
 
 /**
@@ -68,6 +69,7 @@ export async function drainOutbox(): Promise<SyncSummary> {
   }
 
   inFlight = true;
+  useOutboxStatus.getState().setSyncing(true);
   try {
     const { data } = await api.post<{ results: SyncOpResult[] }>('/sync/batch', {
       ops: items.map((item) => ({
@@ -99,6 +101,12 @@ export async function drainOutbox(): Promise<SyncSummary> {
     await Promise.all(items.map((item) => bumpAttempt(item.op_id, message)));
   } finally {
     inFlight = false;
+    const status = useOutboxStatus.getState();
+    status.setSyncing(false);
+    if (!summary.error) {
+      status.markSynced();
+    }
+    await status.refresh();
   }
 
   notify(summary);
@@ -117,7 +125,7 @@ function notify(summary: SyncSummary): void {
   const { show } = useSyncToastStore.getState();
 
   if (summary.error) {
-    show('Sync failed — will retry automatically.', 'warning');
+    show("Couldn't reach the server. Your records are safe on this phone and will sync automatically.", 'warning');
 
     return;
   }
@@ -125,12 +133,15 @@ function notify(summary: SyncSummary): void {
   const synced = summary.applied + summary.duplicates;
 
   if (summary.rejected > 0) {
-    show(`${synced} synced, ${summary.rejected} rejected — review in Sync Queue.`, 'warning');
+    show(
+      `${synced} record${synced === 1 ? '' : 's'} synced. ${summary.rejected} need${summary.rejected === 1 ? 's' : ''} your attention in Sync.`,
+      'warning',
+    );
 
     return;
   }
 
-  show(`Synced ${synced} item${synced === 1 ? '' : 's'}.`, 'success');
+  show(`${synced} record${synced === 1 ? '' : 's'} synced to the server.`, 'success');
 }
 
 /** Drain whenever connectivity returns. Returns an unsubscribe function. */

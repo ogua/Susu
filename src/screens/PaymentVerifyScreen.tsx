@@ -1,12 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { apiErrorMessage } from '@/api/client';
 import { submitChargeOtp, verifyPaymentIntent } from '@/api/payments';
 import { ThemedText } from '@/components/themed-text';
+import { Button, Icon, Input, Notice, ResultView, Screen } from '@/components/ui';
+import { Radii, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuthStore } from '@/stores/authStore';
 import type { PaymentIntent } from '@/types/api';
-import { Palette } from '@/constants/theme';
+import { displayFormatted } from '@/utils/money';
 
 const POLL_INTERVAL_MS = 3_000;
 const POLL_WINDOW_MS = 90_000;
@@ -15,8 +19,8 @@ const TERMINAL_STATUSES: PaymentIntent['status'][] = ['success', 'failed', 'aban
 
 const STATUS_MESSAGES: Record<PaymentIntent['status'], string> = {
   initiated: 'Starting the payment…',
-  pay_offline: 'Check your phone and enter your mobile money PIN to approve.',
-  send_otp: 'Enter the OTP sent to your phone to continue.',
+  pay_offline: 'Approve the prompt on the phone with the mobile money PIN.',
+  send_otp: 'Enter the verification code sent to the phone.',
   pending: 'Confirming with the mobile money network…',
   success: 'Payment confirmed!',
   failed: 'Payment failed.',
@@ -32,9 +36,12 @@ const STATUS_MESSAGES: Record<PaymentIntent['status'], string> = {
  * whichever lands first wins (VerifyPaymentIntentAction.complete).
  */
 export default function PaymentVerifyScreen() {
-  const { intentId, amountFormatted } = useLocalSearchParams<{
+  const theme = useTheme();
+  const role = useAuthStore((state) => state.user?.role);
+  const { intentId, amountFormatted, customerName } = useLocalSearchParams<{
     intentId: string;
     amountFormatted?: string;
+    customerName?: string;
   }>();
 
   const [intent, setIntent] = useState<PaymentIntent | null>(null);
@@ -126,94 +133,106 @@ export default function PaymentVerifyScreen() {
   }
 
   const status = intent?.status ?? 'initiated';
-  const isTerminal = TERMINAL_STATUSES.includes(status);
+  const amountText = displayFormatted(amountFormatted ?? intent?.amount_formatted);
+  const doneHref = role === 'customer' ? '/(customer)' : '/(agent)';
+
+  if (status === 'success') {
+    return (
+      <Screen footer={<Button title="Done" size="lg" onPress={() => router.dismissTo(doneHref)} />}>
+        <ResultView
+          tone="success"
+          title="Payment confirmed"
+          amount={amountText}
+          message={`The mobile money payment${customerName ? ` from ${customerName}` : ''} was approved and recorded by the server.`}
+        />
+      </Screen>
+    );
+  }
+
+  if (status === 'failed' || status === 'abandoned') {
+    return (
+      <Screen
+        footer={
+          <>
+            <Button title="Try again" icon="sync" size="lg" onPress={() => router.back()} />
+            <Button title="Cancel" variant="ghost" onPress={() => router.dismissTo(doneHref)} />
+          </>
+        }
+      >
+        <ResultView
+          tone="failed"
+          title={status === 'failed' ? 'Payment failed' : 'Payment not completed'}
+          amount={amountText}
+          message="No money was taken and nothing was recorded. Check the number and balance, then try again."
+        />
+      </Screen>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <ThemedText type="subtitle">{amountFormatted ?? intent?.amount_formatted ?? 'Mobile Money Payment'}</ThemedText>
-
-        {!isTerminal && !timedOut ? <ActivityIndicator size="large" style={styles.spinner} /> : null}
-
-        <ThemedText style={status === 'failed' || status === 'abandoned' ? styles.error : undefined}>
-          {STATUS_MESSAGES[status]}
+    <Screen
+      footer={
+        status === 'send_otp' ? (
+          <Button
+            title="Submit code"
+            size="lg"
+            loading={submittingOtp}
+            loadingTitle="Verifying…"
+            disabled={!otp.trim()}
+            onPress={handleSubmitOtp}
+          />
+        ) : timedOut ? (
+          <Button title="Check again" icon="sync" size="lg" onPress={startPolling} />
+        ) : undefined
+      }
+    >
+      <View style={styles.waiting} accessibilityLiveRegion="polite">
+        <View style={[styles.iconCircle, { backgroundColor: theme.infoSoft }]}>
+          {timedOut ? <Icon name="clock" size={40} color={theme.info} /> : <ActivityIndicator size="large" color={theme.info} />}
+        </View>
+        <ThemedText type="caption" themeColor="textMuted">
+          Mobile money payment
         </ThemedText>
-
-        {status === 'send_otp' ? (
-          <View style={styles.otpRow}>
-            <TextInput
-              style={styles.otpInput}
-              value={otp}
-              onChangeText={setOtp}
-              placeholder="OTP"
-              keyboardType="number-pad"
-              autoFocus
-            />
-            <Pressable
-              style={[styles.button, (submittingOtp || !otp.trim()) && styles.buttonDisabled]}
-              onPress={handleSubmitOtp}
-              disabled={submittingOtp || !otp.trim()}
-            >
-              {submittingOtp ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Submit</ThemedText>}
-            </Pressable>
-          </View>
-        ) : null}
-
-        {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-
-        {timedOut && !isTerminal ? (
-          <>
-            <ThemedText type="small" style={styles.hint}>
-              Still waiting on confirmation. This can take a little longer on some networks.
-            </ThemedText>
-            <Pressable style={styles.button} onPress={startPolling}>
-              <ThemedText style={styles.buttonText}>Check again</ThemedText>
-            </Pressable>
-          </>
-        ) : null}
-
-        {isTerminal ? (
-          <Pressable style={styles.button} onPress={() => router.back()}>
-            <ThemedText style={styles.buttonText}>Done</ThemedText>
-          </Pressable>
-        ) : null}
+        <ThemedText type="moneyHero" style={styles.center} adjustsFontSizeToFit numberOfLines={1}>
+          {amountText}
+        </ThemedText>
+        <ThemedText type="bodyStrong" style={styles.center}>
+          {timedOut ? 'Still waiting for confirmation' : STATUS_MESSAGES[status]}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+          {timedOut
+            ? "Some networks take longer. Don't charge again — check again first so the customer isn't billed twice."
+            : 'Keep this screen open. Do not ask for cash until the payment is confirmed.'}
+        </ThemedText>
       </View>
-    </View>
+
+      {status === 'send_otp' ? (
+        <Input
+          label="Verification code"
+          value={otp}
+          onChangeText={setOtp}
+          placeholder="Enter the code sent by SMS"
+          keyboardType="number-pad"
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          autoFocus
+        />
+      ) : null}
+
+      {error ? <Notice tone="warning" message={error} /> : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, justifyContent: 'center' },
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    padding: 24,
-    gap: 14,
-    backgroundColor: '#ffffff',
+  waiting: { alignItems: 'center', gap: Spacing.two, paddingTop: Spacing.five },
+  iconCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: Radii.pill,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.two,
   },
-  spinner: { marginVertical: 8 },
-  otpRow: { flexDirection: 'row', gap: 8, width: '100%' },
-  otpInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 18,
-    textAlign: 'center',
-  },
-  button: {
-    backgroundColor: Palette.primary500,
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '700' },
-  error: { color: Palette.danger, textAlign: 'center' },
-  hint: { textAlign: 'center', opacity: 0.6 },
+  center: { textAlign: 'center' },
 });

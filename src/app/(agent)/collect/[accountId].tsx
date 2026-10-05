@@ -1,207 +1,423 @@
-import { useLocalSearchParams, router } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { openBrowserAsync } from 'expo-web-browser';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
 
+import { getAgentStatementUrl } from '@/api/accounts';
 import { apiErrorMessage } from '@/api/client';
 import { chargeMobileMoney } from '@/api/payments';
+import { MomoFields } from '@/components/momo-fields';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Input, Screen } from '@/components/ui';
-import { Palette, Radii } from '@/constants/theme';
+import {
+  AmountInput,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Field,
+  KeyValueRow,
+  Notice,
+  ReceiptCard,
+  ResultView,
+  Screen,
+  SegmentedControl,
+} from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
+import { useOnline } from '@/hooks/use-network';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuthStore } from '@/stores/authStore';
+import { useOutboxStatus } from '@/stores/outboxStatusStore';
 import { drainOutbox } from '@/sync/engine';
 import { enqueueCollection } from '@/sync/ops';
+import { getOutboxItem, type OutboxStatus } from '@/sync/outbox';
 import type { MobileMoneyProvider } from '@/types/api';
+import { formatDateTime } from '@/utils/format';
 import { getCurrentPositionSafe } from '@/utils/location';
+import { momoPhoneError, normalizeMomoPhone } from '@/utils/momo';
+import { displayFormatted, formatMoney, minorToInput, parseAmountToMinor } from '@/utils/money';
 
-const PROVIDERS: { value: MobileMoneyProvider; label: string }[] = [
-  { value: 'mtn', label: 'MTN' },
-  { value: 'vod', label: 'Telecel' },
-  { value: 'atl', label: 'AirtelTigo' },
-];
+type Method = 'cash' | 'mobile_money';
+
+interface SavedCollection {
+  opId: string;
+  amount: number;
+  recordedAt: Date;
+}
 
 /**
  * Cash stays offline-first (outbox); mobile money needs a live round trip to
  * Paystack, so it bypasses the outbox entirely and goes straight to the
  * verify screen once the charge is initiated.
+ *
+ * Double-submit safety: a ref guard blocks re-entry within the same frame,
+ * and once a cash collection is queued the form is replaced by the receipt —
+ * there is no button left that could queue it a second time.
  */
 export default function CollectScreen() {
   const theme = useTheme();
+  const online = useOnline();
+  const user = useAuthStore((state) => state.user);
   const params = useLocalSearchParams<{
     accountId: string;
     accountNumber?: string;
     customerName?: string;
+    customerId?: string;
+    customerPhone?: string;
+    productName?: string;
     contributionAmount?: string;
     balanceFormatted?: string;
+    status?: string;
   }>();
 
-  const [method, setMethod] = useState<'cash' | 'mobile_money'>('cash');
-  const [amount, setAmount] = useState(
-    params.contributionAmount ? (Number(params.contributionAmount) / 100).toFixed(2) : '',
-  );
-  const [phone, setPhone] = useState('');
+  const agreed = Number(params.contributionAmount) || 0;
+  const [method, setMethod] = useState<Method>('cash');
+  const [amount, setAmount] = useState(agreed > 0 ? minorToInput(agreed) : '');
+  const [phone, setPhone] = useState(params.customerPhone ?? '');
   const [provider, setProvider] = useState<MobileMoneyProvider>('mtn');
   const [submitting, setSubmitting] = useState(false);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedCollection | null>(null);
+  const [openingStatement, setOpeningStatement] = useState(false);
+  const submittingRef = useRef(false);
+  const momoKey = useIdempotencyKey();
 
-  async function handleSubmitCash() {
+  const amountMinor = parseAmountToMinor(amount);
+  const customerName = params.customerName || 'Customer';
+  const quickAmounts = agreed > 0 ? [agreed, agreed * 2, agreed * 5, agreed * 10] : undefined;
+
+  function changeMomoInput<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      // A changed amount/number/network is a new payment attempt.
+      momoKey.rotate();
+    };
+  }
+
+  async function submitCash(minor: number) {
     const location = await getCurrentPositionSafe();
-
-    await enqueueCollection({
+    const opId = await enqueueCollection({
       savings_account_id: params.accountId,
-      amount: Math.round(Number(amount) * 100),
+      amount: minor,
       latitude: location?.latitude,
       longitude: location?.longitude,
     });
 
-    setSavedMessage('Collection saved. It will sync automatically.');
-    // Fire-and-forget: don't block the agent's next collection on network.
+    setSaved({ opId, amount: minor, recordedAt: new Date() });
+    // Fire-and-forget: never block the agent's next collection on network.
     void drainOutbox();
-
-    setTimeout(() => router.back(), 900);
   }
 
-  async function handleSubmitMobileMoney() {
-    if (!phone.trim()) {
-      setError('Enter the mobile money number.');
-      return;
-    }
-
+  async function submitMobileMoney(minor: number) {
     const intent = await chargeMobileMoney({
       savings_account_id: params.accountId,
-      amount: Math.round(Number(amount) * 100),
-      phone: phone.trim(),
+      amount: minor,
+      phone: normalizeMomoPhone(phone),
       provider,
+      client_reference: momoKey.key,
     });
+    momoKey.rotate();
 
     router.push({
       pathname: '/(agent)/payment-verify',
-      params: { intentId: intent.id, amountFormatted: intent.amount_formatted },
+      params: { intentId: intent.id, amountFormatted: intent.amount_formatted, customerName },
     });
   }
 
   async function handleSubmit() {
-    setError(null);
-    const parsed = Number(amount);
-    if (!parsed || parsed <= 0) {
-      setError('Enter a valid amount.');
+    if (submittingRef.current || saved) {
       return;
     }
+    setError(null);
+    setPhoneError(null);
 
+    if (amountMinor === null || amountMinor <= 0) {
+      setError('Enter the amount the customer is paying.');
+      return;
+    }
+    if (method === 'mobile_money') {
+      const invalid = momoPhoneError(phone);
+      if (invalid) {
+        setPhoneError(invalid);
+        return;
+      }
+    }
+
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       if (method === 'cash') {
-        await handleSubmitCash();
+        await submitCash(amountMinor);
       } else {
-        await handleSubmitMobileMoney();
+        await submitMobileMoney(amountMinor);
       }
     } catch (err) {
-      setError(method === 'cash' ? 'Could not save the collection locally. Please try again.' : apiErrorMessage(err));
+      setError(
+        method === 'cash'
+          ? "This collection couldn't be saved on the phone. Nothing was recorded — please try again."
+          : apiErrorMessage(err),
+      );
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
-  function segment(options: { value: string; label: string }[], selected: string, onSelect: (value: string) => void) {
-    return (
-      <View style={styles.segmentRow}>
-        {options.map((option) => {
-          const active = selected === option.value;
+  async function handleStatement() {
+    setOpeningStatement(true);
+    try {
+      await openBrowserAsync(await getAgentStatementUrl(params.accountId));
+    } catch (err) {
+      Alert.alert("Couldn't open the statement", apiErrorMessage(err));
+    } finally {
+      setOpeningStatement(false);
+    }
+  }
 
-          return (
-            <Pressable
-              key={option.value}
-              style={[
-                styles.segment,
-                { borderColor: active ? Palette.primary500 : theme.border },
-                active && styles.segmentActive,
-              ]}
-              onPress={() => onSelect(option.value)}
-            >
-              <ThemedText type="smallBold" style={active ? styles.segmentTextActive : undefined}>
-                {option.label}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
+  if (saved) {
+    return (
+      <CollectionResult
+        saved={saved}
+        customerName={customerName}
+        accountNumber={params.accountNumber}
+        productName={params.productName}
+        collector={user?.name}
+        business={user?.company?.name}
+      />
     );
   }
 
+  const submitTitle =
+    amountMinor && amountMinor > 0
+      ? method === 'cash'
+        ? `Record ${formatMoney(amountMinor)} cash`
+        : `Charge ${formatMoney(amountMinor)} via MoMo`
+      : method === 'cash'
+        ? 'Record cash collection'
+        : 'Charge mobile money';
+
   return (
-    <Screen>
+    <Screen
+      footer={
+        <>
+          <Button
+            title={submitTitle}
+            loadingTitle={method === 'cash' ? 'Saving…' : 'Contacting network…'}
+            icon={method === 'cash' ? 'cash' : 'phone'}
+            size="lg"
+            loading={submitting}
+            disabled={method === 'mobile_money' && !online}
+            onPress={handleSubmit}
+          />
+          <ThemedText type="caption" themeColor="textMuted" style={styles.center}>
+            {method === 'cash'
+              ? 'Saves on this phone instantly, even offline, then syncs automatically.'
+              : online
+                ? 'The customer approves the payment with their MoMo PIN.'
+                : 'Mobile money needs an internet connection.'}
+          </ThemedText>
+        </>
+      }
+    >
       <Card>
-        <ThemedText type="subtitle">{params.customerName || 'Customer'}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {params.accountNumber}
-          {params.balanceFormatted ? ` · Balance ${params.balanceFormatted}` : ''}
-        </ThemedText>
+        <View style={styles.customerRow}>
+          <Avatar name={customerName} size={48} />
+          <View style={styles.flex}>
+            <ThemedText type="heading" numberOfLines={1}>
+              {customerName}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+              {params.accountNumber}
+              {params.productName ? ` · ${params.productName}` : ''}
+            </ThemedText>
+          </View>
+          {params.status && params.status !== 'active' ? <Badge label={params.status} /> : null}
+        </View>
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
+        <KeyValueRow label="Current savings balance" value={displayFormatted(params.balanceFormatted)} emphasis />
+        {agreed > 0 ? <KeyValueRow label="Agreed contribution" value={formatMoney(agreed)} /> : null}
+        <View style={styles.secondaryActions}>
+          <Button
+            title="Statement"
+            icon="document"
+            variant="outline"
+            loading={openingStatement}
+            onPress={handleStatement}
+            style={styles.flex}
+          />
+          <Button
+            title="Apply for loan"
+            icon="loan"
+            variant="outline"
+            style={styles.flex}
+            onPress={() =>
+              router.push({
+                pathname: '/(agent)/loans/apply/[accountId]',
+                params: { accountId: params.accountId, customerId: params.customerId ?? '', customerName },
+              })
+            }
+          />
+        </View>
       </Card>
 
-      <Card style={styles.form}>
-        {segment(
-          [
-            { value: 'cash', label: 'Cash' },
-            { value: 'mobile_money', label: 'Mobile Money' },
-          ],
-          method,
-          (value) => setMethod(value as 'cash' | 'mobile_money'),
-        )}
-
-        <Input
-          label="Amount (GHS)"
-          keyboardType="decimal-pad"
-          value={amount}
-          onChangeText={setAmount}
-          placeholder="0.00"
-          autoFocus
-          style={styles.amountInput}
-          error={error}
+      {params.status && params.status !== 'active' ? (
+        <Notice
+          tone="warning"
+          message={`This account is ${params.status}. The server may not accept collections on it.`}
         />
+      ) : null}
 
-        {method === 'mobile_money' ? (
-          <>
-            <Input
-              label="Mobile money number"
-              keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="024xxxxxxx"
-            />
-            {segment(PROVIDERS, provider, (value) => setProvider(value as MobileMoneyProvider))}
-          </>
-        ) : null}
-
-        {savedMessage ? <ThemedText style={{ color: Palette.success }}>{savedMessage}</ThemedText> : null}
-
-        <Button
-          title={method === 'cash' ? 'Save Collection' : 'Charge Mobile Money'}
-          loading={submitting}
-          onPress={handleSubmit}
+      <Field label="Payment method">
+        <SegmentedControl<Method>
+          accessibilityLabel="Payment method"
+          options={[
+            { value: 'cash', label: 'Cash', icon: 'cash' },
+            { value: 'mobile_money', label: 'Mobile Money', icon: 'phone' },
+          ]}
+          value={method}
+          onChange={setMethod}
         />
+      </Field>
 
-        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-          {method === 'cash'
-            ? 'Works offline — this is saved on your device immediately and synced when you have a connection.'
-            : 'Requires an internet connection — the customer will get a PIN prompt on their phone.'}
-        </ThemedText>
-      </Card>
+      <AmountInput
+        label="Amount received"
+        value={amount}
+        onChangeText={changeMomoInput(setAmount)}
+        quickAmounts={quickAmounts}
+        error={error}
+        returnKeyType="done"
+        selectTextOnFocus
+      />
+
+      {method === 'mobile_money' ? (
+        <MomoFields
+          phoneLabel="Customer's MoMo number"
+          phone={phone}
+          onPhoneChange={changeMomoInput(setPhone)}
+          provider={provider}
+          onProviderChange={changeMomoInput(setProvider)}
+          phoneError={phoneError}
+        />
+      ) : null}
     </Screen>
   );
 }
 
+/**
+ * Post-save receipt. Reports exactly what is known: the record is on the
+ * phone; it flips to "synced" only when the outbox drain confirms it. We do
+ * not show a new balance — that's computed server-side (commission etc.).
+ */
+function CollectionResult({
+  saved,
+  customerName,
+  accountNumber,
+  productName,
+  collector,
+  business,
+}: {
+  saved: SavedCollection;
+  customerName: string;
+  accountNumber?: string;
+  productName?: string;
+  collector?: string;
+  business?: string;
+}) {
+  const [status, setStatus] = useState<OutboxStatus>('pending');
+  const [rejection, setRejection] = useState<string | null>(null);
+  const pendingCount = useOutboxStatus((state) => state.pending);
+  const syncing = useOutboxStatus((state) => state.syncing);
+
+  // Re-read this op whenever the shared outbox state changes (a drain finished).
+  useEffect(() => {
+    let active = true;
+    void getOutboxItem(saved.opId).then((item) => {
+      if (active && item) {
+        setStatus(item.status);
+        setRejection(item.last_error);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [saved.opId, pendingCount, syncing]);
+
+  const reference = saved.opId.slice(0, 8).toUpperCase();
+  const tone = status === 'synced' ? 'success' : status === 'rejected' ? 'failed' : 'pending';
+  const title =
+    status === 'synced'
+      ? 'Collection recorded'
+      : status === 'rejected'
+        ? 'Collection needs attention'
+        : 'Saved on this phone';
+  const message =
+    status === 'synced'
+      ? `The server has confirmed this collection for ${customerName}.`
+      : status === 'rejected'
+        ? "The server didn't accept this collection, so the customer's balance has not changed. Open Sync Status to review it."
+        : syncing
+          ? 'Sending to the server now…'
+          : 'Securely saved. It will sync automatically when you have a connection — you can carry on collecting.';
+
+  return (
+    <Screen
+      footer={
+        <>
+          <Button title="Next customer" icon="search" size="lg" onPress={() => router.back()} />
+          {status === 'rejected' ? (
+            <Button title="Open Sync Status" variant="outline" icon="sync" onPress={() => router.replace('/(agent)/sync')} />
+          ) : (
+            <Button title="Back to home" variant="ghost" onPress={() => router.dismissTo('/(agent)')} />
+          )}
+        </>
+      }
+    >
+      <ResultView tone={tone} title={title} amount={formatMoney(saved.amount)} message={message}>
+        <ReceiptCard
+          business={business}
+          footnote={
+            status === 'synced'
+              ? 'Confirmed by the server. The updated balance appears on the customer’s statement.'
+              : 'Pending server confirmation. Keep this reference until it syncs.'
+          }
+        >
+          <KeyValueRow label="Customer" value={customerName} />
+          <KeyValueRow label="Account" value={`${accountNumber ?? '—'}${productName ? ` · ${productName}` : ''}`} />
+          <KeyValueRow label="Amount" value={formatMoney(saved.amount)} emphasis />
+          <KeyValueRow label="Payment method" value="Cash" />
+          <KeyValueRow label="Date & time" value={formatDateTime(saved.recordedAt)} />
+          {collector ? <KeyValueRow label="Collected by" value={collector} /> : null}
+          <KeyValueRow label="Device reference" value={reference} />
+          <View style={styles.statusRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Status
+            </ThemedText>
+            <Badge
+              label={status === 'synced' ? 'Synced' : status === 'rejected' ? 'Rejected' : 'Waiting to sync'}
+              tone={status === 'synced' ? 'success' : status === 'rejected' ? 'danger' : 'warning'}
+            />
+          </View>
+          {rejection && status === 'rejected' ? <Notice tone="danger" message={friendlyReason(rejection)} /> : null}
+        </ReceiptCard>
+      </ResultView>
+    </Screen>
+  );
+}
+
+/** Server rejection reasons are validation messages; hide anything technical. */
+function friendlyReason(error: string): string {
+  return /exception|sql|stack|http|\bat\s|undefined|null/i.test(error) || error.length > 200
+    ? 'The server could not process this record.'
+    : error;
+}
+
 const styles = StyleSheet.create({
-  form: { gap: 12 },
-  amountInput: { fontSize: 22, fontWeight: '600' },
-  segmentRow: { flexDirection: 'row', gap: 8 },
-  segment: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: Radii.sm,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  segmentActive: { backgroundColor: Palette.primary500, borderColor: Palette.primary500 },
-  segmentTextActive: { color: '#ffffff' },
-  hint: { textAlign: 'center' },
+  flex: { flex: 1 },
+  center: { textAlign: 'center' },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },
+  secondaryActions: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.one },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
 });

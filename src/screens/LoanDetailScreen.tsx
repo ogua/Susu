@@ -1,17 +1,37 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiErrorMessage } from '@/api/client';
 import { getLoan, recordLoanRepayment } from '@/api/loans';
+import { InstallmentRow } from '@/components/installment-row';
 import { SavingsAccountPicker } from '@/components/savings-account-picker';
 import { ThemedText } from '@/components/themed-text';
+import {
+  AmountInput,
+  Badge,
+  Button,
+  Card,
+  confirmAction,
+  EmptyState,
+  ErrorState,
+  Field,
+  HeroCard,
+  HeroStat,
+  Input,
+  LoadingState,
+  Notice,
+  SectionHeader,
+} from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/stores/authStore';
 import { drainOutbox } from '@/sync/engine';
 import { enqueueLoanWriteOff } from '@/sync/ops';
-import type { LoanInstallment } from '@/types/api';
-import { Palette } from '@/constants/theme';
+import { displayFormatted, formatMoney, parseAmountToMinor } from '@/utils/money';
 
 /**
  * Shared by the agent and customer loan-detail routes — only the "Record
@@ -22,6 +42,8 @@ import { Palette } from '@/constants/theme';
  * when online — the drain happens immediately after queueing.
  */
 export default function LoanDetailScreen() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { loanId } = useLocalSearchParams<{ loanId: string }>();
   const role = useAuthStore((state) => state.user?.role);
   const isStaff = role === 'field_agent' || role === 'branch_manager' || role === 'company_admin';
@@ -31,13 +53,16 @@ export default function LoanDetailScreen() {
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [repaid, setRepaid] = useState<string | null>(null);
+  const repayKey = useIdempotencyKey();
+  const busyRef = useRef(false);
 
   const [writeOffReason, setWriteOffReason] = useState('');
   const [writeOffAccountId, setWriteOffAccountId] = useState<string | null>(null);
   const [writeOffAmount, setWriteOffAmount] = useState('');
   const [writeOffSubmitting, setWriteOffSubmitting] = useState(false);
   const [writeOffError, setWriteOffError] = useState<string | null>(null);
-  const [writeOffSaved, setWriteOffSaved] = useState<string | null>(null);
+  const [writeOffSaved, setWriteOffSaved] = useState(false);
 
   const loan = useQuery({
     queryKey: ['loan', loanId],
@@ -45,217 +70,212 @@ export default function LoanDetailScreen() {
     enabled: !!loanId,
   });
 
-  async function handleRecordRepayment() {
-    setError(null);
-    const parsed = Number(amount);
-    if (!parsed || parsed <= 0) {
-      setError('Enter a valid amount.');
-      return;
-    }
-
+  async function recordRepayment(minor: number) {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setSubmitting(true);
     try {
-      await recordLoanRepayment(loanId, Math.round(parsed * 100));
+      await recordLoanRepayment(loanId, minor, repayKey.key);
+      repayKey.rotate();
       setAmount('');
+      setRepaid(`Repayment of ${formatMoney(minor)} recorded.`);
       await queryClient.invalidateQueries({ queryKey: ['loan', loanId] });
     } catch (err) {
+      // Keep the same key: retrying this exact repayment can't double-post.
       setError(apiErrorMessage(err));
     } finally {
+      busyRef.current = false;
       setSubmitting(false);
     }
   }
 
-  async function handleWriteOff() {
-    setWriteOffError(null);
-    if (!writeOffReason.trim()) {
-      setWriteOffError('Enter a reason for the write-off.');
+  function handleRecordRepayment() {
+    setError(null);
+    setRepaid(null);
+    const minor = parseAmountToMinor(amount);
+    if (!minor) {
+      setError('Enter the amount the customer is repaying.');
       return;
     }
+    confirmAction({
+      title: 'Record this repayment?',
+      message: `${formatMoney(minor)} cash repayment on loan ${loan.data?.loan_number ?? ''}.`,
+      confirmLabel: `Record ${formatMoney(minor)}`,
+      onConfirm: () => void recordRepayment(minor),
+    });
+  }
 
+  async function writeOff(savingsApplied: number | undefined) {
+    if (busyRef.current || writeOffSaved) return;
+    busyRef.current = true;
     setWriteOffSubmitting(true);
     try {
       await enqueueLoanWriteOff({
         loan_id: loanId,
         reason: writeOffReason.trim(),
         savings_account_id: writeOffAccountId ?? undefined,
-        savings_amount_applied: writeOffAccountId ? Math.round(Number(writeOffAmount || '0') * 100) : undefined,
+        savings_amount_applied: savingsApplied,
       });
-
-      setWriteOffReason('');
-      setWriteOffAccountId(null);
-      setWriteOffAmount('');
-      setWriteOffSaved('Write-off saved. It will sync automatically.');
-      // Fire-and-forget: don't block on network: this is an offline-capable op.
+      setWriteOffSaved(true);
       void drainOutbox().then(() => queryClient.invalidateQueries({ queryKey: ['loan', loanId] }));
     } catch {
-      setWriteOffError('Could not save the write-off locally. Please try again.');
+      setWriteOffError("The write-off couldn't be saved on the phone. Nothing was recorded — please try again.");
     } finally {
+      busyRef.current = false;
       setWriteOffSubmitting(false);
     }
   }
 
-  function renderInstallment({ item }: { item: LoanInstallment }) {
-    return (
-      <View style={styles.installmentRow}>
-        <View style={{ flex: 1 }}>
-          <ThemedText type="smallBold">
-            #{item.sequence} — {new Date(item.due_date).toLocaleDateString()}
-          </ThemedText>
-          <ThemedText type="small">{item.status.replaceAll('_', ' ')}</ThemedText>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <ThemedText>{item.total_due_formatted}</ThemedText>
-          {item.remaining > 0 && item.remaining < item.total_due ? (
-            <ThemedText type="small">Remaining: GHS {(item.remaining / 100).toFixed(2)}</ThemedText>
-          ) : null}
-        </View>
-      </View>
-    );
+  function handleWriteOff() {
+    setWriteOffError(null);
+    if (!writeOffReason.trim()) {
+      setWriteOffError('Enter the reason for writing off this loan.');
+      return;
+    }
+    let savingsApplied: number | undefined;
+    if (writeOffAccountId) {
+      const parsed = writeOffAmount.trim() ? parseAmountToMinor(writeOffAmount) : 0;
+      if (parsed === null) {
+        setWriteOffError('Enter a valid amount to apply from savings, or leave it empty.');
+        return;
+      }
+      savingsApplied = parsed;
+    }
+    const data = loan.data;
+    confirmAction({
+      title: 'Write off this loan?',
+      message: `Loan ${data?.loan_number ?? ''} has ${displayFormatted(data?.outstanding_balance_formatted)} outstanding.${
+        savingsApplied ? ` ${formatMoney(savingsApplied)} will first be taken from the customer's savings.` : ''
+      } The rest is recorded as a loss. This cannot be undone.`,
+      confirmLabel: 'Write off loan',
+      destructive: true,
+      onConfirm: () => void writeOff(savingsApplied),
+    });
   }
 
   if (loan.isLoading) {
-    return <ActivityIndicator style={{ marginTop: 24 }} />;
+    return <LoadingState label="Loading loan…" />;
   }
   if (loan.isError || !loan.data) {
-    return <ThemedText style={styles.empty}>Could not load this loan.</ThemedText>;
+    return <ErrorState title="Couldn't load this loan" onRetry={() => void loan.refetch()} />;
   }
 
   const data = loan.data;
+  const installments = data.installments ?? [];
 
   return (
     <FlatList
-      contentContainerStyle={styles.container}
-      data={data.installments ?? []}
+      style={{ backgroundColor: theme.background }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.four }}
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
+      data={installments}
       keyExtractor={(item) => item.id}
-      renderItem={renderInstallment}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      renderItem={({ item }) => (
+        <InstallmentRow
+          sequence={item.sequence}
+          dueDate={item.due_date}
+          status={item.status}
+          amountDueFormatted={item.total_due_formatted}
+          remainingFormatted={formatMoney(item.remaining)}
+          partiallyPaid={item.remaining > 0 && item.remaining < item.total_due}
+        />
+      )}
       ListHeaderComponent={
-        <View style={{ gap: 12, marginBottom: 12 }}>
-          <View style={styles.card}>
-            <ThemedText type="subtitle">{data.loan_number}</ThemedText>
-            <ThemedText type="small">{data.loan_product?.name}</ThemedText>
-            <ThemedText>Principal: {data.principal_amount_formatted}</ThemedText>
-            <ThemedText>Total repayable: {data.total_repayable_formatted}</ThemedText>
-            <ThemedText>Outstanding: {data.outstanding_balance_formatted}</ThemedText>
-            <ThemedText type="small">Status: {data.status.replaceAll('_', ' ')}</ThemedText>
-            {data.rejection_reason ? (
-              <ThemedText type="small" style={styles.error}>
-                Rejected: {data.rejection_reason}
-              </ThemedText>
-            ) : null}
+        <View style={styles.header}>
+          <HeroCard
+            label="Outstanding loan balance"
+            amount={displayFormatted(data.outstanding_balance_formatted)}
+            caption={`${data.loan_number}${data.loan_product?.name ? ` · ${data.loan_product.name}` : ''}`}
+          >
+            <View style={styles.heroStats}>
+              <HeroStat label="Amount borrowed" value={displayFormatted(data.principal_amount_formatted)} />
+              <HeroStat label="Total to repay" value={displayFormatted(data.total_repayable_formatted)} />
+            </View>
+          </HeroCard>
+
+          <View style={styles.statusRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Loan status
+            </ThemedText>
+            <Badge label={data.status} />
           </View>
 
+          {data.rejection_reason ? <Notice tone="danger" title="Application rejected" message={data.rejection_reason} /> : null}
+          {data.write_off_reason ? <Notice tone="warning" title="Written off" message={data.write_off_reason} /> : null}
+
           {isStaff && data.status === 'disbursed' ? (
-            <View style={styles.card}>
-              <ThemedText type="subtitle">Record Repayment</ThemedText>
-              <TextInput
-                style={styles.input}
-                keyboardType="decimal-pad"
+            <Card style={styles.section}>
+              <ThemedText type="heading">Record repayment</ThemedText>
+              <AmountInput
+                size="md"
+                label="Amount received"
                 value={amount}
-                onChangeText={setAmount}
-                placeholder="Amount (GHS)"
+                onChangeText={(text) => {
+                  setAmount(text);
+                  repayKey.rotate();
+                }}
+                error={error}
               />
-              {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-              <Pressable
-                style={[styles.button, submitting && styles.buttonDisabled]}
+              {repaid ? <Notice tone="success" message={repaid} /> : null}
+              <Button
+                title={parseAmountToMinor(amount) ? `Record ${formatMoney(parseAmountToMinor(amount) ?? 0)}` : 'Record repayment'}
+                icon="cash"
+                loading={submitting}
+                loadingTitle="Recording…"
                 onPress={handleRecordRepayment}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <ThemedText style={styles.buttonText}>Record Repayment</ThemedText>
-                )}
-              </Pressable>
-            </View>
+              />
+            </Card>
           ) : null}
 
           {isManager && data.status === 'disbursed' ? (
-            <View style={styles.card}>
-              <ThemedText type="subtitle">Write Off Loan</ThemedText>
-              <ThemedText type="small">
-                Permanently closes the loan and recognizes the remaining balance as a loss. This cannot be undone.
+            <Card style={[styles.section, { borderColor: theme.danger }]}>
+              <ThemedText type="heading" themeColor="danger">
+                Write off loan
               </ThemedText>
-              <TextInput
-                style={styles.input}
-                value={writeOffReason}
-                onChangeText={setWriteOffReason}
-                placeholder="Reason"
-                multiline
-              />
-              <ThemedText type="small">Apply savings first (optional):</ThemedText>
-              <SavingsAccountPicker
-                customerId={data.customer_id}
-                value={writeOffAccountId}
-                onChange={setWriteOffAccountId}
-              />
-              {writeOffAccountId ? (
-                <TextInput
-                  style={styles.input}
-                  keyboardType="decimal-pad"
-                  value={writeOffAmount}
-                  onChangeText={setWriteOffAmount}
-                  placeholder="Amount to apply (GHS)"
+              <ThemedText type="small" themeColor="textSecondary">
+                Closes the loan permanently and records the remaining balance as a loss. This cannot be undone.
+              </ThemedText>
+              {writeOffSaved ? (
+                <Notice
+                  tone="success"
+                  message="Write-off saved and sent for processing. The loan status updates once the server confirms it."
                 />
-              ) : null}
-              {writeOffError ? <ThemedText style={styles.error}>{writeOffError}</ThemedText> : null}
-              {writeOffSaved ? <ThemedText style={{ color: Palette.success }}>{writeOffSaved}</ThemedText> : null}
-              <Pressable
-                style={[styles.buttonDanger, writeOffSubmitting && styles.buttonDisabled]}
-                onPress={handleWriteOff}
-                disabled={writeOffSubmitting}
-              >
-                {writeOffSubmitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <ThemedText style={styles.buttonText}>Write Off</ThemedText>
-                )}
-              </Pressable>
-            </View>
+              ) : (
+                <>
+                  <Input label="Reason" value={writeOffReason} onChangeText={setWriteOffReason} multiline placeholder="Why is this loan uncollectible?" />
+                  <Field label="Recover from savings first" optional>
+                    <SavingsAccountPicker customerId={data.customer_id} value={writeOffAccountId} onChange={setWriteOffAccountId} />
+                  </Field>
+                  {writeOffAccountId ? (
+                    <AmountInput size="md" label="Amount to take from savings" value={writeOffAmount} onChangeText={setWriteOffAmount} />
+                  ) : null}
+                  {writeOffError ? <Notice tone="danger" message={writeOffError} /> : null}
+                  <Button
+                    title="Write off loan"
+                    variant="destructive"
+                    icon="warning"
+                    loading={writeOffSubmitting}
+                    onPress={handleWriteOff}
+                  />
+                </>
+              )}
+            </Card>
           ) : null}
 
-          <ThemedText type="subtitle">Repayment Schedule</ThemedText>
+          <SectionHeader title={`Repayment schedule${installments.length ? ` · ${installments.length} instalments` : ''}`} />
         </View>
       }
-      ListEmptyComponent={<ThemedText style={styles.empty}>No schedule yet.</ThemedText>}
+      ListEmptyComponent={
+        <EmptyState icon="calendar" title="No schedule yet" hint="The repayment schedule is created when the loan is disbursed." />
+      }
     />
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    padding: 16,
-    gap: 6,
-    backgroundColor: '#ffffff',
-  },
-  installmentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  separator: { height: 1, backgroundColor: Palette.border },
-  input: {
-    borderWidth: 1,
-    borderColor: Palette.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: Palette.primary500,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  buttonDanger: {
-    backgroundColor: Palette.danger,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontWeight: '700' },
-  error: { color: Palette.danger },
-  empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
+  header: { padding: Spacing.three, gap: Spacing.three },
+  heroStats: { flexDirection: 'row', gap: Spacing.two },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  section: { gap: Spacing.three },
 });

@@ -1,10 +1,11 @@
 import { Redirect, Stack } from 'expo-router';
 
-import { Palette } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/stores/authStore';
 
 /** Staff experience (field agents; managers/admins reviewing on the go). */
 export default function AgentLayout() {
+  const theme = useTheme();
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
 
@@ -19,18 +20,21 @@ export default function AgentLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: Palette.primary500 },
-        headerTintColor: '#ffffff',
-        headerTitleStyle: { fontWeight: '600' },
+        headerStyle: { backgroundColor: theme.background },
+        headerTintColor: theme.text,
+        headerTitleStyle: { fontWeight: '600', color: theme.text },
+        headerShadowVisible: false,
+        headerBackButtonDisplayMode: 'minimal',
+        contentStyle: { backgroundColor: theme.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'OguaFinance' }} />
-      <Stack.Screen name="accounts" options={{ title: 'My Accounts' }} />
-      <Stack.Screen name="collect/[accountId]" options={{ title: 'Record Collection' }} />
+      <Stack.Screen name="index" options={{ title: 'Home', headerShown: false }} />
+      <Stack.Screen name="accounts" options={{ title: 'Collect' }} />
+      <Stack.Screen name="collect/[accountId]" options={{ title: 'Record Collection', gestureEnabled: true }} />
       <Stack.Screen name="register-customer" options={{ title: 'Register Customer' }} />
       <Stack.Screen name="open-account" options={{ title: 'Open Savings Account' }} />
-      <Stack.Screen name="day-close" options={{ title: 'Day Summary' }} />
-      <Stack.Screen name="sync" options={{ title: 'Sync Queue' }} />
+      <Stack.Screen name="day-close" options={{ title: 'Close My Day' }} />
+      <Stack.Screen name="sync" options={{ title: 'Sync Status' }} />
       <Stack.Screen name="payment-verify" options={{ title: 'Mobile Money Payment' }} />
       <Stack.Screen name="loans/index" options={{ title: 'Loans' }} />
       <Stack.Screen name="loans/[loanId]" options={{ title: 'Loan' }} />
