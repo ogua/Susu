@@ -96,7 +96,7 @@ class BuySharesAction
         });
     }
 
-    private function assertPurchasable(User $agent, SavingsAccount $account, int $shares): void
+    public function assertPurchasable(User $agent, SavingsAccount $account, int $shares): void
     {
         if ($account->product->type !== SavingsProductType::Shares) {
             throw ValidationException::withMessages(['account' => 'This account does not support share purchases.']);

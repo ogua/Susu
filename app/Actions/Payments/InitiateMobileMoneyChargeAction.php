@@ -42,6 +42,8 @@ class InitiateMobileMoneyChargeAction
             return $existing;
         }
 
+        $this->verify->assertCreditable($initiatedBy, $account, $amount);
+
         $account->loadMissing('company.paymentSetting');
         $paystack = $this->paystack->forCompany($account->company);
 

@@ -22,7 +22,10 @@ class InitializeCheckoutAction
 {
     use ResolvesCustomerEmail;
 
-    public function __construct(private PaystackClient $paystack) {}
+    public function __construct(
+        private PaystackClient $paystack,
+        private VerifyPaymentIntentAction $verify,
+    ) {}
 
     /**
      * @return array{intent: PaymentIntent, authorization_url: ?string}
@@ -42,6 +45,8 @@ class InitializeCheckoutAction
 
             return ['intent' => $existing, 'authorization_url' => $authorizationUrl];
         }
+
+        $this->verify->assertCreditable($initiatedBy, $account, $amount);
 
         $account->loadMissing('company.paymentSetting');
         $paystack = $this->paystack->forCompany($account->company);

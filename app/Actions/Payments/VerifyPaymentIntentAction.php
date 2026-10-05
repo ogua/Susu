@@ -10,6 +10,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\SavingsProductType;
 use App\Models\PaymentIntent;
 use App\Models\SavingsAccount;
+use App\Models\User;
 use App\Services\Payments\PaystackClient;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -42,6 +43,35 @@ class VerifyPaymentIntentAction
         return $this->complete($intent, PaymentIntentStatus::fromProviderStatus($data['status'] ?? 'pending'), $response);
     }
 
+    /**
+     * The same rules complete() applies when crediting the account, run
+     * before Paystack is contacted. Without this a payment the ledger would
+     * refuse (wrong amount, closed account, unassigned agent) was charged to
+     * the customer first and then never credited.
+     */
+    public function assertCreditable(User $initiatedBy, SavingsAccount $account, int $amount): void
+    {
+        $account->loadMissing(['product', 'customer']);
+
+        if ($account->product->type === SavingsProductType::Shares) {
+            $this->assertMultipleOfParValue($account, $amount);
+            $this->buyShares->assertPurchasable($initiatedBy, $account, intdiv($amount, $account->product->par_value));
+
+            return;
+        }
+
+        $this->recordCollection->assertRecordable($initiatedBy, $account, $amount);
+    }
+
+    private function assertMultipleOfParValue(SavingsAccount $account, int $amount): void
+    {
+        if ($amount <= 0 || $amount % $account->product->par_value !== 0) {
+            throw ValidationException::withMessages([
+                'amount' => 'Amount must be a positive multiple of the par value ('.$account->product->par_value.').',
+            ]);
+        }
+    }
+
     /** Applies an already-known outcome (e.g. from a webhook payload) without calling Paystack again. */
     public function complete(PaymentIntent $intent, PaymentIntentStatus $status, array $rawResponse): PaymentIntent
     {
@@ -64,11 +94,7 @@ class VerifyPaymentIntentAction
                 $account->loadMissing('product');
 
                 if ($account->product->type === SavingsProductType::Shares) {
-                    if ($locked->amount % $account->product->par_value !== 0) {
-                        throw ValidationException::withMessages([
-                            'amount' => 'Amount must be a positive multiple of the par value ('.$account->product->par_value.').',
-                        ]);
-                    }
+                    $this->assertMultipleOfParValue($account, $locked->amount);
 
                     $result = $this->buyShares->execute(
                         agent: $locked->initiatedBy,

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\AccountStatus;
 use App\Enums\PaymentIntentStatus;
 use App\Models\AgentDailySummary;
 use App\Models\Branch;
@@ -298,4 +299,68 @@ it('lists payment intents scoped to the caller company, for back-office roles on
         ->and($ids)->not->toContain($otherIntent->id);
 
     $this->actingAs($this->agent, 'sanctum')->getJson('/api/v1/payments')->assertForbidden();
+});
+
+it('refuses a momo charge the ledger would reject before Paystack charges the customer', function (): void {
+    Http::fake();
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/payments/charge', [
+        'savings_account_id' => $this->account->id,
+        'amount' => 100, // not a multiple of the 500 daily contribution
+        'phone' => '0244000111',
+        'provider' => 'mtn',
+    ])->assertUnprocessable()->assertJsonValidationErrors('amount');
+
+    Http::assertNothingSent();
+    expect(PaymentIntent::count())->toBe(0);
+});
+
+it('refuses a hosted checkout the ledger would reject before Paystack is called', function (): void {
+    Http::fake();
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/payments/initialize', [
+        'savings_account_id' => $this->account->id,
+        'amount' => 750,
+        'callback_url' => 'https://example.com/done',
+    ])->assertUnprocessable()->assertJsonValidationErrors('amount');
+
+    Http::assertNothingSent();
+    expect(PaymentIntent::count())->toBe(0);
+});
+
+it('refuses to charge for a closed account', function (): void {
+    Http::fake();
+    $this->account->forceFill(['status' => AccountStatus::Closed])->save();
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/payments/charge', [
+        'savings_account_id' => $this->account->id,
+        'amount' => 500,
+        'phone' => '0244000111',
+        'provider' => 'mtn',
+    ])->assertUnprocessable()->assertJsonValidationErrors('account');
+
+    Http::assertNothingSent();
+});
+
+it('refuses a shares charge that is not a multiple of the par value before charging', function (): void {
+    Http::fake();
+    $sharesProduct = SavingsProduct::factory()->shares(10_00)->create([
+        'company_id' => $this->branch->company_id,
+    ]);
+    $sharesAccount = SavingsAccount::factory()->create([
+        'branch_id' => $this->branch->id,
+        'company_id' => $this->branch->company_id,
+        'customer_id' => $this->customer->id,
+        'savings_product_id' => $sharesProduct->id,
+        'agent_id' => $this->agent->id,
+    ]);
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/payments/charge', [
+        'savings_account_id' => $sharesAccount->id,
+        'amount' => 15_00,
+        'phone' => '0244000111',
+        'provider' => 'mtn',
+    ])->assertUnprocessable()->assertJsonValidationErrors('amount');
+
+    Http::assertNothingSent();
 });

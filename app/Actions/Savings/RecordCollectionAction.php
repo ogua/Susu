@@ -147,7 +147,11 @@ class RecordCollectionAction
         });
     }
 
-    private function assertRecordable(User $agent, SavingsAccount $account, int $amount): void
+    /**
+     * Every rule a deposit must pass, exposed so mobile money flows can check
+     * before charging the customer rather than after the money has moved.
+     */
+    public function assertRecordable(User $agent, SavingsAccount $account, int $amount): void
     {
         if ($account->status === AccountStatus::Closed) {
             throw ValidationException::withMessages(['account' => 'This savings account is closed.']);
