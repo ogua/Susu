@@ -54,6 +54,9 @@ export function LoanApplicationForm({
   const [amount, setAmount] = useState('');
   const [guarantorName, setGuarantorName] = useState('');
   const [guarantorPhone, setGuarantorPhone] = useState('');
+  const [guarantorRelationship, setGuarantorRelationship] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [collaterals, setCollaterals] = useState<CollateralDraft[]>([]);
   const [eligible, setEligible] = useState<boolean | null>(null);
   const [reasons, setReasons] = useState<string[]>([]);
   const [checking, setChecking] = useState(false);
@@ -102,6 +105,10 @@ export function LoanApplicationForm({
     };
   }, [amountMinor, accountId]);
 
+  function updateCollateral(itemKey: string, patch: Partial<CollateralDraft>) {
+    setCollaterals((current) => current.map((item) => (item.key === itemKey ? { ...item, ...patch } : item)));
+  }
+
   async function handleSubmit() {
     if (submittingRef.current || submitted !== null) return;
     setError(null);
@@ -111,6 +118,11 @@ export function LoanApplicationForm({
     }
     if (!amountMinor) {
       setError('Enter the amount to borrow.');
+      return;
+    }
+    const filledCollaterals = collaterals.filter((item) => item.type.trim() || item.description.trim() || item.value);
+    if (filledCollaterals.some((item) => !item.type.trim() || !item.description.trim())) {
+      setError('Every collateral item needs a type and a description.');
       return;
     }
 
@@ -125,6 +137,23 @@ export function LoanApplicationForm({
         guarantor_name: guarantorName.trim() || undefined,
         guarantor_phone: guarantorPhone.trim() || undefined,
         client_reference: key,
+        purpose: purpose.trim() || undefined,
+        collaterals: filledCollaterals.length
+          ? filledCollaterals.map((item) => ({
+              type: item.type.trim(),
+              description: item.description.trim(),
+              estimated_value: parseAmountToMinor(item.value) ?? 0,
+            }))
+          : undefined,
+        guarantors: guarantorName.trim()
+          ? [
+              {
+                name: guarantorName.trim(),
+                phone: guarantorPhone.trim() || null,
+                relationship: guarantorRelationship.trim() || null,
+              },
+            ]
+          : undefined,
       });
       setSubmitted(amountMinor);
     } catch (err) {
@@ -236,12 +265,62 @@ export function LoanApplicationForm({
           </View>
           <Input label="Guarantor name" value={guarantorName} onChangeText={setGuarantorName} autoCapitalize="words" />
           <Input label="Guarantor phone" value={guarantorPhone} onChangeText={setGuarantorPhone} keyboardType="phone-pad" />
+          <Input label="Relationship to customer" value={guarantorRelationship} onChangeText={setGuarantorRelationship} autoCapitalize="words" />
+        </Card>
+      ) : null}
+
+      {withGuarantor ? (
+        <Card style={styles.section}>
+          <View>
+            <ThemedText type="heading">Purpose & collateral</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textMuted }}>
+              Optional — what the loan is for, and anything pledged against it.
+            </ThemedText>
+          </View>
+          <Input label="Loan purpose" value={purpose} onChangeText={setPurpose} />
+          {collaterals.map((item, index) => (
+            <View key={item.key} style={styles.collateral}>
+              <Input
+                label={`Collateral ${index + 1} type`}
+                placeholder="e.g. Vehicle, Land, Equipment"
+                value={item.type}
+                onChangeText={(text) => updateCollateral(item.key, { type: text })}
+              />
+              <Input
+                label="Description"
+                value={item.description}
+                onChangeText={(text) => updateCollateral(item.key, { description: text })}
+              />
+              <AmountInput
+                label="Estimated value"
+                size="md"
+                value={item.value}
+                onChangeText={(text) => updateCollateral(item.key, { value: text })}
+              />
+              <Button
+                title="Remove"
+                variant="secondary"
+                onPress={() => setCollaterals((current) => current.filter((existing) => existing.key !== item.key))}
+              />
+            </View>
+          ))}
+          <Button
+            title="Add collateral"
+            icon="add"
+            variant="secondary"
+            onPress={() =>
+              setCollaterals((current) => [...current, { key: `${Date.now()}-${current.length}`, type: '', description: '', value: '' }])
+            }
+          />
         </Card>
       ) : null}
     </Screen>
   );
 }
 
+type CollateralDraft = { key: string; type: string; description: string; value: string };
+
 const styles = StyleSheet.create({
   section: { gap: Spacing.three },
+  collateral: { gap: Spacing.two, paddingBottom: Spacing.two },
 });

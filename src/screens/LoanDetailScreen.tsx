@@ -21,6 +21,7 @@ import {
   HeroCard,
   HeroStat,
   Input,
+  KeyValueRow,
   LoadingState,
   Notice,
   SectionHeader,
@@ -203,6 +204,31 @@ export default function LoanDetailScreen() {
 
           {data.rejection_reason ? <Notice tone="danger" title="Application rejected" message={data.rejection_reason} /> : null}
           {data.write_off_reason ? <Notice tone="warning" title="Written off" message={data.write_off_reason} /> : null}
+
+          {data.purpose || data.first_repayment_date || data.charges?.length || data.collaterals?.length || data.guarantors?.length ? (
+            <Card style={styles.section}>
+              <ThemedText type="heading">Loan details</ThemedText>
+              {data.purpose ? <KeyValueRow label="Purpose" value={data.purpose} /> : null}
+              {data.first_repayment_date ? <KeyValueRow label="First repayment" value={data.first_repayment_date} /> : null}
+              {(data.charges ?? []).map((charge) => (
+                <KeyValueRow key={charge.id} label={`Charge · ${charge.name}`} value={formatMoney(charge.amount)} />
+              ))}
+              {(data.collaterals ?? []).map((collateral, index) => (
+                <KeyValueRow
+                  key={collateral.id ?? `collateral-${index}`}
+                  label={`Collateral · ${collateral.type}`}
+                  value={`${collateral.description}${collateral.estimated_value ? ` (${formatMoney(collateral.estimated_value)})` : ''}`}
+                />
+              ))}
+              {(data.guarantors ?? []).map((guarantor, index) => (
+                <KeyValueRow
+                  key={guarantor.id ?? `guarantor-${index}`}
+                  label="Guarantor"
+                  value={[guarantor.name, guarantor.relationship, guarantor.phone].filter(Boolean).join(' · ')}
+                />
+              ))}
+            </Card>
+          ) : null}
 
           {isStaff && data.status === 'disbursed' ? (
             <Card style={styles.section}>

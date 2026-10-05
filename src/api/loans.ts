@@ -1,5 +1,5 @@
 import { api } from '@/api/client';
-import type { Loan, LoanEligibility, LoanProduct, Paginated } from '@/types/api';
+import type { Loan, LoanCollateral, LoanEligibility, LoanGuarantor, LoanProduct, Paginated } from '@/types/api';
 
 export async function getLoanProducts(): Promise<LoanProduct[]> {
   const { data } = await api.get<{ data: LoanProduct[] }>('/loans/products');
@@ -36,6 +36,11 @@ export async function applyForLoan(payload: {
   guarantor_phone?: string;
   notes?: string;
   client_reference?: string;
+  // Loan application details (additive; staff-only server-side for term overrides).
+  purpose?: string;
+  first_repayment_date?: string;
+  collaterals?: LoanCollateral[];
+  guarantors?: LoanGuarantor[];
 }): Promise<Loan> {
   const { data } = await api.post<{ data: Loan }>('/loans', payload);
 
