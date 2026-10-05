@@ -3,10 +3,14 @@
 namespace App\Filament\Resources\Customers\Pages;
 
 use App\Enums\ClientType;
+use App\Enums\CustomerSegment;
 use App\Filament\Resources\Customers\CustomerResource;
+use App\Filament\Resources\Customers\Widgets\CustomerOverview;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\Tabs\Tab;
+use Illuminate\Database\Eloquent\Builder;
 
 class ListCustomers extends ListRecords
 {
@@ -26,5 +30,28 @@ class ListCustomers extends ListRecords
                     'client_type' => ClientType::Business->value,
                 ])),
         ];
+    }
+
+    protected function getHeaderWidgets(): array
+    {
+        return [CustomerOverview::class];
+    }
+
+    /**
+     * @return array<string, Tab>
+     */
+    public function getTabs(): array
+    {
+        $tabs = [];
+
+        foreach (CustomerSegment::cases() as $segment) {
+            $tabs[$segment->value] = Tab::make($segment->label())
+                ->modifyQueryUsing(fn (Builder $query): Builder => $segment->apply($query))
+                ->badge(fn (): int => $segment->apply(CustomerResource::getEloquentQuery())->count())
+                ->badgeColor($segment->color())
+                ->deferBadge();
+        }
+
+        return $tabs;
     }
 }

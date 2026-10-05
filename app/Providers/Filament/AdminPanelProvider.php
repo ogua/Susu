@@ -62,6 +62,7 @@ class AdminPanelProvider extends PanelProvider
                 // FilamentInfoWidget::class,
             ])
             ->navigationGroups([
+                'Customers',
                 'Susu Groups',
                 'Loans',
                 'Savings',

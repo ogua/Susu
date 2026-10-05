@@ -14,6 +14,12 @@ class AddLoanGroupMemberAction
         if ($customer->company_id !== $loanGroup->company_id) {
             throw ValidationException::withMessages(['customer' => 'Customer not found in this company.']);
         }
+        if ($customer->branch_id !== $loanGroup->branch_id) {
+            throw ValidationException::withMessages(['customer' => 'Only customers of the group\'s branch can join it — transfer the customer first.']);
+        }
+        if (! $loanGroup->is_active) {
+            throw ValidationException::withMessages(['customer' => 'This group is deactivated.']);
+        }
         if ($loanGroup->members()->where('customer_id', $customer->id)->where('status', 'active')->exists()) {
             throw ValidationException::withMessages(['customer' => 'This customer is already a member of the loan group.']);
         }

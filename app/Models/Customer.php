@@ -161,6 +161,31 @@ class Customer extends Model
         return $this->belongsTo(User::class, 'assigned_agent_id');
     }
 
+    public function loans(): HasMany
+    {
+        return $this->hasMany(Loan::class);
+    }
+
+    public function groupLoans(): HasMany
+    {
+        return $this->hasMany(GroupLoan::class);
+    }
+
+    public function loanGroupMemberships(): HasMany
+    {
+        return $this->hasMany(LoanGroupMember::class);
+    }
+
+    public function groupMemberships(): HasMany
+    {
+        return $this->hasMany(GroupMember::class);
+    }
+
+    public function withdrawalRequests(): HasMany
+    {
+        return $this->hasMany(WithdrawalRequest::class);
+    }
+
     public function fullName(): string
     {
         return trim($this->first_name.' '.$this->last_name);

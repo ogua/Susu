@@ -50,6 +50,17 @@ class CustomerPolicy
         return $this->sameCompany($user, $customer) && $user->hasRole(['company_admin', 'branch_manager']);
     }
 
+    /** Moving a customer between branches is a back-office decision. */
+    public function transfer(User $user, Customer $customer): bool
+    {
+        return $this->sameCompany($user, $customer) && $user->hasRole(['company_admin', 'branch_manager']);
+    }
+
+    public function assignAgent(User $user, Customer $customer): bool
+    {
+        return $this->sameCompany($user, $customer) && $user->hasRole(['company_admin', 'branch_manager']);
+    }
+
     private function sameCompany(User $user, Customer $customer): bool
     {
         return $user->company_id === $customer->company_id;
