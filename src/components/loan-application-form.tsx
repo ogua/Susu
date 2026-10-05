@@ -22,6 +22,7 @@ import { Spacing } from '@/constants/theme';
 import { useIdempotencyKey } from '@/hooks/use-idempotency-key';
 import { useTheme } from '@/hooks/use-theme';
 import type { SavingsAccount } from '@/types/api';
+import { isValidIsoDate, maskDateInput } from '@/utils/format';
 import { displayFormatted, formatMoney, parseAmountToMinor } from '@/utils/money';
 
 /**
@@ -56,6 +57,7 @@ export function LoanApplicationForm({
   const [guarantorPhone, setGuarantorPhone] = useState('');
   const [guarantorRelationship, setGuarantorRelationship] = useState('');
   const [purpose, setPurpose] = useState('');
+  const [firstRepaymentDate, setFirstRepaymentDate] = useState('');
   const [collaterals, setCollaterals] = useState<CollateralDraft[]>([]);
   const [eligible, setEligible] = useState<boolean | null>(null);
   const [reasons, setReasons] = useState<string[]>([]);
@@ -120,6 +122,11 @@ export function LoanApplicationForm({
       setError('Enter the amount to borrow.');
       return;
     }
+    const firstDate = firstRepaymentDate.trim();
+    if (firstDate && (!isValidIsoDate(firstDate) || firstDate < new Date().toISOString().slice(0, 10))) {
+      setError('Use a first repayment date from today on, e.g. ' + new Date().toISOString().slice(0, 10) + '.');
+      return;
+    }
     const filledCollaterals = collaterals.filter((item) => item.type.trim() || item.description.trim() || item.value);
     if (filledCollaterals.some((item) => !item.type.trim() || !item.description.trim())) {
       setError('Every collateral item needs a type and a description.');
@@ -138,6 +145,7 @@ export function LoanApplicationForm({
         guarantor_phone: guarantorPhone.trim() || undefined,
         client_reference: key,
         purpose: purpose.trim() || undefined,
+        first_repayment_date: firstDate || undefined,
         collaterals: filledCollaterals.length
           ? filledCollaterals.map((item) => ({
               type: item.type.trim(),
@@ -278,6 +286,14 @@ export function LoanApplicationForm({
             </ThemedText>
           </View>
           <Input label="Loan purpose" value={purpose} onChangeText={setPurpose} />
+          <Input
+            label="First repayment date (optional)"
+            value={firstRepaymentDate}
+            onChangeText={(text) => setFirstRepaymentDate(maskDateInput(text))}
+            placeholder="YYYY-MM-DD"
+            keyboardType="number-pad"
+            maxLength={10}
+          />
           {collaterals.map((item, index) => (
             <View key={item.key} style={styles.collateral}>
               <Input
