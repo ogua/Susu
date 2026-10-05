@@ -48,6 +48,8 @@ export default function AgentLayout() {
       <Stack.Screen name="group-loans/[groupLoanId]" options={{ title: 'Group Loan' }} />
       <Stack.Screen name="group-loans/apply" options={{ title: 'Apply for Group Loan' }} />
       <Stack.Screen name="collection-sheet" options={{ title: 'Collection Sheet' }} />
+      <Stack.Screen name="loan-groups/index" options={{ title: 'Customer Groups' }} />
+      <Stack.Screen name="loan-groups/[loanGroupId]" options={{ title: 'Customer Group' }} />
     </Stack>
   );
 }

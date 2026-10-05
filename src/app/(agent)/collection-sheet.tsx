@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -38,7 +39,9 @@ const MY_SHEET = 'mine';
  * syncs later — each op is idempotent on its op_id.
  */
 export default function CollectionSheetScreen() {
-  const [groupId, setGroupId] = useState<string>(MY_SHEET);
+  // Opened from a group page → start on that group.
+  const params = useLocalSearchParams<{ groupId?: string }>();
+  const [groupId, setGroupId] = useState<string>(params.groupId ?? MY_SHEET);
   // Only what the agent typed; untouched rows fall back to what's due.
   const [edits, setEdits] = useState<Record<string, Partial<Entry>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});

@@ -44,6 +44,7 @@ const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; manage
   { label: 'Close my day', hint: 'Declare cash', icon: 'dayClose', href: '/(agent)/day-close' },
   { label: 'Loans', hint: 'Repayments', icon: 'loan', href: '/(agent)/loans' },
   { label: 'Susu groups', hint: 'Contributions', icon: 'group', href: '/(agent)/groups' },
+  { label: 'Customer groups', hint: 'Totals & history', icon: 'group', href: '/(agent)/loan-groups' as Href },
   { label: 'Group loans', hint: 'Deposits & repay', icon: 'savings', href: '/(agent)/group-loans' },
   { label: 'Sync status', hint: 'Saved records', icon: 'sync', href: '/(agent)/sync' },
 ];
