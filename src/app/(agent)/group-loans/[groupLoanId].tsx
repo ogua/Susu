@@ -6,25 +6,34 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } f
 import { apiErrorMessage } from '@/api/client';
 import {
   activateGroupLoan,
-  applyGroupLoanDeposit,
   getGroupLoan,
   recordGroupLoanDeposit,
   recordGroupLoanRepayment,
+  writeOffGroupLoan,
 } from '@/api/groupLoans';
+import { SavingsAccountPicker } from '@/components/savings-account-picker';
 import { ThemedText } from '@/components/themed-text';
+import { useAuthStore } from '@/stores/authStore';
 import type { GroupLoanInstallment } from '@/types/api';
 import { Palette } from '@/constants/theme';
 
 /**
- * Per-member group loan: draft -> record deposit -> activate -> repayments,
- * with an "apply deposit to balance" option. No approve/reject step — the
- * group loan feature has no maker-checker.
+ * Per-member group loan: draft -> record deposit (into a chosen savings
+ * account) -> activate -> repayments, with a manager-tier write-off option
+ * that can optionally draw down the member's savings first. No approve/
+ * reject step — the group loan feature has no maker-checker.
  */
 export default function GroupLoanDetailScreen() {
   const { groupLoanId } = useLocalSearchParams<{ groupLoanId: string }>();
   const queryClient = useQueryClient();
+  const role = useAuthStore((state) => state.user?.role);
+  const isManager = role === 'branch_manager' || role === 'company_admin';
 
   const [amount, setAmount] = useState('');
+  const [depositAccountId, setDepositAccountId] = useState<string | null>(null);
+  const [writeOffReason, setWriteOffReason] = useState('');
+  const [writeOffAccountId, setWriteOffAccountId] = useState<string | null>(null);
+  const [writeOffAmount, setWriteOffAmount] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +49,9 @@ export default function GroupLoanDetailScreen() {
     try {
       await fn();
       setAmount('');
+      setWriteOffReason('');
+      setWriteOffAccountId(null);
+      setWriteOffAmount('');
       await queryClient.invalidateQueries({ queryKey: ['groupLoan', groupLoanId] });
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -107,10 +119,19 @@ export default function GroupLoanDetailScreen() {
             <View style={styles.card}>
               <ThemedText type="subtitle">Record Security Deposit</ThemedText>
               <ThemedText type="small">Due: {data.security_deposit_amount_formatted}</ThemedText>
+              <ThemedText type="small">Deposit into:</ThemedText>
+              <SavingsAccountPicker
+                customerId={data.customer_id}
+                value={depositAccountId}
+                onChange={setDepositAccountId}
+              />
               <Pressable
                 style={[styles.button, busy && styles.buttonDisabled]}
                 disabled={!!busy}
-                onPress={() => run('deposit', () => recordGroupLoanDeposit(data.id, data.security_deposit_amount))}
+                onPress={() => {
+                  if (!depositAccountId) return setError('Select a savings account to deposit into.');
+                  run('deposit', () => recordGroupLoanDeposit(data.id, data.security_deposit_amount, depositAccountId));
+                }}
               >
                 {busy === 'deposit' ? (
                   <ActivityIndicator color="#fff" />
@@ -163,20 +184,54 @@ export default function GroupLoanDetailScreen() {
                   <ThemedText style={styles.buttonText}>Record Repayment</ThemedText>
                 )}
               </Pressable>
+            </View>
+          ) : null}
 
-              {data.deposit_status === 'held' ? (
-                <Pressable
-                  style={[styles.buttonSecondary, busy && styles.buttonDisabled]}
-                  disabled={!!busy}
-                  onPress={() => run('applyDeposit', () => applyGroupLoanDeposit(data.id))}
-                >
-                  {busy === 'applyDeposit' ? (
-                    <ActivityIndicator color={Palette.primary500} />
-                  ) : (
-                    <ThemedText style={styles.buttonSecondaryText}>Apply deposit to balance</ThemedText>
-                  )}
-                </Pressable>
+          {data.status === 'active' && isManager ? (
+            <View style={styles.card}>
+              <ThemedText type="subtitle">Write Off Loan</ThemedText>
+              <ThemedText type="small">
+                Permanently closes the loan and recognizes the remaining balance as a loss. This cannot be undone.
+              </ThemedText>
+              <TextInput
+                style={styles.input}
+                value={writeOffReason}
+                onChangeText={setWriteOffReason}
+                placeholder="Reason"
+                multiline
+              />
+              <ThemedText type="small">Apply savings first (optional):</ThemedText>
+              <SavingsAccountPicker
+                customerId={data.customer_id}
+                value={writeOffAccountId}
+                onChange={setWriteOffAccountId}
+              />
+              {writeOffAccountId ? (
+                <TextInput
+                  style={styles.input}
+                  keyboardType="decimal-pad"
+                  value={writeOffAmount}
+                  onChangeText={setWriteOffAmount}
+                  placeholder="Amount to apply (GHS)"
+                />
               ) : null}
+              <Pressable
+                style={[styles.buttonDanger, busy && styles.buttonDisabled]}
+                disabled={!!busy}
+                onPress={() => {
+                  if (!writeOffReason.trim()) return setError('Enter a reason for the write-off.');
+                  const savingsApplied = writeOffAccountId ? Math.round(Number(writeOffAmount || '0') * 100) : undefined;
+                  run('writeOff', () =>
+                    writeOffGroupLoan(data.id, writeOffReason.trim(), writeOffAccountId ?? undefined, savingsApplied),
+                  );
+                }}
+              >
+                {busy === 'writeOff' ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.buttonText}>Write Off</ThemedText>
+                )}
+              </Pressable>
             </View>
           ) : null}
 
@@ -214,16 +269,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  buttonSecondary: {
-    borderWidth: 1,
-    borderColor: Palette.primary500,
+  buttonDanger: {
+    backgroundColor: Palette.danger,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#ffffff', fontWeight: '700' },
-  buttonSecondaryText: { color: Palette.primary500, fontWeight: '700' },
   error: { color: Palette.danger },
   empty: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
 });

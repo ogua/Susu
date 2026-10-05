@@ -32,16 +32,16 @@ export async function issueGroupMemberLoan(payload: {
   return data.data;
 }
 
-/** Record the member paying in their agreed security deposit (in minor units). */
-export async function recordGroupLoanDeposit(groupLoanId: string, amount: number): Promise<GroupLoan> {
-  const { data } = await api.post<{ group_loan: GroupLoan }>(`/group-loans/${groupLoanId}/deposit`, { amount });
-
-  return data.group_loan;
-}
-
-/** Apply the held deposit against the outstanding balance (non-cash); excess is refunded. */
-export async function applyGroupLoanDeposit(groupLoanId: string): Promise<GroupLoan> {
-  const { data } = await api.post<{ group_loan: GroupLoan }>(`/group-loans/${groupLoanId}/apply-deposit`, {});
+/** Record the member paying in their agreed security deposit (in minor units), crediting it into the given savings account. */
+export async function recordGroupLoanDeposit(
+  groupLoanId: string,
+  amount: number,
+  savingsAccountId: string,
+): Promise<GroupLoan> {
+  const { data } = await api.post<{ group_loan: GroupLoan }>(`/group-loans/${groupLoanId}/deposit`, {
+    amount,
+    savings_account_id: savingsAccountId,
+  });
 
   return data.group_loan;
 }
@@ -60,9 +60,21 @@ export async function recordGroupLoanRepayment(groupLoanId: string, amount: numb
   return data.group_loan;
 }
 
-/** Manager-tier: declare the remaining balance uncollectible. */
-export async function writeOffGroupLoan(groupLoanId: string, reason: string): Promise<GroupLoan> {
-  const { data } = await api.post<{ data: GroupLoan }>(`/group-loans/${groupLoanId}/write-off`, { reason });
+/**
+ * Manager-tier: declare the remaining balance uncollectible. Optionally draws
+ * a chosen amount down from one of the member's savings accounts first —
+ * only the residual after that is booked as a loss.
+ */
+export async function writeOffGroupLoan(
+  groupLoanId: string,
+  reason: string,
+  savingsAccountId?: string,
+  savingsAmountApplied?: number,
+): Promise<GroupLoan> {
+  const { data } = await api.post<{ data: GroupLoan }>(`/group-loans/${groupLoanId}/write-off`, {
+    reason,
+    ...(savingsAccountId ? { savings_account_id: savingsAccountId, savings_amount_applied: savingsAmountApplied ?? 0 } : {}),
+  });
 
   return data.data;
 }

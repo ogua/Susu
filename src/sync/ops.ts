@@ -68,3 +68,17 @@ interface LocationPingPayload {
 export async function enqueueLocationPings(pings: LocationPingPayload[]): Promise<string> {
   return enqueue('locations.record', { pings });
 }
+
+/**
+ * Individual loan write-off has no direct HTTP route on the backend — it's
+ * sync-only. Optionally draws a chosen amount down from one of the
+ * customer's savings accounts first; only the residual is booked as a loss.
+ */
+export async function enqueueLoanWriteOff(payload: {
+  loan_id: string;
+  reason: string;
+  savings_account_id?: string;
+  savings_amount_applied?: number;
+}): Promise<string> {
+  return enqueue('loan.write_off', payload);
+}

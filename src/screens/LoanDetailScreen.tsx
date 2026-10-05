@@ -5,26 +5,39 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } f
 
 import { apiErrorMessage } from '@/api/client';
 import { getLoan, recordLoanRepayment } from '@/api/loans';
+import { SavingsAccountPicker } from '@/components/savings-account-picker';
 import { ThemedText } from '@/components/themed-text';
 import { useAuthStore } from '@/stores/authStore';
+import { drainOutbox } from '@/sync/engine';
+import { enqueueLoanWriteOff } from '@/sync/ops';
 import type { LoanInstallment } from '@/types/api';
 import { Palette } from '@/constants/theme';
 
 /**
  * Shared by the agent and customer loan-detail routes — only the "Record
- * Repayment" section differs (staff-only, mirrors the API's role gating),
- * decided here by the signed-in user's role rather than two near-duplicate
- * screens.
+ * Repayment" and "Write Off" sections differ (staff/manager-tier, mirrors
+ * the API's role gating), decided here by the signed-in user's role rather
+ * than two near-duplicate screens. Write-off has no direct HTTP route on the
+ * backend (sync-batch only), so it goes through the offline outbox even
+ * when online — the drain happens immediately after queueing.
  */
 export default function LoanDetailScreen() {
   const { loanId } = useLocalSearchParams<{ loanId: string }>();
   const role = useAuthStore((state) => state.user?.role);
   const isStaff = role === 'field_agent' || role === 'branch_manager' || role === 'company_admin';
+  const isManager = role === 'branch_manager' || role === 'company_admin';
   const queryClient = useQueryClient();
 
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [writeOffReason, setWriteOffReason] = useState('');
+  const [writeOffAccountId, setWriteOffAccountId] = useState<string | null>(null);
+  const [writeOffAmount, setWriteOffAmount] = useState('');
+  const [writeOffSubmitting, setWriteOffSubmitting] = useState(false);
+  const [writeOffError, setWriteOffError] = useState<string | null>(null);
+  const [writeOffSaved, setWriteOffSaved] = useState<string | null>(null);
 
   const loan = useQuery({
     queryKey: ['loan', loanId],
@@ -49,6 +62,35 @@ export default function LoanDetailScreen() {
       setError(apiErrorMessage(err));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleWriteOff() {
+    setWriteOffError(null);
+    if (!writeOffReason.trim()) {
+      setWriteOffError('Enter a reason for the write-off.');
+      return;
+    }
+
+    setWriteOffSubmitting(true);
+    try {
+      await enqueueLoanWriteOff({
+        loan_id: loanId,
+        reason: writeOffReason.trim(),
+        savings_account_id: writeOffAccountId ?? undefined,
+        savings_amount_applied: writeOffAccountId ? Math.round(Number(writeOffAmount || '0') * 100) : undefined,
+      });
+
+      setWriteOffReason('');
+      setWriteOffAccountId(null);
+      setWriteOffAmount('');
+      setWriteOffSaved('Write-off saved. It will sync automatically.');
+      // Fire-and-forget: don't block on network: this is an offline-capable op.
+      void drainOutbox().then(() => queryClient.invalidateQueries({ queryKey: ['loan', loanId] }));
+    } catch {
+      setWriteOffError('Could not save the write-off locally. Please try again.');
+    } finally {
+      setWriteOffSubmitting(false);
     }
   }
 
@@ -128,6 +170,50 @@ export default function LoanDetailScreen() {
             </View>
           ) : null}
 
+          {isManager && data.status === 'disbursed' ? (
+            <View style={styles.card}>
+              <ThemedText type="subtitle">Write Off Loan</ThemedText>
+              <ThemedText type="small">
+                Permanently closes the loan and recognizes the remaining balance as a loss. This cannot be undone.
+              </ThemedText>
+              <TextInput
+                style={styles.input}
+                value={writeOffReason}
+                onChangeText={setWriteOffReason}
+                placeholder="Reason"
+                multiline
+              />
+              <ThemedText type="small">Apply savings first (optional):</ThemedText>
+              <SavingsAccountPicker
+                customerId={data.customer_id}
+                value={writeOffAccountId}
+                onChange={setWriteOffAccountId}
+              />
+              {writeOffAccountId ? (
+                <TextInput
+                  style={styles.input}
+                  keyboardType="decimal-pad"
+                  value={writeOffAmount}
+                  onChangeText={setWriteOffAmount}
+                  placeholder="Amount to apply (GHS)"
+                />
+              ) : null}
+              {writeOffError ? <ThemedText style={styles.error}>{writeOffError}</ThemedText> : null}
+              {writeOffSaved ? <ThemedText style={{ color: Palette.success }}>{writeOffSaved}</ThemedText> : null}
+              <Pressable
+                style={[styles.buttonDanger, writeOffSubmitting && styles.buttonDisabled]}
+                onPress={handleWriteOff}
+                disabled={writeOffSubmitting}
+              >
+                {writeOffSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.buttonText}>Write Off</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+
           <ThemedText type="subtitle">Repayment Schedule</ThemedText>
         </View>
       }
@@ -158,6 +244,12 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: Palette.primary500,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  buttonDanger: {
+    backgroundColor: Palette.danger,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',

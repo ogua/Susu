@@ -239,6 +239,11 @@ export interface Loan {
   approved_at: string | null;
   disbursed_at: string | null;
   closed_at: string | null;
+  written_off_at: string | null;
+  write_off_reason: string | null;
+  write_off_amount: number | null;
+  write_off_savings_account_id: string | null;
+  write_off_savings_applied: number | null;
 }
 
 export interface LoanEligibility {
@@ -254,7 +259,7 @@ export interface LoanEligibility {
  */
 export type GroupLoanStatus = 'draft' | 'active' | 'closed' | 'written_off';
 
-export type GroupLoanDepositStatus = 'pending' | 'held' | 'settled';
+export type GroupLoanDepositStatus = 'pending' | 'held';
 
 export type RepaymentFrequency = 'daily' | 'weekly' | 'monthly';
 
@@ -300,6 +305,10 @@ export interface GroupLoan {
   activated_at: string | null;
   closed_at: string | null;
   written_off_at: string | null;
+  write_off_reason: string | null;
+  write_off_amount: number | null;
+  write_off_savings_account_id: string | null;
+  write_off_savings_applied: number | null;
 }
 
 export interface LoanGroupMember {
