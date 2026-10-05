@@ -27,6 +27,9 @@ it('creates a pending sale and returns the Paystack authorization url', function
     expect($result['sale']->status)->toBe(LicenseSaleStatus::Pending)
         ->and($result['sale']->install_id)->toBe('install-abc')
         ->and($result['sale']->amount)->toBe(config('license.price'))
+        // SUSULIC- lets oguapaymentwebhook (the shared Paystack webhook
+        // gateway) route this sale's webhook to this project's license endpoint.
+        ->and($result['sale']->provider_reference)->toStartWith('SUSULIC-')
         ->and($result['authorization_url'])->toBe('https://checkout.paystack.com/abc123');
 });
 

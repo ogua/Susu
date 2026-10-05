@@ -26,7 +26,12 @@ class InitiateLicenseCheckoutAction
         ?string $customerPhone,
         string $callbackUrl,
     ): array {
-        $reference = (string) Str::uuid();
+        // SUSULIC- (not SUSU-, kept distinct so oguapaymentwebhook can route
+        // license-sale webhooks to this project's separate license endpoint,
+        // deliberately kept apart from the money-movement susu flow) routes
+        // this webhook through oguapaymentwebhook, the one URL shared by
+        // every Ogua project.
+        $reference = 'SUSULIC-'.Str::uuid();
 
         $sale = DesktopLicenseSale::create([
             'install_id' => $installId,

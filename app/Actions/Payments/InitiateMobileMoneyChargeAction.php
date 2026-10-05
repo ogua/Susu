@@ -55,16 +55,27 @@ class InitiateMobileMoneyChargeAction
             'client_reference' => $clientReference,
         ]);
 
+        // SUSU- routes this webhook through oguapaymentwebhook, the one URL
+        // shared by every Ogua project. Applied only to what Paystack sees —
+        // client_reference (the caller's own idempotency key) stays as given.
+        $providerReference = 'SUSU-'.$clientReference;
+
         $response = $this->paystack->chargeMobileMoney(
             email: $this->emailFor($account, $initiatedBy),
             amountMinorUnits: $amount,
-            reference: $clientReference,
+            reference: $providerReference,
             phone: $phone,
             provider: $provider,
         );
 
         $data = $response['data'] ?? [];
-        $intent->forceFill(['provider_reference' => $data['reference'] ?? $clientReference])->save();
+
+        // Always $providerReference, not $data['reference'] — we told
+        // Paystack exactly what reference to use, so trust that over
+        // whatever comes back (Paystack echoes it verbatim in practice, but
+        // falling back to a returned value here would silently drop the
+        // SUSU- prefix the gateway depends on if it ever didn't).
+        $intent->forceFill(['provider_reference' => $providerReference])->save();
 
         // Routed through the same complete() the webhook/verify race uses:
         // Paystack occasionally returns an immediate 'success' on the charge

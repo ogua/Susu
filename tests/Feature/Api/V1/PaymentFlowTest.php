@@ -61,6 +61,10 @@ it('initiates a charge, gets pay_offline, then verify posts the collection once 
     $charge->assertCreated()->assertJsonPath('intent.status', 'pay_offline');
     $intentId = $charge->json('intent.id');
 
+    // SUSU- lets oguapaymentwebhook (the shared Paystack webhook gateway)
+    // route this charge's webhook to this project.
+    expect(PaymentIntent::find($intentId)->provider_reference)->toStartWith('SUSU-');
+
     $verify = $this->actingAs($this->agent, 'sanctum')->postJson("/api/v1/payments/{$intentId}/verify");
 
     $verify->assertOk()->assertJsonPath('intent.status', 'success');

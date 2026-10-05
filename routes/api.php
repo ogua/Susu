@@ -19,3 +19,17 @@ Route::post('/webhooks/paystack', PaystackWebhookController::class)
 Route::post('/webhooks/paystack/license', LicenseWebhookController::class)
     ->middleware('paystack.signature')
     ->name('webhooks.paystack.license');
+
+// Reached via oguapaymentwebhook — the shared gateway holding the one
+// webhook URL Paystack allows across all Ogua projects — once Paystack's
+// dashboard is pointed at it instead of the direct routes above. Feed the
+// same controllers; paystack.signature still verifies the (relayed,
+// unchanged) original Paystack signature, and verify.gateway.signature
+// additionally requires the forward to have actually come from the gateway.
+Route::post('/webhooks/paystack/gateway', PaystackWebhookController::class)
+    ->middleware(['verify.gateway.signature', 'paystack.signature'])
+    ->name('webhooks.paystack.gateway');
+
+Route::post('/webhooks/paystack/license/gateway', LicenseWebhookController::class)
+    ->middleware(['verify.gateway.signature', 'paystack.signature'])
+    ->name('webhooks.paystack.license.gateway');

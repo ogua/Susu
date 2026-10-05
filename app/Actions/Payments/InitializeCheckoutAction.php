@@ -54,17 +54,27 @@ class InitializeCheckoutAction
             'client_reference' => $clientReference,
         ]);
 
+        // SUSU- routes this webhook through oguapaymentwebhook, the one URL
+        // shared by every Ogua project. Applied only to what Paystack sees —
+        // client_reference (the caller's own idempotency key) stays as given.
+        $providerReference = 'SUSU-'.$clientReference;
+
         $response = $this->paystack->initializeTransaction(
             $this->emailFor($account, $initiatedBy),
             $amount,
-            $clientReference,
+            $providerReference,
             $callbackUrl,
         );
         $data = $response['data'] ?? [];
 
         $intent->forceFill([
             'status' => $data['authorization_url'] ?? null ? PaymentIntentStatus::Pending : PaymentIntentStatus::Failed,
-            'provider_reference' => $data['reference'] ?? $clientReference,
+            // Always $providerReference, not $data['reference'] — we told
+            // Paystack exactly what reference to use, so trust that over
+            // whatever comes back (Paystack echoes it verbatim in practice,
+            // but falling back to a returned value here would silently drop
+            // the SUSU- prefix the gateway depends on if it ever didn't).
+            'provider_reference' => $providerReference,
             'raw_response' => $response,
         ])->save();
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\VerifyGatewaySignature;
 use App\Http\Middleware\VerifyPaystackSignature;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
             'paystack.signature' => VerifyPaystackSignature::class,
+            'verify.gateway.signature' => VerifyGatewaySignature::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

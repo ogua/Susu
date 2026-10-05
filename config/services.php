@@ -42,6 +42,24 @@ return [
     ],
 
     /*
+    |--------------------------------------------------------------------------
+    | Payment Webhook Gateway
+    |--------------------------------------------------------------------------
+    |
+    | oguapaymentwebhook is the single URL Paystack is configured to call for
+    | every project sharing this Paystack account. It forwards events for
+    | this project (susu references prefixed "SUSU-", license references
+    | prefixed "SUSULIC-") to the internal endpoints below, signing each
+    | forward with this secret so the endpoint can tell a real forward from
+    | an arbitrary caller. Must match the SUSU_WEBHOOK_FORWARD_SECRET /
+    | SUSULIC_WEBHOOK_FORWARD_SECRET configured on the gateway.
+    |
+    */
+    'webhook_gateway' => [
+        'forward_secret' => env('WEBHOOK_GATEWAY_FORWARD_SECRET'),
+    ],
+
+    /*
      * Platform-level SMS (no Company context), used for scenarios like
      * license-key delivery where the recipient isn't a company's customer.
      * Separate from company_sms_settings (App\Services\Sms\SmsService::send()),
