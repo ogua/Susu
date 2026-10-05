@@ -83,7 +83,7 @@ class SmsService
     {
         return match ($provider) {
             'log' => new LogSmsDriver,
-            'arkesel' => new ArkeselSmsDriver((string) $apiKey, (string) config('services.arkesel.base_url', 'https://sms.arkesel.com')),
+            'arkesel' => new ArkeselSmsDriver((string) $apiKey, (string) config('services.arkesel.base_url', 'https://sms.oguaschoolz.com')),
             default => throw new InvalidArgumentException(
                 "SMS provider '{$provider}' is not implemented yet."
             ),

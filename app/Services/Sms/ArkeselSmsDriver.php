@@ -15,7 +15,7 @@ class ArkeselSmsDriver implements SmsDriver
 {
     public function __construct(
         private string $apiKey,
-        private string $baseUrl = 'https://sms.arkesel.com',
+        private string $baseUrl = 'https://sms.oguaschoolz.com',
     ) {}
 
     public function send(string $to, string $body, ?string $senderId = null): ?string

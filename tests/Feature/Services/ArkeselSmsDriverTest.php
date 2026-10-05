@@ -8,7 +8,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
-    config(['services.arkesel.base_url' => 'https://sms.arkesel.com']);
+    config(['services.arkesel.base_url' => 'https://sms.oguaschoolz.com']);
 
     $this->company = Company::factory()->create();
     CompanySmsSetting::create([
@@ -23,7 +23,7 @@ beforeEach(function (): void {
 });
 
 it('sends through Arkesel with the company key and sender ID', function (): void {
-    Http::fake(['https://sms.arkesel.com/api/v2/sms/send' => Http::response([
+    Http::fake(['https://sms.oguaschoolz.com/api/v2/sms/send' => Http::response([
         'status' => 'success',
         'data' => [['recipient' => '233244000111', 'id' => 'msg-123']],
     ])]);
@@ -38,7 +38,7 @@ it('sends through Arkesel with the company key and sender ID', function (): void
 });
 
 it('throws when Arkesel reports a failure', function (): void {
-    Http::fake(['https://sms.arkesel.com/*' => Http::response(['status' => 'error', 'message' => 'Insufficient balance'], 200)]);
+    Http::fake(['https://sms.oguaschoolz.com/*' => Http::response(['status' => 'error', 'message' => 'Insufficient balance'], 200)]);
 
     app(SmsService::class)->send($this->company, '0244000111', 'Hello');
 })->throws(RuntimeException::class, 'Insufficient balance');

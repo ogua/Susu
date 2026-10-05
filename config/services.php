@@ -77,7 +77,7 @@ return [
      * Arkesel endpoint can be swapped in here.
      */
     'arkesel' => [
-        'base_url' => env('ARKESEL_BASE_URL', 'https://sms.arkesel.com'),
+        'base_url' => env('ARKESEL_BASE_URL', 'https://sms.oguaschoolz.com'),
     ],
 
 ];
