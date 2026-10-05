@@ -207,7 +207,7 @@ export default function CollectionSheetScreen() {
       ) : sheet.isError ? (
         <ErrorState title="Couldn't load the sheet" hint="The sheet needs a connection to load. Queued entries still sync later." onRetry={() => void sheet.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState icon="checkCircle" title="Nobody is due" hint="Pick a group to see all its members, or check back tomorrow." />
+        <EmptyState icon="checkCircle" title="Nobody is due" hint="Pick a group to see your members in it, or check back tomorrow." />
       ) : (
         rows.map((row) => (
           <Card key={row.key} style={styles.card}>
