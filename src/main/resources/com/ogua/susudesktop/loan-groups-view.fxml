@@ -48,6 +48,8 @@
             <Button fx:id="toggleActiveButton" onAction="#onToggleActive" styleClass="button-secondary" text="Deactivate/Reactivate"/>
             <Button fx:id="enterTransactionButton" onAction="#onEnterTransaction" styleClass="button-primary" text="Enter Transaction"/>
             <Button fx:id="historyButton" onAction="#onShowHistory" styleClass="button-secondary" text="History"/>
+            <Button fx:id="issueGroupLoanButton" onAction="#onIssueGroupLoan" styleClass="button-secondary" text="Issue Loan to Group"/>
+            <Button fx:id="openGroupSavingsButton" onAction="#onOpenGroupSavings" styleClass="button-secondary" text="Open Savings for Group"/>
         </HBox>
         <Label fx:id="summaryLabel" styleClass="text-muted" wrapText="true" text="Select a group to see its totals."/>
         <TableView fx:id="table" prefHeight="220" styleClass="table-view" VBox.vgrow="ALWAYS">

@@ -35,7 +35,84 @@ public class LoanGroupInsightsService {
 
     public record PostResult(int repaymentsCount, long repaymentsTotal, int depositsCount, long depositsTotal) {}
 
+    /** Ids created, plus "member name: reason" for every member skipped. */
+    public record BulkResult(List<String> created, List<String> skipped) {}
+
     private final GroupLoanService groupLoanService = new GroupLoanService();
+    private final LoanGroupService loanGroupService = new LoanGroupService();
+    private final SavingsAccountService savingsAccountService = new SavingsAccountService();
+    private final SavingsProductService savingsProductService = new SavingsProductService();
+
+    /**
+     * "Apply a loan to the group": the same terms to every active member, one
+     * draft loan each — parity port of IssueLoansToGroupAction. Members who
+     * can't take one (e.g. an open loan) are skipped, not fatal. Each issue
+     * queues its own group_loan.issue outbox op.
+     */
+    public BulkResult issueLoansToGroup(String agentId, String loanGroupId, long principal, long securityDeposit,
+                                        long periodicAmount, enums.LoanFrequency frequency, LocalDate startDate,
+                                        String notes) throws SQLException {
+        List<models.LoanGroupMember> members = loanGroupService.findMembers(loanGroupId).stream()
+                .filter(member -> "active".equals(member.getStatus()))
+                .toList();
+        if (members.isEmpty()) {
+            throw new IllegalArgumentException("The group has no active members to issue loans to.");
+        }
+
+        List<String> created = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+        for (models.LoanGroupMember member : members) {
+            try {
+                created.add(groupLoanService.issue(agentId, loanGroupId, member.getCustomerId(), principal, securityDeposit,
+                        periodicAmount, frequency, startDate, notes, null).getId());
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                skipped.add(memberName(member) + ": " + e.getMessage());
+            }
+        }
+        return new BulkResult(created, skipped);
+    }
+
+    /**
+     * "Apply a saving to the group": a daily-susu account for every active
+     * member who lacks one on this product — parity port of
+     * OpenSavingsForGroupAction. Each open queues its own account.open op.
+     */
+    public BulkResult openSavingsForGroup(String agentId, String loanGroupId, String savingsProductId,
+                                          Long contributionAmount) throws SQLException {
+        models.SavingsProduct product = savingsProductService.findActive().stream()
+                .filter(candidate -> candidate.getId().equals(savingsProductId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("This savings product is not available."));
+        if (!"daily_susu".equals(product.getType())) {
+            throw new IllegalArgumentException("Only daily susu products can be opened for a whole group — target and"
+                    + " fixed deposits need per-member amounts and dates.");
+        }
+
+        List<String> created = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+        for (models.LoanGroupMember member : loanGroupService.findMembers(loanGroupId)) {
+            if (!"active".equals(member.getStatus())) {
+                continue;
+            }
+            boolean hasOne = savingsAccountService.findByCustomer(member.getCustomerId()).stream()
+                    .anyMatch(account -> savingsProductId.equals(account.getSavingsProductId())
+                            && account.getStatus() == enums.AccountStatus.ACTIVE);
+            if (hasOne) {
+                skipped.add(memberName(member) + ": already has this account.");
+                continue;
+            }
+            try {
+                created.add(savingsAccountService.open(member.getCustomerId(), savingsProductId, agentId, contributionAmount).getId());
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                skipped.add(memberName(member) + ": " + e.getMessage());
+            }
+        }
+        return new BulkResult(created, skipped);
+    }
+
+    private static String memberName(models.LoanGroupMember member) {
+        return member.getCustomer() != null ? member.getCustomer().fullName() : member.getCustomerId();
+    }
     private final CollectionService collectionService = new CollectionService();
 
     public Summary summary(String loanGroupId) throws SQLException {

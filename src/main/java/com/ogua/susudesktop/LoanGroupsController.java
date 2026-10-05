@@ -1,27 +1,34 @@
 package com.ogua.susudesktop;
 
 import db.SessionManager;
+import enums.LoanFrequency;
 import java.time.LocalDate;
 import java.util.List;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.GridPane;
 import models.Customer;
 import models.LoanGroup;
 import models.LoanGroupMember;
+import models.SavingsProduct;
 import service.CustomerService;
 import service.LoanGroupInsightsService;
 import service.LoanGroupService;
+import service.SavingsProductService;
 import support.Money;
 
 /**
@@ -51,6 +58,8 @@ public class LoanGroupsController {
     @FXML private Button removeMemberButton;
     @FXML private Button enterTransactionButton;
     @FXML private Button historyButton;
+    @FXML private Button issueGroupLoanButton;
+    @FXML private Button openGroupSavingsButton;
     @FXML private Label summaryLabel;
 
     @FXML private TableView<LoanGroupMember> membersTable;
@@ -61,6 +70,7 @@ public class LoanGroupsController {
     private final LoanGroupService loanGroupService = new LoanGroupService();
     private final CustomerService customerService = new CustomerService();
     private final LoanGroupInsightsService insightsService = new LoanGroupInsightsService();
+    private final SavingsProductService savingsProductService = new SavingsProductService();
 
     @FXML
     private void initialize() {
@@ -108,6 +118,164 @@ public class LoanGroupsController {
         removeMemberButton.setDisable(true);
         enterTransactionButton.setDisable(selected == null || !selected.isActive());
         historyButton.setDisable(selected == null);
+        boolean manager = isManager();
+        issueGroupLoanButton.setVisible(manager);
+        issueGroupLoanButton.setManaged(manager);
+        openGroupSavingsButton.setVisible(manager);
+        openGroupSavingsButton.setManaged(manager);
+        issueGroupLoanButton.setDisable(selected == null || !selected.isActive());
+        openGroupSavingsButton.setDisable(selected == null || !selected.isActive());
+    }
+
+    /** Group-wide loans/savings are manager-tier, matching LoanGroupPolicy::update on the backend. */
+    private boolean isManager() {
+        var user = SessionManager.getCurrentUser();
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+        String role = user.getRole().toLowerCase();
+        return role.equals("company_admin") || role.equals("branch_manager");
+    }
+
+    @FXML
+    private void onIssueGroupLoan() {
+        LoanGroup group = table.getSelectionModel().getSelectedItem();
+        if (group == null) {
+            return;
+        }
+
+        Dialog<Object[]> dialog = new Dialog<>();
+        dialog.setTitle("Issue Loan to Group");
+        dialog.setHeaderText(group.getName() + " — the same terms go to every active member without an open loan."
+                + " Each loan then goes through deposit → activation as usual.");
+        ButtonType issueType = new ButtonType("Issue Loans", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(issueType, ButtonType.CANCEL);
+
+        TextField principalField = new TextField();
+        TextField depositField = new TextField("0");
+        TextField periodicField = new TextField();
+        ComboBox<LoanFrequency> frequencyCombo = new ComboBox<>(FXCollections.observableArrayList(LoanFrequency.values()));
+        frequencyCombo.setValue(LoanFrequency.WEEKLY);
+        DatePicker startPicker = new DatePicker(LocalDate.now());
+        TextField notesField = new TextField();
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(10));
+        grid.addRow(0, new Label("Loan amount per member (GHS):"), principalField);
+        grid.addRow(1, new Label("Security deposit (GHS):"), depositField);
+        grid.addRow(2, new Label("Amount to be paid each period (GHS):"), periodicField);
+        grid.addRow(3, new Label("Frequency:"), frequencyCombo);
+        grid.addRow(4, new Label("First payment date:"), startPicker);
+        grid.addRow(5, new Label("Notes:"), notesField);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType != issueType) {
+                return null;
+            }
+            try {
+                return new Object[] {Money.toMinorUnits(principalField.getText()), Money.toMinorUnits(depositField.getText().isBlank() ? "0" : depositField.getText()),
+                        Money.toMinorUnits(periodicField.getText()), frequencyCombo.getValue(), startPicker.getValue(),
+                        notesField.getText().isBlank() ? null : notesField.getText().trim()};
+            } catch (Exception e) {
+                return null;
+            }
+        });
+
+        dialog.showAndWait().ifPresent(values -> {
+            String agentId = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+            runBulk("Issuing loans…", "loan(s) issued", () -> insightsService.issueLoansToGroup(agentId, group.getId(),
+                    (long) values[0], (long) values[1], (long) values[2], (LoanFrequency) values[3], (LocalDate) values[4],
+                    (String) values[5]), group);
+        });
+    }
+
+    @FXML
+    private void onOpenGroupSavings() {
+        LoanGroup group = table.getSelectionModel().getSelectedItem();
+        if (group == null) {
+            return;
+        }
+        Task<List<SavingsProduct>> load = new Task<>() {
+            @Override
+            protected List<SavingsProduct> call() throws Exception {
+                return savingsProductService.findActive().stream().filter(product -> "daily_susu".equals(product.getType())).toList();
+            }
+        };
+        load.setOnSucceeded(event -> {
+            Dialog<Object[]> dialog = new Dialog<>();
+            dialog.setTitle("Open Savings for Group");
+            dialog.setHeaderText(group.getName() + " — opens an account on this product for every active member who"
+                    + " doesn't already have one.");
+            ButtonType openType = new ButtonType("Open Accounts", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(openType, ButtonType.CANCEL);
+
+            ComboBox<SavingsProduct> productCombo = new ComboBox<>(FXCollections.observableArrayList(load.getValue()));
+            productCombo.setConverter(new javafx.util.StringConverter<>() {
+                @Override public String toString(SavingsProduct product) { return product == null ? "" : product.getName(); }
+                @Override public SavingsProduct fromString(String string) { return null; }
+            });
+            productCombo.getSelectionModel().selectFirst();
+            TextField contributionField = new TextField();
+            contributionField.setPromptText("Product default");
+
+            GridPane grid = new GridPane();
+            grid.setHgap(8);
+            grid.setVgap(8);
+            grid.setPadding(new Insets(10));
+            grid.addRow(0, new Label("Savings product:"), productCombo);
+            grid.addRow(1, new Label("Daily contribution (GHS):"), contributionField);
+            dialog.getDialogPane().setContent(grid);
+
+            dialog.setResultConverter(buttonType -> {
+                if (buttonType != openType || productCombo.getValue() == null) {
+                    return null;
+                }
+                try {
+                    Long contribution = contributionField.getText().isBlank() ? null : Money.toMinorUnits(contributionField.getText());
+                    return new Object[] {productCombo.getValue().getId(), contribution};
+                } catch (Exception e) {
+                    return null;
+                }
+            });
+
+            dialog.showAndWait().ifPresent(values -> {
+                String agentId = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
+                runBulk("Opening accounts…", "account(s) opened",
+                        () -> insightsService.openSavingsForGroup(agentId, group.getId(), (String) values[0], (Long) values[1]), group);
+            });
+        });
+        load.setOnFailed(event -> statusLabel.setText("Could not load savings products: " + load.getException().getMessage()));
+        new Thread(load, "group-savings-products").start();
+    }
+
+    private void runBulk(String progress, String doneLabel, BulkAction action, LoanGroup group) {
+        statusLabel.setText(progress);
+        Task<LoanGroupInsightsService.BulkResult> task = new Task<>() {
+            @Override
+            protected LoanGroupInsightsService.BulkResult call() throws Exception {
+                return action.run();
+            }
+        };
+        task.setOnSucceeded(event -> {
+            statusLabel.setText("");
+            LoanGroupInsightsService.BulkResult result = task.getValue();
+            Alert alert = new Alert(result.skipped().isEmpty() ? Alert.AlertType.INFORMATION : Alert.AlertType.WARNING,
+                    result.skipped().isEmpty() ? "" : result.skipped().size() + " skipped:\n" + String.join("\n", result.skipped()));
+            alert.setHeaderText(result.created().size() + " " + doneLabel);
+            alert.showAndWait();
+            loadMembers(group);
+            loadSummary(group);
+        });
+        task.setOnFailed(event -> statusLabel.setText(task.getException().getMessage()));
+        new Thread(task, "loan-group-bulk").start();
+    }
+
+    @FunctionalInterface
+    private interface BulkAction {
+        LoanGroupInsightsService.BulkResult run() throws Exception;
     }
 
     /** Disbursed / paid / outstanding / overdue for the selected group (BuildLoanGroupSummaryAction parity). */

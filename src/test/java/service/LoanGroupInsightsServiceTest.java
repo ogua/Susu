@@ -67,6 +67,29 @@ class LoanGroupInsightsServiceTest {
     }
 
     @Test
+    void issuesLoansAndOpensSavingsForTheWholeGroup() throws Exception {
+        LoanGroup group = loanGroups.create("Bulk Group", "LGRP-BLK", "setup");
+        Customer yaw = newCustomer("Yaw");
+        Customer efua = newCustomer("Efua");
+        loanGroups.addMember(group.getId(), yaw.getId());
+        loanGroups.addMember(group.getId(), efua.getId());
+        String productId = products.getOrCreateDefault().getId();
+        accounts.open(yaw.getId(), productId, AGENT_ID, null);
+
+        LoanGroupInsightsService.BulkResult savings = insights.openSavingsForGroup(AGENT_ID, group.getId(), productId, null);
+        assertEquals(1, savings.created().size());
+        assertEquals(1, savings.skipped().size());
+
+        LoanGroupInsightsService.BulkResult first = insights.issueLoansToGroup(AGENT_ID, group.getId(), 500_00, 0, 50_00,
+                LoanFrequency.WEEKLY, LocalDate.now(), null);
+        LoanGroupInsightsService.BulkResult second = insights.issueLoansToGroup(AGENT_ID, group.getId(), 500_00, 0, 50_00,
+                LoanFrequency.WEEKLY, LocalDate.now(), null);
+        assertEquals(2, first.created().size());
+        assertTrue(second.created().isEmpty());
+        assertEquals(2, second.skipped().size());
+    }
+
+    @Test
     void summarisesBuildsHistoryAndPostsASheet() throws Exception {
         LoanGroup group = loanGroups.create("Insights Group", "LGRP-INS", "setup");
         Customer ama = newCustomer("Ama");
