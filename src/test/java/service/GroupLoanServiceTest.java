@@ -304,6 +304,17 @@ class GroupLoanServiceTest {
     }
 
     @Test
+    void refusesASecondLoanWhileTheFirstIsStillADraft() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-190");
+        Customer customer = newCustomer("Akua", "Darko");
+        GroupLoan draft = issue(group, customer, 1000_00, 100_00, 100_00);
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> issue(group, customer, 500_00, 50_00, 50_00));
+        assertTrue(refused.getMessage().contains(draft.getLoanNumber()));
+    }
+
+    @Test
     void usesTheClientReferenceAsTheGroupLoanId() throws Exception {
         LoanGroup group = newLoanGroup("LGRP-114");
         String ref = UUID.randomUUID().toString();

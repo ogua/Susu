@@ -81,8 +81,12 @@ public class GroupLoanService {
         }
 
         LoanGroupMember member = resolveMember(loanGroupId, customerId);
-        if (hasActiveLoan(member.getId())) {
-            throw new IllegalStateException("This member already has an active loan in the group.");
+        GroupLoan openLoan = findOpenLoan(member.getId());
+        if (openLoan != null) {
+            throw new IllegalStateException(openLoan.getStatus() == GroupLoanStatus.DRAFT
+                    ? "This member already has loan " + openLoan.getLoanNumber()
+                            + " awaiting its security deposit and activation."
+                    : "This member already has an active loan in the group.");
         }
 
         int totalPeriods = scheduleGenerator.periodCount(principal, periodicAmount);
@@ -475,16 +479,26 @@ public class GroupLoanService {
         return loanGroupService.addMember(loanGroupId, customerId);
     }
 
-    private boolean hasActiveLoan(String loanGroupMemberId) throws SQLException {
+    /**
+     * The member's in-flight loan — a draft still awaiting its deposit/activation,
+     * or an active loan — or null when a new loan may be issued (mirrors the server).
+     */
+    private GroupLoan findOpenLoan(String loanGroupMemberId) throws SQLException {
+        String id;
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT 1 FROM group_loans WHERE loan_group_member_id = ? AND status = ?")) {
+                     "SELECT id FROM group_loans WHERE loan_group_member_id = ? AND status IN (?, ?) LIMIT 1")) {
             ps.setString(1, loanGroupMemberId);
-            ps.setString(2, GroupLoanStatus.ACTIVE.value());
+            ps.setString(2, GroupLoanStatus.DRAFT.value());
+            ps.setString(3, GroupLoanStatus.ACTIVE.value());
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+                if (!rs.next()) {
+                    return null;
+                }
+                id = rs.getString("id");
             }
         }
+        return findById(id);
     }
 
     /** Loads a savings account and rejects one that isn't the borrower's own. Call outside any open connection. */
