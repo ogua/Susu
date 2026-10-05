@@ -53,6 +53,8 @@ public class Loan {
     private Instant writtenOffAt;
     private String writeOffReason;
     private Long writeOffAmount;
+    private String writeOffSavingsAccountId;
+    private Long writeOffSavingsApplied;
 
     /** Populated by list/detail queries via a join; not always present. */
     private Customer customer;
@@ -172,6 +174,12 @@ public class Loan {
 
     public Long getWriteOffAmount() { return writeOffAmount; }
     public void setWriteOffAmount(Long writeOffAmount) { this.writeOffAmount = writeOffAmount; }
+
+    public String getWriteOffSavingsAccountId() { return writeOffSavingsAccountId; }
+    public void setWriteOffSavingsAccountId(String writeOffSavingsAccountId) { this.writeOffSavingsAccountId = writeOffSavingsAccountId; }
+
+    public Long getWriteOffSavingsApplied() { return writeOffSavingsApplied; }
+    public void setWriteOffSavingsApplied(Long writeOffSavingsApplied) { this.writeOffSavingsApplied = writeOffSavingsApplied; }
 
     public Customer getCustomer() { return customer; }
     public void setCustomer(Customer customer) { this.customer = customer; }

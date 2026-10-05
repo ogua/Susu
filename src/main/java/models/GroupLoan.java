@@ -9,9 +9,10 @@ import java.util.List;
 
 /**
  * One loan issued to a single member of a loan group. The member enters a
- * total principal, a refundable security deposit, and the amount they pay
- * each period; the schedule is spread from that periodic amount at
- * activation. No product, no interest, no equal-split-across-members.
+ * total principal, a security deposit (paid into one of their savings
+ * accounts), and the amount they pay each period; the schedule is spread
+ * from that periodic amount at activation. No product, no interest, no
+ * equal-split-across-members.
  */
 public class GroupLoan {
 
@@ -22,7 +23,6 @@ public class GroupLoan {
     private String agentId;
     private String activatedBy;
     private String receivableAccountId;
-    private String depositLiabilityAccountId;
 
     private String loanNumber;
 
@@ -45,6 +45,8 @@ public class GroupLoan {
     private Instant writtenOffAt;
     private String writeOffReason;
     private Long writeOffAmount;
+    private String writeOffSavingsAccountId;
+    private Long writeOffSavingsApplied;
 
     /** Populated by list/detail queries via a join; not always present. */
     private LoanGroup loanGroup;
@@ -74,8 +76,6 @@ public class GroupLoan {
     public String getReceivableAccountId() { return receivableAccountId; }
     public void setReceivableAccountId(String receivableAccountId) { this.receivableAccountId = receivableAccountId; }
 
-    public String getDepositLiabilityAccountId() { return depositLiabilityAccountId; }
-    public void setDepositLiabilityAccountId(String depositLiabilityAccountId) { this.depositLiabilityAccountId = depositLiabilityAccountId; }
 
     public String getLoanNumber() { return loanNumber; }
     public void setLoanNumber(String loanNumber) { this.loanNumber = loanNumber; }
@@ -130,6 +130,12 @@ public class GroupLoan {
 
     public Long getWriteOffAmount() { return writeOffAmount; }
     public void setWriteOffAmount(Long writeOffAmount) { this.writeOffAmount = writeOffAmount; }
+
+    public String getWriteOffSavingsAccountId() { return writeOffSavingsAccountId; }
+    public void setWriteOffSavingsAccountId(String writeOffSavingsAccountId) { this.writeOffSavingsAccountId = writeOffSavingsAccountId; }
+
+    public Long getWriteOffSavingsApplied() { return writeOffSavingsApplied; }
+    public void setWriteOffSavingsApplied(Long writeOffSavingsApplied) { this.writeOffSavingsApplied = writeOffSavingsApplied; }
 
     public LoanGroup getLoanGroup() { return loanGroup; }
     public void setLoanGroup(LoanGroup loanGroup) { this.loanGroup = loanGroup; }

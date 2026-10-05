@@ -405,12 +405,42 @@ public class LoanService {
      * only closes an existing loan rather than minting a new one.
      */
     public Loan writeOff(String loanId, String writtenOffBy, String reason) throws SQLException {
+        return writeOff(loanId, writtenOffBy, reason, null, 0);
+    }
+
+    /**
+     * As {@link #writeOff(String, String, String)}, but first applies an
+     * amount of the borrower's own savings against the receivable (Dr savings
+     * liability / Cr receivable), so only the residual principal is booked as
+     * bad debt. Capped at the principal still on the receivable — savings
+     * can't settle interest that was never recognized as income.
+     */
+    public Loan writeOff(String loanId, String writtenOffBy, String reason, String savingsAccountId,
+                         long savingsAmountApplied) throws SQLException {
         Loan loan = requireStatus(loanId, LoanStatus.DISBURSED, "written off");
         if (loan.getOutstandingBalance() <= 0) {
             throw new IllegalStateException("This loan has no outstanding balance to write off.");
         }
 
         long writeOffAmount = loan.getOutstandingBalance();
+        long applied = 0;
+
+        if (savingsAccountId != null && savingsAmountApplied > 0) {
+            SavingsAccount account = accountService.findById(savingsAccountId);
+            if (account == null || !account.getCustomerId().equals(loan.getCustomerId())) {
+                throw new IllegalArgumentException("This savings account does not belong to the borrower.");
+            }
+            if (savingsAmountApplied > accountBalance(loan.getReceivableAccountId())) {
+                throw new IllegalArgumentException("Cannot apply more than the outstanding principal.");
+            }
+            // Must run before the principal read below: this posting already credits
+            // the receivable, so the re-read yields the reduced residual.
+            accountService.applyToLoanReceivable(savingsAccountId, loan.getReceivableAccountId(),
+                    savingsAmountApplied, writtenOffBy, TransactionType.SAVINGS_APPLIED_TO_LOAN_WRITE_OFF,
+                    "Savings applied to write-off " + loan.getLoanNumber());
+            applied = savingsAmountApplied;
+        }
+
         long principalOutstanding = accountBalance(loan.getReceivableAccountId());
 
         if (principalOutstanding > 0) {
@@ -425,22 +455,31 @@ public class LoanService {
                     .description("Loan write-off " + loan.getLoanNumber()));
         }
 
+        String appliedAccountId = applied > 0 ? savingsAccountId : null;
+
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "UPDATE loans SET status = ?, outstanding_balance = 0, written_off_at = ?, write_off_reason = ?,"
-                     + " write_off_amount = ?, approved_by = ?, updated_at = ? WHERE id = ?")) {
+                     + " write_off_amount = ?, write_off_savings_account_id = ?, write_off_savings_applied = ?,"
+                     + " approved_by = ?, updated_at = ? WHERE id = ?")) {
             String now = Instant.now().toString();
             ps.setString(1, LoanStatus.WRITTEN_OFF.value());
             ps.setString(2, now);
             ps.setString(3, reason);
             ps.setLong(4, writeOffAmount);
-            ps.setString(5, writtenOffBy);
-            ps.setString(6, now);
-            ps.setString(7, loanId);
+            ps.setString(5, appliedAccountId);
+            ps.setLong(6, applied);
+            ps.setString(7, writtenOffBy);
+            ps.setString(8, now);
+            ps.setString(9, loanId);
             ps.executeUpdate();
         }
 
-        outbox.enqueueIfHybrid("loan.write_off", new JSONObject().put("loan_id", loanId).put("reason", reason));
+        JSONObject payload = new JSONObject().put("loan_id", loanId).put("reason", reason);
+        if (appliedAccountId != null) {
+            payload.put("savings_account_id", appliedAccountId).put("savings_amount_applied", applied);
+        }
+        outbox.enqueueIfHybrid("loan.write_off", payload);
 
         return findById(loanId);
     }
@@ -900,6 +939,9 @@ public class LoanService {
         loan.setWriteOffReason(rs.getString("write_off_reason"));
         long writeOffAmount = rs.getLong("write_off_amount");
         loan.setWriteOffAmount(rs.wasNull() ? null : writeOffAmount);
+        loan.setWriteOffSavingsAccountId(rs.getString("write_off_savings_account_id"));
+        long writeOffSavingsApplied = rs.getLong("write_off_savings_applied");
+        loan.setWriteOffSavingsApplied(rs.wasNull() ? null : writeOffSavingsApplied);
         return loan;
     }
 

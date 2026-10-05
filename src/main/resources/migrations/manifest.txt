@@ -12,3 +12,4 @@ V009__loan_refinancing.sql
 V010__loan_write_off.sql
 V011__fixed_deposit_and_shares_savings.sql
 V012__group_loan_redesign.sql
+V013__deposits_into_savings.sql

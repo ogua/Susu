@@ -333,6 +333,7 @@ class LoanServiceTest {
         Loan disbursed = loans.disburse(applied.getId(), MANAGER_ID);
         long outstandingBeforeWriteOff = disbursed.getOutstandingBalance();
         long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+        long badDebtBefore = badDebtBalance();
 
         Loan writtenOff = loans.writeOff(disbursed.getId(), MANAGER_ID, "Borrower absconded");
 
@@ -342,9 +343,79 @@ class LoanServiceTest {
         assertEquals("Borrower absconded", writtenOff.getWriteOffReason());
         assertNotNull(writtenOff.getWrittenOffAt());
         assertEquals(0, findLedgerAccountById(writtenOff.getReceivableAccountId()).getBalance());
+        assertEquals(badDebtBefore + principalOutstanding, badDebtBalance());
+    }
 
-        var badDebtExpense = findLedgerAccountByCode("5100-BADDEBT");
-        assertEquals(principalOutstanding, badDebtExpense.getBalance());
+    @Test
+    void writeOffAppliesChosenSavingsThenBadDebtsOnlyTheResidualPrincipal() throws Exception {
+        Customer customer = newCustomer("Akosua", "Boakye");
+        SavingsAccount account = fundedAccount(customer, 300_00);
+        Loan disbursed = disbursedLoan(customer, 300_00);
+        long outstandingBeforeWriteOff = disbursed.getOutstandingBalance();
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+        long savingsBefore = accounts.findById(account.getId()).getBalance();
+        long badDebtBefore = badDebtBalance();
+
+        Loan writtenOff = loans.writeOff(disbursed.getId(), MANAGER_ID, "Absconded", account.getId(), 100_00);
+
+        assertEquals(LoanStatus.WRITTEN_OFF, writtenOff.getStatus());
+        assertEquals(outstandingBeforeWriteOff, writtenOff.getWriteOffAmount()); // full loss snapshot, unchanged
+        assertEquals(account.getId(), writtenOff.getWriteOffSavingsAccountId());
+        assertEquals(100_00, (long) writtenOff.getWriteOffSavingsApplied());
+        assertEquals(savingsBefore - 100_00, accounts.findById(account.getId()).getBalance());
+        assertEquals(0, findLedgerAccountById(writtenOff.getReceivableAccountId()).getBalance());
+        assertEquals(badDebtBefore + principalOutstanding - 100_00, badDebtBalance());
+    }
+
+    @Test
+    void writeOffRefusesToApplySavingsBeyondTheOutstandingPrincipal() throws Exception {
+        Customer customer = newCustomer("Fiifi", "Arthur");
+        SavingsAccount account = fundedAccount(customer, 600_00);
+        Loan disbursed = disbursedLoan(customer, 300_00);
+        long principalOutstanding = findLedgerAccountById(disbursed.getReceivableAccountId()).getBalance();
+        long savingsBefore = accounts.findById(account.getId()).getBalance();
+        // Above the principal on the receivable, but still within outstanding_balance (which includes interest).
+        long request = principalOutstanding + 1_00;
+        assertTrue(request <= disbursed.getOutstandingBalance());
+        assertTrue(request <= savingsBefore);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> loans.writeOff(disbursed.getId(), MANAGER_ID, "Absconded", account.getId(), request));
+        assertEquals(LoanStatus.DISBURSED, loans.findById(disbursed.getId()).getStatus());
+        assertEquals(savingsBefore, accounts.findById(account.getId()).getBalance());
+    }
+
+    @Test
+    void writeOffRejectsASavingsAccountThatIsNotTheBorrowers() throws Exception {
+        Customer borrower = newCustomer("Nana", "Yeboah");
+        SavingsAccount someoneElses = fundedAccount(newCustomer("Kobby", "Mensah"), 300_00);
+        Loan disbursed = disbursedLoan(borrower, 300_00);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> loans.writeOff(disbursed.getId(), MANAGER_ID, "Absconded", someoneElses.getId(), 100_00));
+    }
+
+    private Loan disbursedLoan(Customer customer, long principal) throws Exception {
+        LoanProduct product = loanProducts.getOrCreateDefault();
+        Loan applied = loans.apply(AGENT_ID, customer.getId(), product.getId(), principal, null, null, null, null, null);
+        loans.approve(applied.getId(), MANAGER_ID);
+        return loans.disburse(applied.getId(), MANAGER_ID);
+    }
+
+    /** Opens an account (GHS 100 contribution) and funds it through real, ledger-backed collections. */
+    private SavingsAccount fundedAccount(Customer customer, long collected) throws Exception {
+        SavingsAccount account = accounts.open(customer.getId(), savingsProducts.getOrCreateDefault().getId(),
+                AGENT_ID, 100_00L);
+        new CollectionService().record(AGENT_ID, "Agent", account.getId(), collected, null, null);
+        return accounts.findById(account.getId());
+    }
+
+    private long badDebtBalance() throws Exception {
+        try (var conn = DatabaseConnection.getConnection();
+             var ps = conn.prepareStatement("SELECT balance FROM ledger_accounts WHERE code = '5100-BADDEBT'");
+             var rs = ps.executeQuery()) {
+            return rs.next() ? rs.getLong(1) : 0;
+        }
     }
 
     @Test

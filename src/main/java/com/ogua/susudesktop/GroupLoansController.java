@@ -22,18 +22,21 @@ import models.Customer;
 import models.GroupLoan;
 import models.GroupLoanInstallment;
 import models.LoanGroup;
+import models.SavingsAccount;
 import service.CustomerService;
 import service.GroupLoanRepaymentResult;
 import service.GroupLoanService;
 import service.LoanGroupService;
 import service.PeriodicScheduleGenerator;
+import service.SavingsAccountService;
 import support.Money;
 
 /**
  * Group loans — one loan per group member. Issue a loan (loan amount +
  * security deposit + a directly-entered periodic repayment amount), then
- * record the deposit, activate, take repayments, or apply the deposit against
- * the balance. Write-off is manager-tier. No approve/reject/disburse step.
+ * record the deposit into one of the member's savings accounts, activate, and
+ * take repayments. Write-off is manager-tier and can draw the member's savings
+ * down first. No approve/reject/disburse step.
  */
 public class GroupLoansController {
 
@@ -64,7 +67,6 @@ public class GroupLoansController {
     @FXML private Button depositButton;
     @FXML private Button activateButton;
     @FXML private Button repayButton;
-    @FXML private Button applyDepositButton;
     @FXML private Button writeOffButton;
 
     @FXML private TableView<GroupLoanInstallment> installmentsTable;
@@ -77,6 +79,7 @@ public class GroupLoansController {
     private final LoanGroupService loanGroupService = new LoanGroupService();
     private final CustomerService customerService = new CustomerService();
     private final GroupLoanService groupLoanService = new GroupLoanService();
+    private final SavingsAccountService savingsAccountService = new SavingsAccountService();
     private final PeriodicScheduleGenerator scheduleGenerator = new PeriodicScheduleGenerator();
 
     @FXML
@@ -153,12 +156,10 @@ public class GroupLoansController {
                 && selected.getStatus() == enums.GroupLoanStatus.DRAFT
                 && selected.getDepositStatus() == enums.DepositStatus.HELD;
         boolean active = selected != null && selected.getStatus() == enums.GroupLoanStatus.ACTIVE;
-        boolean depositHeld = active && selected.getDepositStatus() == enums.DepositStatus.HELD;
 
         depositButton.setDisable(!pendingDeposit);
         activateButton.setDisable(!readyToActivate);
         repayButton.setDisable(!active);
-        applyDepositButton.setDisable(!depositHeld);
         writeOffButton.setDisable(!canWriteOff() || !active);
     }
 
@@ -287,9 +288,20 @@ public class GroupLoansController {
         }
         String recordedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
         long amount = selected.getSecurityDepositAmount();
-        runAction("Recording deposit…",
-                () -> groupLoanService.recordDeposit(selected.getId(), amount, recordedBy, null, null),
-                "Could not record deposit");
+
+        withMemberAccounts(selected, accounts -> {
+            List<SavingsAccount> active = SavingsAccountDialogs.active(accounts);
+            if (active.isEmpty()) {
+                statusLabel.setText("This member has no savings accounts — open one first.");
+                return;
+            }
+            SavingsAccountDialogs.pickAccount(
+                    selected.getLoanNumber() + " — deposit due " + Money.format(amount), active)
+                    .ifPresent(account -> runAction("Recording deposit…",
+                            () -> groupLoanService.recordDeposit(selected.getId(), account.getId(), amount,
+                                    recordedBy, null, null),
+                            "Could not record deposit"));
+        });
     }
 
     @FXML
@@ -301,17 +313,6 @@ public class GroupLoansController {
         String activatedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
         runAction("Activating…", () -> groupLoanService.activate(selected.getId(), activatedBy),
                 "Could not activate loan");
-    }
-
-    @FXML
-    private void onApplyDeposit() {
-        GroupLoan selected = table.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            return;
-        }
-        String appliedBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-        runAction("Applying deposit…", () -> groupLoanService.applyDeposit(selected.getId(), appliedBy, null),
-                "Could not apply deposit");
     }
 
     @FXML
@@ -371,19 +372,29 @@ public class GroupLoansController {
             return;
         }
 
-        TextInputDialog dialog = new TextInputDialog();
-        dialog.setTitle("Write Off Group Loan");
-        dialog.setHeaderText(selected.getLoanNumber() + " — this permanently closes the loan and recognizes the"
-                + " remaining balance as a loss. This cannot be undone.");
-        dialog.setContentText("Reason:");
-        Optional<String> input = dialog.showAndWait();
-        if (input.isEmpty() || input.get().isBlank()) {
-            return;
-        }
-
         String writtenOffBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-        runAction("Writing off…", () -> groupLoanService.writeOff(selected.getId(), writtenOffBy, input.get().trim()),
-                "Could not write off loan");
+
+        withMemberAccounts(selected, accounts -> SavingsAccountDialogs.writeOff("Write Off Group Loan",
+                selected.getLoanNumber() + " — outstanding " + Money.format(selected.getOutstandingBalance())
+                        + ". This permanently closes the loan and recognizes the remaining balance as a loss."
+                        + " This cannot be undone.",
+                accounts)
+                .ifPresent(input -> runAction("Writing off…",
+                        () -> groupLoanService.writeOff(selected.getId(), writtenOffBy, input.reason(),
+                                input.savingsAccountId(), input.savingsAmountApplied()),
+                        "Could not write off loan")));
+    }
+
+    /** Loads the member's savings accounts off the FX thread, then hands them to {@code then} on it. */
+    private void withMemberAccounts(GroupLoan groupLoan, java.util.function.Consumer<List<SavingsAccount>> then) {
+        Task<List<SavingsAccount>> task = new Task<>() {
+            @Override protected List<SavingsAccount> call() throws Exception {
+                return savingsAccountService.findByCustomer(groupLoan.getCustomerId());
+            }
+        };
+        task.setOnSucceeded(e -> then.accept(task.getValue()));
+        task.setOnFailed(e -> statusLabel.setText("Could not load savings accounts: " + task.getException().getMessage()));
+        new Thread(task, "group-loan-savings-load").start();
     }
 
     private void runAction(String progress, GroupLoanAction action, String failureMessage) {

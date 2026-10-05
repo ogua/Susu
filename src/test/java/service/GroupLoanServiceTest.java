@@ -16,6 +16,7 @@ import models.Customer;
 import models.GroupLoan;
 import models.GroupLoanInstallment;
 import models.LoanGroup;
+import models.SavingsAccount;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -27,9 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * End-to-end run of the standalone-mode group loan engine: issue a per-member
- * loan, record its security deposit, activate it (schedule spread from the
- * periodic amount), repay it, apply the deposit against the balance, and
- * write it off. Mirrors tests/Feature/GroupLoans/GroupLoanLifecycleTest.php.
+ * loan, record its security deposit into the member's savings account,
+ * activate it (schedule spread from the periodic amount), repay it, and write
+ * it off (optionally drawing savings down first). Mirrors
+ * tests/Feature/GroupLoans/GroupLoanLifecycleTest.php.
  */
 class GroupLoanServiceTest {
 
@@ -37,6 +39,8 @@ class GroupLoanServiceTest {
     private final CustomerService customers = new CustomerService();
     private final LoanGroupService loanGroups = new LoanGroupService();
     private final GroupLoanService groupLoans = new GroupLoanService();
+    private final SavingsAccountService accounts = new SavingsAccountService();
+    private final SavingsProductService products = new SavingsProductService();
     private final LedgerService ledger = new LedgerService();
     private static final String AGENT_ID = "agent-1";
     private static final String MANAGER_ID = "manager-1";
@@ -75,9 +79,22 @@ class GroupLoanServiceTest {
                 LoanFrequency.WEEKLY, LocalDate.now(), null, null);
     }
 
+    /** The customer's first savings account, opened on demand. */
+    private SavingsAccount accountFor(String customerId) throws Exception {
+        List<SavingsAccount> existing = accounts.findByCustomer(customerId);
+        return existing.isEmpty()
+                ? accounts.open(customerId, products.getOrCreateDefault().getId(), AGENT_ID, null)
+                : existing.get(0);
+    }
+
     private GroupLoan activate(GroupLoan loan) throws Exception {
-        groupLoans.recordDeposit(loan.getId(), loan.getSecurityDepositAmount(), AGENT_ID, null, null);
+        groupLoans.recordDeposit(loan.getId(), accountFor(loan.getCustomerId()).getId(),
+                loan.getSecurityDepositAmount(), AGENT_ID, null, null);
         return groupLoans.activate(loan.getId(), AGENT_ID);
+    }
+
+    private long savingsLedgerBalance(SavingsAccount account) throws Exception {
+        return ledger.recomputeBalance(findLedgerAccountByCode("SAV-" + account.getAccountNumber()));
     }
 
     @Test
@@ -93,15 +110,27 @@ class GroupLoanServiceTest {
     }
 
     @Test
-    void recordsTheDepositAsAHeldLiability() throws Exception {
+    void recordsTheDepositIntoTheChosenSavingsAccount() throws Exception {
         LoanGroup group = newLoanGroup("LGRP-102");
         GroupLoan loan = issue(group, newCustomer("Kofi", "Owusu"), 1000_00, 100_00, 100_00);
+        SavingsAccount account = accountFor(loan.getCustomerId());
 
-        GroupLoan afterDeposit = groupLoans.recordDeposit(loan.getId(), 100_00, AGENT_ID, null, null);
+        GroupLoan afterDeposit = groupLoans.recordDeposit(loan.getId(), account.getId(), 100_00, AGENT_ID, null, null);
 
         assertEquals(DepositStatus.HELD, afterDeposit.getDepositStatus());
-        var depositAccount = findLedgerAccountByCode("GLDEP-" + loan.getLoanNumber());
-        assertEquals(100_00, ledger.recomputeBalance(depositAccount));
+        assertEquals(100_00, accounts.findById(account.getId()).getBalance());
+        assertEquals(100_00, savingsLedgerBalance(account));
+    }
+
+    @Test
+    void rejectsADepositIntoAnotherCustomersSavingsAccount() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-115");
+        GroupLoan loan = issue(group, newCustomer("Akua", "Frimpong"), 1000_00, 100_00, 100_00);
+        SavingsAccount someoneElses = accountFor(newCustomer("Kweku", "Ansah").getId());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> groupLoans.recordDeposit(loan.getId(), someoneElses.getId(), 100_00, AGENT_ID, null, null));
+        assertEquals(DepositStatus.PENDING, groupLoans.findById(loan.getId()).getDepositStatus());
     }
 
     @Test
@@ -144,18 +173,20 @@ class GroupLoanServiceTest {
     }
 
     @Test
-    void autoClosesAndRefundsTheStillHeldDepositWhenFullyRepaid() throws Exception {
+    void autoClosesWithoutTouchingSavingsWhenFullyRepaid() throws Exception {
         LoanGroup group = newLoanGroup("LGRP-106");
         GroupLoan active = activate(issue(group, newCustomer("Kojo", "Danso"), 1000_00, 100_00, 100_00));
+        SavingsAccount account = accountFor(active.getCustomerId());
+        long cashBefore = findLedgerAccountByCode("CASH-MAIN").getBalance();
 
         var result = groupLoans.recordRepayment(active.getId(), 1000_00, AGENT_ID, null, null);
 
         GroupLoan closed = groupLoans.findById(active.getId());
         assertEquals(GroupLoanStatus.CLOSED, result.groupLoan().getStatus());
-        assertEquals(DepositStatus.SETTLED, closed.getDepositStatus());
-
-        var depositAccount = findLedgerAccountByCode("GLDEP-" + active.getLoanNumber());
-        assertEquals(0, ledger.recomputeBalance(depositAccount));
+        assertEquals(DepositStatus.HELD, closed.getDepositStatus());
+        // The deposit stays in savings; only the repayment itself moved cash.
+        assertEquals(100_00, accounts.findById(account.getId()).getBalance());
+        assertEquals(cashBefore + 1000_00, findLedgerAccountByCode("CASH-MAIN").getBalance());
     }
 
     @Test
@@ -172,9 +203,11 @@ class GroupLoanServiceTest {
         LoanGroup group = newLoanGroup("LGRP-108");
         GroupLoan loan = issue(group, newCustomer("Yaa", "Nkrumah"), 1000_00, 100_00, 100_00);
 
+        SavingsAccount account = accountFor(loan.getCustomerId());
         String depositRef = UUID.randomUUID().toString();
-        groupLoans.recordDeposit(loan.getId(), 100_00, AGENT_ID, depositRef, null);
-        groupLoans.recordDeposit(loan.getId(), 100_00, AGENT_ID, depositRef, null);
+        groupLoans.recordDeposit(loan.getId(), account.getId(), 100_00, AGENT_ID, depositRef, null);
+        groupLoans.recordDeposit(loan.getId(), account.getId(), 100_00, AGENT_ID, depositRef, null);
+        assertEquals(100_00, accounts.findById(account.getId()).getBalance());
         GroupLoan active = groupLoans.activate(loan.getId(), AGENT_ID);
 
         String repayRef = UUID.randomUUID().toString();
@@ -186,49 +219,67 @@ class GroupLoanServiceTest {
     }
 
     @Test
-    void appliesAHeldDepositAgainstTheBalanceWithNoCashMovement() throws Exception {
-        LoanGroup group = newLoanGroup("LGRP-109");
-        GroupLoan active = activate(issue(group, newCustomer("Kwesi", "Appiah"), 1000_00, 100_00, 100_00));
-        groupLoans.recordRepayment(active.getId(), 200_00, AGENT_ID, null, null);
-
-        long cashBefore = findLedgerAccountByCode("CASH-MAIN").getBalance();
-        GroupLoan afterApply = groupLoans.applyDeposit(active.getId(), AGENT_ID, null);
-
-        assertEquals(700_00, afterApply.getOutstandingBalance());
-        assertEquals(DepositStatus.SETTLED, afterApply.getDepositStatus());
-        assertEquals(cashBefore, findLedgerAccountByCode("CASH-MAIN").getBalance());
-    }
-
-    @Test
-    void refundsTheExcessAndClosesTheLoanWhenTheDepositExceedsTheBalance() throws Exception {
-        LoanGroup group = newLoanGroup("LGRP-110");
-        GroupLoan active = activate(issue(group, newCustomer("Esi", "Quaye"), 1000_00, 300_00, 100_00));
-        groupLoans.recordRepayment(active.getId(), 900_00, AGENT_ID, null, null);
-
-        long cashBefore = findLedgerAccountByCode("CASH-MAIN").getBalance();
-        GroupLoan result = groupLoans.applyDeposit(active.getId(), AGENT_ID, null);
-
-        assertEquals(GroupLoanStatus.CLOSED, result.getStatus());
-        assertEquals(0, result.getOutstandingBalance());
-        // the 200_00 excess is refunded to the member in cash
-        assertEquals(cashBefore - 200_00, findLedgerAccountByCode("CASH-MAIN").getBalance());
-    }
-
-    @Test
-    void writesOffAnActiveLoanSeizingTheDepositThenBadDebtingTheResidual() throws Exception {
+    void writeOffAppliesChosenSavingsThenBadDebtsOnlyTheResidual() throws Exception {
         LoanGroup group = newLoanGroup("LGRP-111");
         GroupLoan active = activate(issue(group, newCustomer("Nii", "Tetteh"), 1000_00, 100_00, 100_00));
         groupLoans.recordRepayment(active.getId(), 400_00, AGENT_ID, null, null);
+        // The 100_00 deposit already sits in this account.
+        SavingsAccount account = accountFor(active.getCustomerId());
 
         long badDebtBefore = findLedgerAccountByCode("5100-BADDEBT").getBalance();
-        GroupLoan writtenOff = groupLoans.writeOff(active.getId(), MANAGER_ID, "Absconded");
+        GroupLoan writtenOff = groupLoans.writeOff(active.getId(), MANAGER_ID, "Absconded", account.getId(), 100_00);
 
         assertEquals(GroupLoanStatus.WRITTEN_OFF, writtenOff.getStatus());
         assertEquals(0, writtenOff.getOutstandingBalance());
         assertEquals(600_00, (long) writtenOff.getWriteOffAmount());
-        assertEquals(DepositStatus.SETTLED, writtenOff.getDepositStatus());
+        assertEquals(account.getId(), writtenOff.getWriteOffSavingsAccountId());
+        assertEquals(100_00, (long) writtenOff.getWriteOffSavingsApplied());
+        assertEquals(DepositStatus.HELD, writtenOff.getDepositStatus());
         assertEquals(0, findLedgerAccountByCode("GLN-" + active.getLoanNumber()).getBalance());
         assertEquals(badDebtBefore + 500_00, findLedgerAccountByCode("5100-BADDEBT").getBalance());
+        assertEquals(0, accounts.findById(account.getId()).getBalance());
+        assertEquals(0, savingsLedgerBalance(account));
+    }
+
+    @Test
+    void writeOffWithNoSavingsBadDebtsTheWholeBalanceAndLeavesSavingsAlone() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-109");
+        GroupLoan active = activate(issue(group, newCustomer("Kwesi", "Appiah"), 1000_00, 100_00, 100_00));
+        groupLoans.recordRepayment(active.getId(), 400_00, AGENT_ID, null, null);
+        SavingsAccount account = accountFor(active.getCustomerId());
+
+        long badDebtBefore = findLedgerAccountByCode("5100-BADDEBT").getBalance();
+        GroupLoan writtenOff = groupLoans.writeOff(active.getId(), MANAGER_ID, "Absconded");
+
+        assertEquals(0, (long) writtenOff.getWriteOffSavingsApplied());
+        assertEquals(null, writtenOff.getWriteOffSavingsAccountId());
+        assertEquals(badDebtBefore + 600_00, findLedgerAccountByCode("5100-BADDEBT").getBalance());
+        assertEquals(100_00, accounts.findById(account.getId()).getBalance());
+    }
+
+    @Test
+    void writeOffRefusesToApplyMoreThanTheSavingsBalance() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-110");
+        GroupLoan active = activate(issue(group, newCustomer("Esi", "Quaye"), 1000_00, 100_00, 100_00));
+        groupLoans.recordRepayment(active.getId(), 400_00, AGENT_ID, null, null);
+        SavingsAccount account = accountFor(active.getCustomerId());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> groupLoans.writeOff(active.getId(), MANAGER_ID, "Absconded", account.getId(), 100_01));
+        assertEquals(GroupLoanStatus.ACTIVE, groupLoans.findById(active.getId()).getStatus());
+        assertEquals(100_00, accounts.findById(account.getId()).getBalance());
+    }
+
+    @Test
+    void writeOffRefusesToApplyMoreThanTheOutstandingBalance() throws Exception {
+        LoanGroup group = newLoanGroup("LGRP-116");
+        GroupLoan active = activate(issue(group, newCustomer("Mawusi", "Kpodo"), 1000_00, 300_00, 100_00));
+        groupLoans.recordRepayment(active.getId(), 900_00, AGENT_ID, null, null);
+        SavingsAccount account = accountFor(active.getCustomerId());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> groupLoans.writeOff(active.getId(), MANAGER_ID, "Absconded", account.getId(), 200_00));
+        assertEquals(GroupLoanStatus.ACTIVE, groupLoans.findById(active.getId()).getStatus());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package service;
 
 import db.DatabaseConnection;
+import enums.AccountStatus;
 import enums.DepositStatus;
 import enums.GroupLoanStatus;
 import enums.InstallmentStatus;
@@ -24,19 +25,20 @@ import models.GroupLoanRepayment;
 import models.JournalEntry;
 import models.LoanGroup;
 import models.LoanGroupMember;
+import models.SavingsAccount;
 import org.json.JSONObject;
 
 /**
  * Group loan lifecycle — one loan per group member. The member enters a total
- * principal, a refundable security deposit, and a directly-entered periodic
- * repayment amount; there is no product, no interest, no equal-split. A
- * parity port of the backend's rebuilt {@code App\Actions\GroupLoans\*Action}
- * classes: the local engine runs first (managers decide offline), hybrid mode
- * pushes each step through the outbox afterward as an audit trail.
+ * principal, a security deposit, and a directly-entered periodic repayment
+ * amount; there is no product, no interest, no equal-split. A parity port of
+ * the backend's rebuilt {@code App\Actions\GroupLoans\*Action} classes: the
+ * local engine runs first (managers decide offline), hybrid mode pushes each
+ * step through the outbox afterward as an audit trail.
  *
- * Lifecycle: issue -&gt; recordDeposit -&gt; activate -&gt; recordRepayment -&gt;
- * (auto) close. applyDeposit offsets a held deposit against outstanding on
- * demand; writeOff seizes the deposit then bad-debts the residual.
+ * Lifecycle: issue -&gt; recordDeposit (credited into a chosen savings account)
+ * -&gt; activate -&gt; recordRepayment -&gt; (auto) close. writeOff can draw a chosen
+ * amount down from the member's savings first, then bad-debts the residual.
  */
 public class GroupLoanService {
 
@@ -45,6 +47,7 @@ public class GroupLoanService {
     private final PeriodicScheduleGenerator scheduleGenerator = new PeriodicScheduleGenerator();
     private final LoanGroupService loanGroupService = new LoanGroupService();
     private final CustomerService customerService = new CustomerService();
+    private final SavingsAccountService savingsAccountService = new SavingsAccountService();
     private final OutboxService outbox = new OutboxService();
 
     // ---------------------------------------------------------------- issue
@@ -135,8 +138,13 @@ public class GroupLoanService {
 
     // -------------------------------------------------------- record deposit
 
-    public GroupLoan recordDeposit(String groupLoanId, long amount, String recordedBy, String clientReference,
-                                    Instant recordedAt) throws SQLException {
+    /**
+     * Records the member paying in their agreed security deposit, crediting it
+     * straight into one of their savings accounts (Dr branch cash / Cr that
+     * account's savings liability) — it becomes ordinary savings once posted.
+     */
+    public GroupLoan recordDeposit(String groupLoanId, String savingsAccountId, long amount, String recordedBy,
+                                    String clientReference, Instant recordedAt) throws SQLException {
         String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
 
         if (findDepositByClientReference(effectiveClientReference) != null) {
@@ -148,19 +156,22 @@ public class GroupLoanService {
             throw new IllegalStateException("A deposit can only be recorded while the loan is a draft.");
         }
         if (groupLoan.getDepositStatus() != DepositStatus.PENDING) {
-            throw new IllegalStateException("This loan's security deposit has already been settled.");
+            throw new IllegalStateException("This loan's security deposit has already been recorded.");
         }
         if (amount <= 0 || amount != groupLoan.getSecurityDepositAmount()) {
             throw new IllegalArgumentException(
                     "The deposit must be paid in full (" + groupLoan.getSecurityDepositAmount() + " pesewas).");
         }
+        SavingsAccount account = requireBorrowerAccount(groupLoan.getCustomerId(), savingsAccountId);
+        if (account.getStatus() == AccountStatus.CLOSED) {
+            throw new IllegalArgumentException("This savings account is closed.");
+        }
 
         Instant effectiveRecordedAt = recordedAt != null ? recordedAt : Instant.now();
-        String depositAccountId = chart.groupLoanDepositLiability(groupLoan.getId(), groupLoan.getLoanNumber()).getId();
 
         List<LedgerLine> lines = new ArrayList<>();
         lines.add(LedgerLine.debit(chart.branchCash().getId(), amount));
-        lines.add(LedgerLine.credit(depositAccountId, amount));
+        lines.add(LedgerLine.credit(account.getLedgerAccountId(), amount));
 
         JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_HELD, lines)
                 .paymentMethod(PaymentMethod.CASH)
@@ -170,21 +181,28 @@ public class GroupLoanService {
                 .description("Group loan security deposit " + groupLoan.getLoanNumber()));
 
         try (Connection conn = DatabaseConnection.getConnection()) {
-            insertDeposit(conn, groupLoan.getId(), entry.getId(), recordedBy, amount, "held",
+            String now = Instant.now().toString();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE savings_accounts SET balance = balance + ?, updated_at = ? WHERE id = ?")) {
+                ps.setLong(1, amount);
+                ps.setString(2, now);
+                ps.setString(3, account.getId());
+                ps.executeUpdate();
+            }
+            insertDeposit(conn, groupLoan.getId(), account.getId(), entry.getId(), recordedBy, amount,
                     effectiveRecordedAt, effectiveClientReference);
             try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE group_loans SET deposit_status = ?, deposit_liability_account_id = ?, updated_at = ?"
-                    + " WHERE id = ?")) {
+                    "UPDATE group_loans SET deposit_status = ?, updated_at = ? WHERE id = ?")) {
                 ps.setString(1, DepositStatus.HELD.value());
-                ps.setString(2, depositAccountId);
-                ps.setString(3, Instant.now().toString());
-                ps.setString(4, groupLoan.getId());
+                ps.setString(2, now);
+                ps.setString(3, groupLoan.getId());
                 ps.executeUpdate();
             }
         }
 
         outbox.enqueueIfHybrid("group_loan.deposit.record", new JSONObject()
                 .put("group_loan_id", groupLoanId)
+                .put("savings_account_id", account.getId())
                 .put("amount", amount)
                 .put("client_reference", effectiveClientReference)
                 .put("recorded_at", effectiveRecordedAt.toString()));
@@ -334,95 +352,13 @@ public class GroupLoanService {
         return new GroupLoanRepaymentResult(entry, findById(groupLoan.getId()), findRepaymentById(repaymentId), false);
     }
 
-    // --------------------------------------------------------- apply deposit
-
-    public GroupLoan applyDeposit(String groupLoanId, String appliedBy, String clientReference) throws SQLException {
-        String effectiveClientReference = clientReference != null ? clientReference : UUID.randomUUID().toString();
-
-        if (findDepositByClientReference(effectiveClientReference) != null) {
-            return findById(groupLoanId);
-        }
-
-        GroupLoan groupLoan = findById(groupLoanId);
-        if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
-            throw new IllegalStateException("The deposit can only be applied while the loan is active.");
-        }
-        if (groupLoan.getDepositStatus() != DepositStatus.HELD || groupLoan.getSecurityDepositAmount() <= 0) {
-            throw new IllegalStateException("There is no held deposit to apply.");
-        }
-
-        long held = groupLoan.getSecurityDepositAmount();
-        long applied = Math.min(held, groupLoan.getOutstandingBalance());
-        long excess = held - applied;
-
-        if (applied > 0) {
-            applyToInstallments(groupLoan.getId(), applied);
-
-            List<LedgerLine> lines = new ArrayList<>();
-            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), applied));
-            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), applied));
-
-            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_APPLIED, lines)
-                    .paymentMethod(PaymentMethod.INTERNAL)
-                    .recordedBy(appliedBy)
-                    .recordedAt(Instant.now())
-                    .clientReference(effectiveClientReference)
-                    .description("Group loan deposit applied to balance " + groupLoan.getLoanNumber()));
-
-            try (Connection conn = DatabaseConnection.getConnection()) {
-                insertDeposit(conn, groupLoan.getId(), entry.getId(), appliedBy, applied, "applied",
-                        Instant.now(), effectiveClientReference);
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE group_loans SET outstanding_balance = ?, updated_at = ? WHERE id = ?")) {
-                    ps.setLong(1, groupLoan.getOutstandingBalance() - applied);
-                    ps.setString(2, Instant.now().toString());
-                    ps.setString(3, groupLoan.getId());
-                    ps.executeUpdate();
-                }
-            }
-        }
-
-        if (excess > 0) {
-            List<LedgerLine> lines = new ArrayList<>();
-            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), excess));
-            lines.add(LedgerLine.credit(chart.branchCash().getId(), excess));
-
-            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_REFUNDED, lines)
-                    .paymentMethod(PaymentMethod.CASH)
-                    .recordedBy(appliedBy)
-                    .recordedAt(Instant.now())
-                    .description("Group loan deposit excess refund " + groupLoan.getLoanNumber()));
-
-            try (Connection conn = DatabaseConnection.getConnection()) {
-                insertDeposit(conn, groupLoan.getId(), entry.getId(), appliedBy, excess, "refunded",
-                        Instant.now(), null);
-            }
-        }
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "UPDATE group_loans SET deposit_status = ?, updated_at = ? WHERE id = ?")) {
-            ps.setString(1, DepositStatus.SETTLED.value());
-            ps.setString(2, Instant.now().toString());
-            ps.setString(3, groupLoan.getId());
-            ps.executeUpdate();
-        }
-
-        outbox.enqueueIfHybrid("group_loan.deposit.apply", new JSONObject()
-                .put("group_loan_id", groupLoanId)
-                .put("client_reference", effectiveClientReference));
-
-        GroupLoan refreshed = findById(groupLoanId);
-        if (refreshed.getOutstandingBalance() <= 0 && refreshed.getStatus() == GroupLoanStatus.ACTIVE) {
-            close(groupLoanId, appliedBy);
-            return findById(groupLoanId);
-        }
-        return refreshed;
-    }
-
     // ----------------------------------------------------------------- close
 
-    /** Closes a fully-repaid loan; refunds a still-held deposit in cash (nothing left to offset). */
+    /**
+     * Closes a fully-repaid loan. Any deposit paid in earlier already lives in
+     * the member's ordinary savings, so there is nothing to refund — this is a
+     * pure status flip.
+     */
     public GroupLoan close(String groupLoanId, String closedBy) throws SQLException {
         GroupLoan groupLoan = findById(groupLoanId);
         if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
@@ -430,30 +366,6 @@ public class GroupLoanService {
         }
         if (groupLoan.getOutstandingBalance() > 0) {
             throw new IllegalStateException("This group loan still has an outstanding balance.");
-        }
-
-        if (groupLoan.getDepositStatus() == DepositStatus.HELD && groupLoan.getSecurityDepositAmount() > 0) {
-            long amount = groupLoan.getSecurityDepositAmount();
-            List<LedgerLine> lines = new ArrayList<>();
-            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), amount));
-            lines.add(LedgerLine.credit(chart.branchCash().getId(), amount));
-
-            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_REFUNDED, lines)
-                    .paymentMethod(PaymentMethod.CASH)
-                    .recordedBy(closedBy)
-                    .recordedAt(Instant.now())
-                    .description("Group loan deposit refund " + groupLoan.getLoanNumber()));
-
-            try (Connection conn = DatabaseConnection.getConnection()) {
-                insertDeposit(conn, groupLoan.getId(), entry.getId(), closedBy, amount, "refunded", Instant.now(), null);
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE group_loans SET deposit_status = ?, updated_at = ? WHERE id = ?")) {
-                    ps.setString(1, DepositStatus.SETTLED.value());
-                    ps.setString(2, Instant.now().toString());
-                    ps.setString(3, groupLoan.getId());
-                    ps.executeUpdate();
-                }
-            }
         }
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -472,7 +384,18 @@ public class GroupLoanService {
 
     // ------------------------------------------------------------- write off
 
+    /** Write-off with no savings applied — the whole outstanding balance is booked as bad debt. */
     public GroupLoan writeOff(String groupLoanId, String writtenOffBy, String reason) throws SQLException {
+        return writeOff(groupLoanId, writtenOffBy, reason, null, 0);
+    }
+
+    /**
+     * Declares an active loan's remaining balance uncollectible. An amount of
+     * the member's own savings can be applied first (Dr savings liability / Cr
+     * receivable); only the residual is booked as bad debt.
+     */
+    public GroupLoan writeOff(String groupLoanId, String writtenOffBy, String reason, String savingsAccountId,
+                               long savingsAmountApplied) throws SQLException {
         GroupLoan groupLoan = findById(groupLoanId);
         if (groupLoan == null || groupLoan.getStatus() != GroupLoanStatus.ACTIVE) {
             throw new IllegalStateException("Only an active group loan can be written off.");
@@ -482,34 +405,20 @@ public class GroupLoanService {
         }
 
         long outstanding = groupLoan.getOutstandingBalance();
-        long seized = 0;
+        long applied = 0;
 
-        if (groupLoan.getDepositStatus() == DepositStatus.HELD && groupLoan.getSecurityDepositAmount() > 0) {
-            seized = Math.min(groupLoan.getSecurityDepositAmount(), outstanding);
-
-            List<LedgerLine> lines = new ArrayList<>();
-            lines.add(LedgerLine.debit(groupLoan.getDepositLiabilityAccountId(), seized));
-            lines.add(LedgerLine.credit(groupLoan.getReceivableAccountId(), seized));
-
-            JournalEntry entry = ledger.post(EntryRequest.of(TransactionType.GROUP_LOAN_DEPOSIT_APPLIED, lines)
-                    .paymentMethod(PaymentMethod.INTERNAL)
-                    .recordedBy(writtenOffBy)
-                    .recordedAt(Instant.now())
-                    .description("Group loan deposit seized on write-off " + groupLoan.getLoanNumber()));
-
-            try (Connection conn = DatabaseConnection.getConnection()) {
-                insertDeposit(conn, groupLoan.getId(), entry.getId(), writtenOffBy, seized, "seized", Instant.now(), null);
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE group_loans SET deposit_status = ?, updated_at = ? WHERE id = ?")) {
-                    ps.setString(1, DepositStatus.SETTLED.value());
-                    ps.setString(2, Instant.now().toString());
-                    ps.setString(3, groupLoan.getId());
-                    ps.executeUpdate();
-                }
+        if (savingsAccountId != null && savingsAmountApplied > 0) {
+            requireBorrowerAccount(groupLoan.getCustomerId(), savingsAccountId);
+            if (savingsAmountApplied > outstanding) {
+                throw new IllegalArgumentException("Cannot apply more than the outstanding balance.");
             }
+            savingsAccountService.applyToLoanReceivable(savingsAccountId, groupLoan.getReceivableAccountId(),
+                    savingsAmountApplied, writtenOffBy, TransactionType.SAVINGS_APPLIED_TO_GROUP_LOAN_WRITE_OFF,
+                    "Savings applied to write-off " + groupLoan.getLoanNumber());
+            applied = savingsAmountApplied;
         }
 
-        long residual = outstanding - seized;
+        long residual = outstanding - applied;
         if (residual > 0) {
             List<LedgerLine> lines = new ArrayList<>();
             lines.add(LedgerLine.debit(chart.badDebtExpense().getId(), residual));
@@ -522,23 +431,32 @@ public class GroupLoanService {
                     .description("Group loan write-off " + groupLoan.getLoanNumber()));
         }
 
+        String appliedAccountId = applied > 0 ? savingsAccountId : null;
+
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "UPDATE group_loans SET status = ?, outstanding_balance = 0, written_off_at = ?,"
-                     + " write_off_reason = ?, write_off_amount = ?, updated_at = ? WHERE id = ?")) {
+                     + " write_off_reason = ?, write_off_amount = ?, write_off_savings_account_id = ?,"
+                     + " write_off_savings_applied = ?, updated_at = ? WHERE id = ?")) {
             String now = Instant.now().toString();
             ps.setString(1, GroupLoanStatus.WRITTEN_OFF.value());
             ps.setString(2, now);
             ps.setString(3, reason);
             ps.setLong(4, outstanding);
-            ps.setString(5, now);
-            ps.setString(6, groupLoanId);
+            ps.setString(5, appliedAccountId);
+            ps.setLong(6, applied);
+            ps.setString(7, now);
+            ps.setString(8, groupLoanId);
             ps.executeUpdate();
         }
 
-        outbox.enqueueIfHybrid("group_loan.write_off", new JSONObject()
+        JSONObject payload = new JSONObject()
                 .put("group_loan_id", groupLoanId)
-                .put("reason", reason));
+                .put("reason", reason);
+        if (appliedAccountId != null) {
+            payload.put("savings_account_id", appliedAccountId).put("savings_amount_applied", applied);
+        }
+        outbox.enqueueIfHybrid("group_loan.write_off", payload);
 
         return findById(groupLoanId);
     }
@@ -569,19 +487,32 @@ public class GroupLoanService {
         }
     }
 
-    private void insertDeposit(Connection conn, String groupLoanId, String journalEntryId, String recordedBy,
-                                long amount, String type, Instant recordedAt, String clientReference)
+    /** Loads a savings account and rejects one that isn't the borrower's own. Call outside any open connection. */
+    private SavingsAccount requireBorrowerAccount(String customerId, String savingsAccountId) throws SQLException {
+        SavingsAccount account = savingsAccountId != null ? savingsAccountService.findById(savingsAccountId) : null;
+        if (account == null) {
+            throw new IllegalArgumentException("Select one of the borrower's savings accounts.");
+        }
+        if (!account.getCustomerId().equals(customerId)) {
+            throw new IllegalArgumentException("This savings account does not belong to the borrower.");
+        }
+        return account;
+    }
+
+    private void insertDeposit(Connection conn, String groupLoanId, String savingsAccountId, String journalEntryId,
+                                String recordedBy, long amount, Instant recordedAt, String clientReference)
             throws SQLException {
         String now = Instant.now().toString();
         try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO group_loan_deposits (id, group_loan_id, journal_entry_id, recorded_by, amount, type,"
-                + " recorded_at, client_reference, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)")) {
+                "INSERT INTO group_loan_deposits (id, group_loan_id, savings_account_id, journal_entry_id, recorded_by,"
+                + " amount, type, recorded_at, client_reference, created_at, updated_at)"
+                + " VALUES (?,?,?,?,?,?,'held',?,?,?,?)")) {
             ps.setString(1, UUID.randomUUID().toString());
             ps.setString(2, groupLoanId);
-            ps.setString(3, journalEntryId);
-            ps.setString(4, recordedBy);
-            ps.setLong(5, amount);
-            ps.setString(6, type);
+            ps.setString(3, savingsAccountId);
+            ps.setString(4, journalEntryId);
+            ps.setString(5, recordedBy);
+            ps.setLong(6, amount);
             ps.setString(7, recordedAt.toString());
             ps.setString(8, clientReference);
             ps.setString(9, now);
@@ -802,7 +733,6 @@ public class GroupLoanService {
         groupLoan.setAgentId(rs.getString("agent_id"));
         groupLoan.setActivatedBy(rs.getString("activated_by"));
         groupLoan.setReceivableAccountId(rs.getString("receivable_account_id"));
-        groupLoan.setDepositLiabilityAccountId(rs.getString("deposit_liability_account_id"));
         groupLoan.setLoanNumber(rs.getString("loan_number"));
         groupLoan.setPrincipalAmount(rs.getLong("principal_amount"));
         groupLoan.setSecurityDepositAmount(rs.getLong("security_deposit_amount"));
@@ -825,6 +755,9 @@ public class GroupLoanService {
         groupLoan.setWriteOffReason(rs.getString("write_off_reason"));
         long writeOffAmount = rs.getLong("write_off_amount");
         groupLoan.setWriteOffAmount(rs.wasNull() ? null : writeOffAmount);
+        groupLoan.setWriteOffSavingsAccountId(rs.getString("write_off_savings_account_id"));
+        long writeOffSavingsApplied = rs.getLong("write_off_savings_applied");
+        groupLoan.setWriteOffSavingsApplied(rs.wasNull() ? null : writeOffSavingsApplied);
         return groupLoan;
     }
 
@@ -858,6 +791,7 @@ public class GroupLoanService {
         GroupLoanDeposit deposit = new GroupLoanDeposit();
         deposit.setId(rs.getString("id"));
         deposit.setGroupLoanId(rs.getString("group_loan_id"));
+        deposit.setSavingsAccountId(rs.getString("savings_account_id"));
         deposit.setJournalEntryId(rs.getString("journal_entry_id"));
         deposit.setRecordedBy(rs.getString("recorded_by"));
         deposit.setAmount(rs.getLong("amount"));

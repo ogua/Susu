@@ -2,11 +2,16 @@ package models;
 
 import java.time.Instant;
 
-/** One event in a group loan's security-deposit lifecycle: held | applied | refunded | seized. */
+/**
+ * A member's security deposit being paid into one of their savings accounts.
+ * {@code type} is "held" going forward; "applied"/"refunded"/"seized" are
+ * legacy values from the pre-savings-account escrow model.
+ */
 public class GroupLoanDeposit {
 
     private String id;
     private String groupLoanId;
+    private String savingsAccountId;
     private String journalEntryId;
     private String recordedBy;
     private long amount;
@@ -19,6 +24,9 @@ public class GroupLoanDeposit {
 
     public String getGroupLoanId() { return groupLoanId; }
     public void setGroupLoanId(String groupLoanId) { this.groupLoanId = groupLoanId; }
+
+    public String getSavingsAccountId() { return savingsAccountId; }
+    public void setSavingsAccountId(String savingsAccountId) { this.savingsAccountId = savingsAccountId; }
 
     public String getJournalEntryId() { return journalEntryId; }
     public void setJournalEntryId(String journalEntryId) { this.journalEntryId = journalEntryId; }

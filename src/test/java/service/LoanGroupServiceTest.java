@@ -12,6 +12,7 @@ import models.Customer;
 import models.GroupLoan;
 import models.LoanGroup;
 import models.LoanGroupMember;
+import models.SavingsAccount;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,9 @@ class LoanGroupServiceTest {
     private GroupLoan activateLoanFor(LoanGroup group, Customer customer) throws Exception {
         GroupLoan loan = groupLoans.issue(AGENT_ID, group.getId(), customer.getId(),
                 1000_00, 100_00, 100_00, LoanFrequency.WEEKLY, LocalDate.now(), null, null);
-        groupLoans.recordDeposit(loan.getId(), 100_00, AGENT_ID, null, null);
+        SavingsAccount account = new SavingsAccountService().open(customer.getId(),
+                new SavingsProductService().getOrCreateDefault().getId(), AGENT_ID, null);
+        groupLoans.recordDeposit(loan.getId(), account.getId(), 100_00, AGENT_ID, null, null);
         return groupLoans.activate(loan.getId(), AGENT_ID);
     }
 

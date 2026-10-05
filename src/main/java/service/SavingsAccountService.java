@@ -2,6 +2,8 @@ package service;
 
 import db.DatabaseConnection;
 import enums.AccountStatus;
+import enums.PaymentMethod;
+import enums.TransactionType;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -113,6 +115,49 @@ public class SavingsAccountService {
         outbox.enqueueIfHybrid("account.open", payload);
 
         return created;
+    }
+
+    /**
+     * Moves an amount from a savings account onto a loan receivable — a
+     * non-cash book transfer (Dr savings liability / Cr receivable). Mirrors
+     * the backend's App\Actions\Loans\ApplySavingsToLoanAction; used by both
+     * write-offs so a borrower's own savings offset the loss.
+     */
+    public JournalEntry applyToLoanReceivable(String savingsAccountId, String receivableAccountId, long amount,
+                                              String appliedBy, TransactionType type, String description)
+            throws SQLException {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("The amount to apply must be greater than zero.");
+        }
+        SavingsAccount account = findById(savingsAccountId);
+        if (account == null) {
+            throw new IllegalArgumentException("Savings account not found.");
+        }
+        if (amount > account.getBalance()) {
+            throw new IllegalArgumentException("This savings account does not have enough balance.");
+        }
+
+        List<LedgerLine> lines = new ArrayList<>();
+        lines.add(LedgerLine.debit(account.getLedgerAccountId(), amount));
+        lines.add(LedgerLine.credit(receivableAccountId, amount));
+
+        // Posted before opening our own connection below — the SQLite pool is single-connection.
+        JournalEntry entry = ledger.post(EntryRequest.of(type, lines)
+                .paymentMethod(PaymentMethod.INTERNAL)
+                .recordedBy(appliedBy)
+                .recordedAt(Instant.now())
+                .description(description));
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE savings_accounts SET balance = balance - ?, updated_at = ? WHERE id = ?")) {
+            ps.setLong(1, amount);
+            ps.setString(2, Instant.now().toString());
+            ps.setString(3, savingsAccountId);
+            ps.executeUpdate();
+        }
+
+        return entry;
     }
 
     public SavingsAccount findById(String id) throws SQLException {

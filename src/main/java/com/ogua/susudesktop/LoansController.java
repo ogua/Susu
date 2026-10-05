@@ -421,20 +421,25 @@ public class LoansController {
             return;
         }
 
-        TextInputDialog dialog = new TextInputDialog();
-        dialog.setTitle("Write Off Loan");
-        dialog.setHeaderText(selected.getLoanNumber() + " — this permanently closes the loan and recognizes the"
-                + " remaining balance as a loss. This cannot be undone.");
-        dialog.setContentText("Reason:");
-        Optional<String> input = dialog.showAndWait();
-        if (input.isEmpty() || input.get().isBlank()) {
-            return;
-        }
-
         String writtenOffBy = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getId() : null;
-        runLoanAction("Writing off…",
-                () -> loanService.writeOff(selected.getId(), writtenOffBy, input.get().trim()),
-                "Could not write off loan");
+
+        Task<List<SavingsAccount>> load = new Task<>() {
+            @Override protected List<SavingsAccount> call() throws Exception {
+                return accountService.findByCustomer(selected.getCustomerId());
+            }
+        };
+        load.setOnSucceeded(event -> SavingsAccountDialogs.writeOff("Write Off Loan",
+                selected.getLoanNumber() + " — outstanding " + Money.format(selected.getOutstandingBalance())
+                        + ". This permanently closes the loan and recognizes the remaining balance as a loss."
+                        + " This cannot be undone.",
+                load.getValue())
+                .ifPresent(input -> runLoanAction("Writing off…",
+                        () -> loanService.writeOff(selected.getId(), writtenOffBy, input.reason(),
+                                input.savingsAccountId(), input.savingsAmountApplied()),
+                        "Could not write off loan")));
+        load.setOnFailed(event -> statusLabel.setText(
+                "Could not load savings accounts: " + load.getException().getMessage()));
+        new Thread(load, "loan-savings-load").start();
     }
 
     /** TextInputDialog only supports one field — restructuring needs both a new product and a reason. */
