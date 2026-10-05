@@ -2,7 +2,6 @@
 
 namespace App\Actions\Reports;
 
-use App\Enums\InstallmentStatus;
 use App\Enums\LoanStatus;
 use App\Models\Branch;
 use App\Models\Loan;
@@ -56,26 +55,17 @@ class BuildLoanPortfolioReportAction
             ])
             ->values();
 
-        // PAR over the whole branch book (not the filtered slice): a loan with
-        // any overdue installment counts its entire outstanding balance at risk.
-        $disbursed = Loan::query()
-            ->where('branch_id', $branch->id)
-            ->where('status', LoanStatus::Disbursed);
-
-        $totalDisbursedOutstanding = (int) (clone $disbursed)->sum('outstanding_balance');
-        $atRiskOutstanding = (int) (clone $disbursed)
-            ->whereHas('installments', fn ($query) => $query->where('status', InstallmentStatus::Overdue))
-            ->sum('outstanding_balance');
+        // PAR over the whole branch book (not the filtered slice), group
+        // loans included.
+        $par = app(BuildPortfolioAtRiskAction::class)->execute($branch);
 
         return [
             'loans' => $loans,
             'statusSummary' => $statusSummary,
             'totalPrincipal' => (int) $loans->sum('principal_amount'),
             'totalOutstanding' => (int) $loans->sum('outstanding_balance'),
-            'atRiskOutstanding' => $atRiskOutstanding,
-            'parPercent' => $totalDisbursedOutstanding > 0
-                ? round(($atRiskOutstanding / $totalDisbursedOutstanding) * 100, 1)
-                : 0.0,
+            'atRiskOutstanding' => $par['at_risk'],
+            'parPercent' => $par['par_percent'],
             'from' => $from,
             'to' => $to,
             'status' => $status,

@@ -3,9 +3,11 @@
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
+use App\Actions\Reports\BuildPortfolioAtRiskAction;
 use App\Enums\InstallmentStatus;
 use App\Models\Branch;
 use App\Models\Customer;
+use App\Models\GroupLoan;
 use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\User;
@@ -78,4 +80,41 @@ it('never re-charges a penalty on a second run', function (): void {
 
     expect($firstInstallment->fresh()->penalty_due)->toBe($penaltyAfterFirstRun)
         ->and($loan->fresh()->outstanding_balance)->toBe($balanceAfterFirstRun);
+});
+
+it('flags past-due group-loan installments overdue without a penalty', function (): void {
+    $late = GroupLoan::factory()->active()->create([
+        'branch_id' => $this->branch->id,
+        'start_date' => now()->subDays(2)->toDateString(),
+    ]);
+    $dueToday = GroupLoan::factory()->active()->create([
+        'branch_id' => $this->branch->id,
+        'start_date' => now()->toDateString(),
+    ]);
+
+    $this->artisan('loans:flag-arrears')->assertSuccessful();
+
+    $lateInstallments = $late->installments()->orderBy('sequence')->get();
+    expect($lateInstallments[0]->status)->toBe(InstallmentStatus::Overdue)
+        ->and($lateInstallments[1]->status)->toBe(InstallmentStatus::Pending)
+        ->and($dueToday->installments()->orderBy('sequence')->first()->status)->toBe(InstallmentStatus::Pending)
+        ->and($late->refresh()->outstanding_balance)->toBe($late->principal_amount);
+});
+
+it('counts group loans in portfolio-at-risk and the defaulters report', function (): void {
+    $groupLoan = GroupLoan::factory()->active()->create([
+        'branch_id' => $this->branch->id,
+        'start_date' => now()->subWeek()->toDateString(),
+    ]);
+    $this->artisan('loans:flag-arrears')->assertSuccessful();
+
+    $par = app(BuildPortfolioAtRiskAction::class)->execute($this->branch);
+    expect($par['at_risk'])->toBe($groupLoan->principal_amount)
+        ->and($par['outstanding'])->toBe($groupLoan->principal_amount);
+
+    $this->actingAs($this->manager, 'sanctum')
+        ->getJson('/api/v1/reports/defaulters?branch_id='.$this->branch->id)
+        ->assertOk()
+        ->assertJsonCount(1, 'data.group_installments')
+        ->assertJsonPath('data.group_installments.0.loan_number', $groupLoan->loan_number);
 });

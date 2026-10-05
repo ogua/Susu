@@ -2,11 +2,10 @@
 
 namespace App\Actions\Dashboard;
 
+use App\Actions\Reports\BuildPortfolioAtRiskAction;
 use App\Enums\AccountStatus;
 use App\Enums\EntryStatus;
-use App\Enums\InstallmentStatus;
 use App\Enums\LedgerAccountType;
-use App\Enums\LoanStatus;
 use App\Enums\TransactionType;
 use App\Models\AgentDailySummary;
 use App\Models\Branch;
@@ -57,14 +56,7 @@ class BuildBranchDashboardAction
             ->whereIn('accountable_id', $agentIds)
             ->sum('balance');
 
-        $disbursed = Loan::query()
-            ->where('branch_id', $branch->id)
-            ->where('status', LoanStatus::Disbursed);
-
-        $totalOutstanding = (int) (clone $disbursed)->sum('outstanding_balance');
-        $atRiskOutstanding = (int) (clone $disbursed)
-            ->whereHas('installments', fn ($query) => $query->where('status', InstallmentStatus::Overdue))
-            ->sum('outstanding_balance');
+        $par = app(BuildPortfolioAtRiskAction::class)->execute($branch);
 
         return [
             'collections_today' => (int) $today->sum('collections_total'),
@@ -74,11 +66,9 @@ class BuildBranchDashboardAction
                 ->where('status', AccountStatus::Active)
                 ->count(),
             'cash_in_field' => (int) $cashInField,
-            'outstanding' => $totalOutstanding,
-            'at_risk' => $atRiskOutstanding,
-            'par_percent' => $totalOutstanding > 0
-                ? round(($atRiskOutstanding / $totalOutstanding) * 100, 1)
-                : 0.0,
+            'outstanding' => $par['outstanding'],
+            'at_risk' => $par['at_risk'],
+            'par_percent' => $par['par_percent'],
         ];
     }
 

@@ -2,25 +2,31 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\GroupLoanStatus;
 use App\Enums\InstallmentStatus;
 use App\Enums\LoanStatus;
+use App\Models\GroupLoanInstallment;
 use App\Models\Loan;
 use App\Models\LoanInstallment;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Flags installments overdue past their grace period and accrues a one-time
- * late penalty (never re-charged on subsequent runs — see the penalty_due =
- * 0 guard below, which is what makes this idempotent to re-run daily).
- * Keeps loan.outstanding_balance in sync with the new penalty so it still
- * equals the sum of every installment's remaining() — the invariant
- * RecordLoanRepaymentAction relies on.
+ * Flags loan installments overdue past their grace period and accrues a
+ * one-time late penalty (never re-charged on subsequent runs — see the
+ * penalty_due = 0 guard below, which is what makes this idempotent to re-run
+ * daily). Keeps loan.outstanding_balance in sync with the new penalty so it
+ * still equals the sum of every installment's remaining() — the invariant
+ * RecordLoanRepaymentAction relies on. Both writes happen in one transaction.
+ *
+ * Group-loan installments are flagged too (from the day after they fall
+ * due); group loans carry no penalty, so only the status changes.
  */
 class FlagLoanArrears extends Command
 {
     protected $signature = 'loans:flag-arrears';
 
-    protected $description = 'Flags loan installments overdue past their grace period and accrues late penalties.';
+    protected $description = 'Flags loan and group-loan installments overdue past their grace period and accrues late penalties.';
 
     public function handle(): int
     {
@@ -43,20 +49,29 @@ class FlagLoanArrears extends Command
                     $overdueAmount = $installment->remainingPrincipal() + $installment->remainingInterest();
                     $penalty = intdiv($overdueAmount * $loan->penalty_rate_bps, 10_000);
 
-                    $installment->forceFill([
-                        'status' => InstallmentStatus::Overdue,
-                        'penalty_due' => $penalty,
-                    ])->save();
+                    DB::transaction(function () use ($installment, $loan, $penalty): void {
+                        $installment->forceFill([
+                            'status' => InstallmentStatus::Overdue,
+                            'penalty_due' => $penalty,
+                        ])->save();
 
-                    if ($penalty > 0) {
-                        Loan::whereKey($loan->id)->increment('outstanding_balance', $penalty);
-                    }
+                        if ($penalty > 0) {
+                            Loan::whereKey($loan->id)->increment('outstanding_balance', $penalty);
+                        }
+                    });
 
                     $flagged++;
                 }
             });
 
-        $this->info("Flagged {$flagged} installment(s) as overdue.");
+        $flaggedGroup = GroupLoanInstallment::query()
+            ->whereIn('status', [InstallmentStatus::Pending, InstallmentStatus::PartiallyPaid])
+            ->whereDate('due_date', '<', today())
+            ->whereColumn('amount_paid', '<', 'amount_due')
+            ->whereHas('groupLoan', fn ($query) => $query->where('status', GroupLoanStatus::Active))
+            ->update(['status' => InstallmentStatus::Overdue->value]);
+
+        $this->info("Flagged {$flagged} loan installment(s) and {$flaggedGroup} group-loan installment(s) as overdue.");
 
         return self::SUCCESS;
     }

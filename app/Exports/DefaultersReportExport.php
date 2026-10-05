@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Actions\Reports\BuildDefaultersReportAction;
 use App\Models\Branch;
+use App\Models\GroupLoanInstallment;
 use App\Models\LoanInstallment;
 use App\Support\Money;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -16,24 +17,29 @@ class DefaultersReportExport implements FromCollection, WithHeadings, WithMappin
 
     public function collection()
     {
-        return app(BuildDefaultersReportAction::class)->execute($this->branch);
+        $report = app(BuildDefaultersReportAction::class);
+
+        return $report->execute($this->branch)->toBase()->concat($report->groupLoans($this->branch));
     }
 
     public function headings(): array
     {
-        return ['Loan #', 'Customer', 'Phone', 'Agent', 'Days Overdue', 'Amount Due'];
+        return ['Loan #', 'Type', 'Customer', 'Phone', 'Agent', 'Days Overdue', 'Amount Due'];
     }
 
     /**
-     * @param  LoanInstallment  $installment
+     * @param  LoanInstallment|GroupLoanInstallment  $installment
      */
     public function map($installment): array
     {
+        $loan = $installment instanceof GroupLoanInstallment ? $installment->groupLoan : $installment->loan;
+
         return [
-            $installment->loan->loan_number,
-            $installment->loan->customer->fullName(),
-            $installment->loan->customer->phone,
-            $installment->loan->agent->name,
+            $loan->loan_number,
+            $installment instanceof GroupLoanInstallment ? 'Group loan' : 'Loan',
+            $loan->customer->fullName(),
+            $loan->customer->phone,
+            $loan->agent?->name,
             (int) $installment->due_date->diffInDays(now()),
             Money::format($installment->remaining()),
         ];

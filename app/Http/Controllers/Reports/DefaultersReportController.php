@@ -18,11 +18,12 @@ class DefaultersReportController extends Controller
     {
         $this->authorizeAccess($request, $branch);
 
-        $installments = app(BuildDefaultersReportAction::class)->execute($branch);
+        $report = app(BuildDefaultersReportAction::class);
 
         return Pdf::loadView('pdf.defaulters-report', [
             'branch' => $branch,
-            'installments' => $installments,
+            'installments' => $report->execute($branch),
+            'groupInstallments' => $report->groupLoans($branch),
         ])->download('defaulters.pdf');
     }
 

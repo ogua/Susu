@@ -16,6 +16,7 @@ use App\Actions\Reports\BuildTrialBalanceAction;
 use App\Actions\Reports\BuildWithdrawalsReportAction;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\GroupLoanInstallment;
 use App\Models\JournalEntry;
 use App\Models\LedgerAccount;
 use App\Models\Loan;
@@ -179,14 +180,24 @@ class ReportController extends Controller
      */
     private function defaulters(Branch $branch): array
     {
-        $installments = app(BuildDefaultersReportAction::class)->execute($branch);
+        $report = app(BuildDefaultersReportAction::class);
 
         return [
-            'installments' => $installments->map(fn (LoanInstallment $installment): array => [
+            'installments' => $report->execute($branch)->map(fn (LoanInstallment $installment): array => [
                 'loan_number' => $installment->loan->loan_number,
                 'customer' => $installment->loan->customer->fullName(),
                 'phone' => $installment->loan->customer->phone,
                 'agent' => $installment->loan->agent?->name,
+                'due_date' => $installment->due_date->toDateString(),
+                'days_overdue' => (int) $installment->due_date->diffInDays(now()),
+                'amount_due' => $installment->remaining(),
+            ])->all(),
+            // Additive: overdue group-loan installments, same row shape.
+            'group_installments' => $report->groupLoans($branch)->map(fn (GroupLoanInstallment $installment): array => [
+                'loan_number' => $installment->groupLoan->loan_number,
+                'customer' => $installment->groupLoan->customer->fullName(),
+                'phone' => $installment->groupLoan->customer->phone,
+                'agent' => $installment->groupLoan->agent?->name,
                 'due_date' => $installment->due_date->toDateString(),
                 'days_overdue' => (int) $installment->due_date->diffInDays(now()),
                 'amount_due' => $installment->remaining(),
