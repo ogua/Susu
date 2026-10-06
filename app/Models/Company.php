@@ -108,6 +108,11 @@ class Company extends Model
         return $this->hasMany(SubscriptionInvoice::class);
     }
 
+    public function notificationLogs(): HasMany
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
+
     public function smsSetting(): HasOne
     {
         return $this->hasOne(CompanySmsSetting::class);
