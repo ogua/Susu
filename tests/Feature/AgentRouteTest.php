@@ -216,3 +216,32 @@ it('accepts a duty toggle from a user without a home branch without tracking the
 
     expect(AgentLivePosition::where('agent_id', $companyAdmin->id)->exists())->toBeFalse();
 });
+
+it('does not track branch managers who toggle duty or send pings', function (): void {
+    Sanctum::actingAs($this->manager);
+
+    $this->postJson('/api/v1/agent/duty', ['on_duty' => true])
+        ->assertOk()
+        ->assertJsonPath('on_duty', true);
+    recordRoute($this->manager, [[0, 5.6, -0.19]]);
+
+    expect(AgentLivePosition::where('agent_id', $this->manager->id)->exists())->toBeFalse();
+});
+
+it('leaves existing non-agent positions off the positions list', function (): void {
+    recordRoute($this->agent, [[0, 5.6, -0.19]]);
+    AgentLivePosition::create([
+        'company_id' => $this->manager->company_id,
+        'branch_id' => $this->branch->id,
+        'agent_id' => $this->manager->id,
+        'latitude' => 5.6,
+        'longitude' => -0.19,
+        'on_duty' => true,
+    ]);
+    Sanctum::actingAs($this->manager);
+
+    $this->getJson('/api/v1/agents/positions')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $this->agent->id);
+});

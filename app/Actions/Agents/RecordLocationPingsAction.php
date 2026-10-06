@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 /**
  * Batch-stores duty-scoped GPS pings and refreshes the agent's live position
- * for the tracking map (AD-11).
+ * for the tracking map (AD-11). Only field agents are tracked.
  *
  * @phpstan-type Ping array{latitude: float, longitude: float, accuracy?: float|null, recorded_at: string}
  */
@@ -21,7 +21,7 @@ class RecordLocationPingsAction
      */
     public function execute(User $agent, array $pings): int
     {
-        if ($pings === [] || $agent->branch_id === null) {
+        if ($pings === [] || $agent->branch_id === null || ! $agent->hasRole('field_agent')) {
             return 0;
         }
 

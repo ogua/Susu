@@ -39,6 +39,7 @@ class BuildAgentPositionsAction
         $today = now()->toDateString();
 
         $positions = AgentLivePosition::query()
+            ->fieldAgents()
             ->where('branch_id', $branch->id)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')

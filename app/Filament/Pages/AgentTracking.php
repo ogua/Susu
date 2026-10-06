@@ -86,6 +86,7 @@ class AgentTracking extends Page implements HasTable
     public function selectAgent(string $agentId): void
     {
         $agent = AgentLivePosition::query()
+            ->fieldAgents()
             ->where('branch_id', Filament::getTenant()?->id)
             ->where('agent_id', $agentId)
             ->with('agent')
@@ -119,6 +120,7 @@ class AgentTracking extends Page implements HasTable
         return $table
             ->query(
                 AgentLivePosition::query()
+                    ->fieldAgents()
                     ->where('branch_id', Filament::getTenant()?->id)
                     ->with('agent')
             )

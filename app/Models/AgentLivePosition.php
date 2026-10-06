@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -41,5 +43,17 @@ class AgentLivePosition extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    /**
+     * Only field agents are tracked; managers and admins who also use the
+     * agent endpoints are left off the map.
+     *
+     * @param  Builder<AgentLivePosition>  $query
+     */
+    #[Scope]
+    protected function fieldAgents(Builder $query): void
+    {
+        $query->whereHas('agent', fn (Builder $agent) => $agent->role('field_agent'));
     }
 }
