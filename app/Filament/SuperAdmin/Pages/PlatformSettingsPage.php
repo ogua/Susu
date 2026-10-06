@@ -71,6 +71,11 @@ class PlatformSettingsPage extends Page
                                 ->label('Days overdue before suspension')
                                 ->integer()->minValue(0)->required(),
                         ]),
+                    Section::make('Data retention')
+                        ->description('After a company is archived, its records are kept this long before personal data may be erased. Financial records are never erased.')
+                        ->schema([
+                            TextInput::make('data_retention_days')->label('Retention (days)')->integer()->minValue(0)->required(),
+                        ]),
                     Section::make('Support contact')
                         ->description('Shown to company admins on their Subscription page.')
                         ->columns(2)

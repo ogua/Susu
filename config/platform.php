@@ -10,4 +10,11 @@ return [
 
     'support_phone' => env('PLATFORM_SUPPORT_PHONE'),
 
+    /*
+    | Days an archived company's records are kept before its customers' and
+    | staff's personal data may be erased (financial records are always kept).
+    | Six years by default, in line with financial record-keeping rules.
+    */
+    'data_retention_days' => (int) env('PLATFORM_DATA_RETENTION_DAYS', 2190),
+
 ];

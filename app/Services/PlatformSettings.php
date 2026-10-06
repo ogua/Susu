@@ -25,6 +25,7 @@ class PlatformSettings
         'billing_suspend_after_days' => ['config' => 'billing.suspend_after_days', 'type' => 'int'],
         'support_email' => ['config' => 'platform.support_email', 'type' => 'string'],
         'support_phone' => ['config' => 'platform.support_phone', 'type' => 'string'],
+        'data_retention_days' => ['config' => 'platform.data_retention_days', 'type' => 'int'],
     ];
 
     /**

@@ -70,7 +70,11 @@ class CompanyInfolist
                         TextEntry::make('suspended_reason')
                             ->label('Suspension')
                             ->placeholder('—')
-                            ->formatStateUsing(fn (string $state): string => $state === Company::SUSPENDED_FOR_NON_PAYMENT ? 'Non-payment (lifts when paid)' : 'By operator'),
+                            ->formatStateUsing(fn (string $state): string => match ($state) {
+                                Company::SUSPENDED_FOR_NON_PAYMENT => 'Non-payment (lifts when paid)',
+                                Company::SUSPENDED_ARCHIVED => 'Archived (offboarded)',
+                                default => 'By operator',
+                            }),
                         TextEntry::make('usage')
                             ->label('Usage against plan limits')
                             ->columnSpanFull()

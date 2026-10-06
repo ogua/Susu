@@ -3,16 +3,22 @@
 namespace App\Filament\SuperAdmin\Resources\Companies;
 
 use App\Actions\Billing\SubscribeCompanyAction;
+use App\Actions\Company\ArchiveCompanyAction;
 use App\Actions\Company\CreateBranchAction;
 use App\Actions\Company\CreateCompanyAdminAction;
+use App\Actions\Company\ErasePersonalDataAction;
+use App\Actions\Company\ExportCompanyDataAction;
 use App\Actions\Company\ProvisionStarterProductsAction;
 use App\Actions\Company\SetCompanyActiveStatusAction;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\BranchForm;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyAdminForm;
 use App\Models\Company;
 use App\Models\Plan;
+use App\Models\User;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
 use Filament\Support\Icons\Heroicon;
@@ -91,12 +97,86 @@ class CompanyActions
             });
     }
 
+    public static function exportData(): Action
+    {
+        return Action::make('exportData')
+            ->label('Export all data')
+            ->icon(Heroicon::OutlinedArchiveBoxArrowDown)
+            ->requiresConfirmation()
+            ->modalDescription('Builds a zip of CSVs with every record this company holds (customers, accounts, loans, ledger, staff). It runs in the background; download it from the Exports tab when ready.')
+            ->action(function (Company $record): void {
+                /** @var User|null $user */
+                $user = Filament::auth()->user();
+                app(ExportCompanyDataAction::class)->request($record, $user);
+
+                Notification::make()->title('Export started')->body('It will appear on the Exports tab when ready.')->success()->send();
+            });
+    }
+
+    public static function archive(): Action
+    {
+        return Action::make('archive')
+            ->label('Archive (offboard)')
+            ->icon(Heroicon::OutlinedArchiveBox)
+            ->color('danger')
+            ->visible(fn (Company $record): bool => $record->archived_at === null)
+            ->requiresConfirmation()
+            ->modalDescription('For a company leaving the platform: everyone is signed out, the subscription is cancelled and open invoices voided. Records are kept for the retention period, then personal data may be erased. Export the data first if the company wants a copy.')
+            ->action(function (Company $record): void {
+                app(ArchiveCompanyAction::class)->archive($record);
+
+                Notification::make()->title("{$record->name} archived")->success()->send();
+            });
+    }
+
+    public static function restore(): Action
+    {
+        return Action::make('restore')
+            ->label('Restore from archive')
+            ->icon(Heroicon::OutlinedArrowUturnLeft)
+            ->visible(fn (Company $record): bool => $record->archived_at !== null && $record->personal_data_erased_at === null)
+            ->requiresConfirmation()
+            ->modalDescription('The company returns to the Companies list, still suspended — reactivate it when it should be used again.')
+            ->action(function (Company $record): void {
+                app(ArchiveCompanyAction::class)->restore($record);
+
+                Notification::make()->title("{$record->name} restored (still suspended)")->success()->send();
+            });
+    }
+
+    public static function erasePersonalData(): Action
+    {
+        return Action::make('erasePersonalData')
+            ->label('Erase personal data')
+            ->icon(Heroicon::OutlinedTrash)
+            ->color('danger')
+            ->visible(fn (Company $record): bool => app(ErasePersonalDataAction::class)->canErase($record))
+            ->modalHeading(fn (Company $record): string => "Erase personal data — {$record->name}")
+            ->modalDescription('Anonymises every customer and staff member of this company and deletes ID documents and photos. Financial records are kept. This cannot be undone.')
+            ->schema([
+                TextInput::make('confirm_name')
+                    ->label('Type the company name to confirm')
+                    ->required()
+                    ->in(fn (Company $record): array => [$record->name])
+                    ->validationMessages(['in' => 'The name does not match.']),
+            ])
+            ->action(function (Company $record): void {
+                $erased = app(ErasePersonalDataAction::class)->execute($record);
+
+                Notification::make()
+                    ->title("Erased {$erased['customers']} customer(s) and {$erased['users']} user(s)")
+                    ->success()
+                    ->send();
+            });
+    }
+
     public static function toggleActive(): Action
     {
         return Action::make('toggleActive')
             ->label(fn (Company $record): string => $record->is_active ? 'Suspend' : 'Reactivate')
             ->icon(fn (Company $record): Heroicon => $record->is_active ? Heroicon::OutlinedNoSymbol : Heroicon::OutlinedCheckCircle)
             ->color(fn (Company $record): string => $record->is_active ? 'danger' : 'success')
+            ->visible(fn (Company $record): bool => $record->archived_at === null)
             ->requiresConfirmation()
             ->modalHeading(fn (Company $record): string => ($record->is_active ? 'Suspend ' : 'Reactivate ').$record->name)
             ->modalDescription(fn (Company $record): string => $record->is_active

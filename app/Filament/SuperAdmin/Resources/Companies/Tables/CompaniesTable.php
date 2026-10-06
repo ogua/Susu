@@ -40,6 +40,16 @@ class CompaniesTable
             ])
             ->filters([
                 TernaryFilter::make('is_active')->label('Active'),
+                TernaryFilter::make('archived')
+                    ->label('Archived')
+                    ->placeholder('Hide archived')
+                    ->trueLabel('Archived only')
+                    ->falseLabel('Hide archived')
+                    ->queries(
+                        true: fn (Builder $query): Builder => $query->whereNotNull('archived_at'),
+                        false: fn (Builder $query): Builder => $query->whereNull('archived_at'),
+                        blank: fn (Builder $query): Builder => $query->whereNull('archived_at'),
+                    ),
                 Filter::make('incomplete_onboarding')
                     ->label('Onboarding incomplete')
                     ->query(fn (Builder $query): Builder => $query->onboardingIncomplete()),

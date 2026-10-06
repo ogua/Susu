@@ -36,6 +36,10 @@ class ViewCompany extends ViewRecord
                 CompanyActions::changePlan()->after($reload),
                 CompanyActions::addStarterProducts()->after($reload),
                 CompanyActions::toggleActive(),
+                CompanyActions::exportData()->after($reload),
+                CompanyActions::archive()->after($reload),
+                CompanyActions::restore()->after($reload),
+                CompanyActions::erasePersonalData()->after($reload),
             ]),
         ];
     }

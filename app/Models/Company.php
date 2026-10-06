@@ -21,6 +21,9 @@ class Company extends Model
     /** suspended_reason set when a super admin suspends by hand. */
     public const SUSPENDED_BY_OPERATOR = 'operator';
 
+    /** suspended_reason set when the company is archived (offboarded). */
+    public const SUSPENDED_ARCHIVED = 'archived';
+
     /** @use HasFactory<CompanyFactory> */
     use HasFactory, HasUuids, LogsActivity;
 
@@ -38,6 +41,8 @@ class Company extends Model
         'contact_phone',
         'is_active',
         'suspended_reason',
+        'archived_at',
+        'personal_data_erased_at',
     ];
 
     /**
@@ -47,6 +52,8 @@ class Company extends Model
     {
         return [
             'is_active' => 'boolean',
+            'archived_at' => 'datetime',
+            'personal_data_erased_at' => 'datetime',
         ];
     }
 
@@ -113,6 +120,11 @@ class Company extends Model
         return $this->hasMany(NotificationLog::class);
     }
 
+    public function exports(): HasMany
+    {
+        return $this->hasMany(CompanyExport::class);
+    }
+
     public function smsSetting(): HasOne
     {
         return $this->hasOne(CompanySmsSetting::class);
@@ -140,7 +152,7 @@ class Company extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'slug', 'domain_alias', 'contact_email', 'contact_phone', 'is_active', 'suspended_reason'])
+            ->logOnly(['name', 'slug', 'domain_alias', 'contact_email', 'contact_phone', 'is_active', 'suspended_reason', 'archived_at', 'personal_data_erased_at'])
             ->logOnlyDirty()
             ->useLogName('company')
             ->dontSubmitEmptyLogs();

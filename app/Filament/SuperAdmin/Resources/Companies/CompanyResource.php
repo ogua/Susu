@@ -7,6 +7,7 @@ use App\Filament\SuperAdmin\Resources\Companies\Pages\EditCompany;
 use App\Filament\SuperAdmin\Resources\Companies\Pages\ListCompanies;
 use App\Filament\SuperAdmin\Resources\Companies\Pages\ViewCompany;
 use App\Filament\SuperAdmin\Resources\Companies\RelationManagers\BranchesRelationManager;
+use App\Filament\SuperAdmin\Resources\Companies\RelationManagers\ExportsRelationManager;
 use App\Filament\SuperAdmin\Resources\Companies\RelationManagers\InvoicesRelationManager;
 use App\Filament\SuperAdmin\Resources\Companies\RelationManagers\StaffRelationManager;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyForm;
@@ -54,6 +55,7 @@ class CompanyResource extends Resource
             BranchesRelationManager::class,
             StaffRelationManager::class,
             InvoicesRelationManager::class,
+            ExportsRelationManager::class,
         ];
     }
 

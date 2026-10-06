@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BillingCallbackController;
+use App\Http\Controllers\CompanyExportDownloadController;
 use App\Http\Controllers\License\LicenseCheckoutController;
 use App\Http\Controllers\Reports\AgentPerformanceReportController;
 use App\Http\Controllers\Reports\BalanceSheetReportController;
@@ -79,6 +80,10 @@ Route::middleware('auth')->prefix('platform-reports')->name('platform-reports.')
     Route::get('/company-usage.pdf', [CompanyUsageReportController::class, 'pdf'])->name('company-usage.pdf');
     Route::get('/company-usage.xlsx', [CompanyUsageReportController::class, 'excel'])->name('company-usage.excel');
 });
+
+Route::get('/platform-exports/{export}', CompanyExportDownloadController::class)
+    ->middleware('auth')
+    ->name('platform-exports.download');
 
 // Headerless report downloads for the mobile/desktop apps — the API mints a
 // short-lived signed URL after its own role checks (see the signed account
