@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\AgentPositionController;
 use App\Http\Controllers\Api\V1\AgentRouteController;
 use App\Http\Controllers\Api\V1\AnnouncementController;
+use App\Http\Controllers\Api\V1\AppUpdateController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
@@ -35,6 +36,11 @@ Route::post('/auth/login/two-factor', [AuthController::class, 'twoFactor'])
 Route::post('/auth/login/two-factor/resend', [AuthController::class, 'resendTwoFactor'])
     ->middleware('throttle:5,1')
     ->name('auth.login.two-factor.resend');
+
+// Public: a signed-out or suspended device must still learn it has to update.
+Route::get('/app/update-check', AppUpdateController::class)
+    ->middleware('throttle:60,1')
+    ->name('app.update-check');
 
 Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RecordClientDevice::class, RequireApiPasswordChange::class])->group(function (): void {
     Route::put('/auth/password', [PasswordController::class, 'update'])
