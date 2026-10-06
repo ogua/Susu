@@ -12,6 +12,10 @@ use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
 use App\Actions\GroupLoans\RecordGroupLoanDepositAction;
 use App\Actions\GroupLoans\RecordGroupLoanRepaymentAction;
 use App\Actions\GroupLoans\WriteOffGroupLoanAction;
+use App\Actions\Groups\ActivateGroupAction;
+use App\Actions\Groups\AddGroupMemberAction;
+use App\Actions\Groups\CreateGroupAction;
+use App\Actions\Groups\PayoutGroupRoundAction;
 use App\Actions\Groups\RecordGroupContributionAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
@@ -33,12 +37,16 @@ use App\Enums\ClientOrigin;
 use App\Enums\LoanFrequency;
 use App\Enums\SyncOpType;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
+use App\Http\Requests\Api\V1\ActivateGroupRequest;
+use App\Http\Requests\Api\V1\AddGroupMemberRequest;
 use App\Http\Requests\Api\V1\ApproveLoanRequest;
 use App\Http\Requests\Api\V1\ApproveWithdrawalRequest;
 use App\Http\Requests\Api\V1\BuySharesRequest;
 use App\Http\Requests\Api\V1\CancelGroupLoanRequest;
+use App\Http\Requests\Api\V1\CreateGroupRequest;
 use App\Http\Requests\Api\V1\DisburseLoanRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
+use App\Http\Requests\Api\V1\PayoutGroupRoundRequest;
 use App\Http\Requests\Api\V1\PayWithdrawalRequest;
 use App\Http\Requests\Api\V1\RecalculateScheduleRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanDepositRequest;
@@ -60,6 +68,7 @@ use App\Http\Requests\Api\V1\UpdateCustomerRequest;
 use App\Http\Requests\Api\V1\WriteOffGroupLoanRequest;
 use App\Http\Requests\Api\V1\WriteOffLoanRequest;
 use App\Models\Customer;
+use App\Models\Group;
 use App\Models\GroupLoan;
 use App\Models\GroupMember;
 use App\Models\Loan;
@@ -117,6 +126,10 @@ class ProcessSyncBatchAction
         private PayWithdrawalAction $payWithdrawal,
         private BuySharesAction $buyShares,
         private UpdateCustomerAction $updateCustomer,
+        private CreateGroupAction $createGroup,
+        private AddGroupMemberAction $addGroupMember,
+        private ActivateGroupAction $activateGroup,
+        private PayoutGroupRoundAction $payoutGroupRound,
     ) {}
 
     /**
@@ -277,6 +290,10 @@ class ProcessSyncBatchAction
             SyncOpType::PayWithdrawal => $this->withdrawalResult($this->payWithdrawal->execute($actor, $this->scoped(WithdrawalRequest::class, $actor)->findOrFail($payload['withdrawal_request_id']))),
             SyncOpType::BuyShares => $this->applyBuyShares($actor, $origin, $payload, $op['op_id'], $recordedAt),
             SyncOpType::UpdateCustomer => $this->applyUpdateCustomer($actor, $payload),
+            SyncOpType::CreateGroup => $this->applyCreateGroup($actor, $payload, $op['op_id']),
+            SyncOpType::AddGroupMember => $this->applyAddGroupMember($actor, $payload, $op['op_id']),
+            SyncOpType::ActivateGroup => $this->applyActivateGroup($actor, $payload),
+            SyncOpType::PayoutGroupRound => $this->applyPayoutGroupRound($actor, $payload),
         };
     }
 
@@ -315,6 +332,10 @@ class ProcessSyncBatchAction
             SyncOpType::PayWithdrawal => PayWithdrawalRequest::payloadRules(),
             SyncOpType::BuyShares => BuySharesRequest::payloadRules(),
             SyncOpType::UpdateCustomer => UpdateCustomerRequest::payloadRules(),
+            SyncOpType::CreateGroup => CreateGroupRequest::payloadRules(),
+            SyncOpType::AddGroupMember => AddGroupMemberRequest::payloadRules(),
+            SyncOpType::ActivateGroup => ActivateGroupRequest::payloadRules(),
+            SyncOpType::PayoutGroupRound => PayoutGroupRoundRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -491,6 +512,61 @@ class ProcessSyncBatchAction
             $payload['reason'] ?? null,
             $payload['client_reference'] ?? $opId,
         ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyCreateGroup(User $actor, array $payload, string $opId): array
+    {
+        $group = $this->createGroup->execute(
+            $actor,
+            StaffBranch::resolve($actor, $payload['branch_id'] ?? null),
+            Arr::only($payload, ['name', 'code', 'contribution_amount', 'frequency']),
+            $payload['client_reference'] ?? $opId,
+        );
+
+        return ['group_id' => $group->id, 'code' => $group->code, 'status' => $group->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyAddGroupMember(User $actor, array $payload, string $opId): array
+    {
+        $group = $this->scoped(Group::class, $actor)->findOrFail($payload['group_id']);
+        $customer = $this->scoped(Customer::class, $actor)->findOrFail($payload['customer_id']);
+
+        $member = $this->addGroupMember->execute($group, $customer, (int) $payload['rotation_position'], $payload['client_reference'] ?? $opId);
+
+        return ['group_member_id' => $member->id, 'rotation_position' => $member->rotation_position];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyActivateGroup(User $actor, array $payload): array
+    {
+        $group = $this->activateGroup->execute($this->scoped(Group::class, $actor)->findOrFail($payload['group_id']));
+
+        return ['group_id' => $group->id, 'status' => $group->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyPayoutGroupRound(User $actor, array $payload): array
+    {
+        $group = $this->scoped(Group::class, $actor)->findOrFail($payload['group_id']);
+        $round = $group->rounds()->where('round_number', $payload['round_number'])->firstOrFail();
+
+        $round = $this->payoutGroupRound->execute($round, $actor, (bool) ($payload['override'] ?? false));
+
+        return ['round_id' => $round->id, 'status' => $round->status->value, 'payout_entry_id' => $round->payout_entry_id];
     }
 
     /**

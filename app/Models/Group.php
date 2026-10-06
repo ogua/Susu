@@ -23,6 +23,7 @@ class Group extends Model
         'branch_id',
         'liability_account_id',
         'created_by',
+        'client_reference',
         'name',
         'code',
         'contribution_amount',

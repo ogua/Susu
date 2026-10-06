@@ -32,6 +32,10 @@ enum SyncOpType: string
     case PayWithdrawal = 'withdrawal.pay';
     case BuyShares = 'shares.purchase';
     case UpdateCustomer = 'customer.update';
+    case CreateGroup = 'group.create';
+    case AddGroupMember = 'group.member.add';
+    case ActivateGroup = 'group.activate';
+    case PayoutGroupRound = 'group.payout';
 
     /**
      * Op types each role may push through /sync/batch.
@@ -65,7 +69,8 @@ enum SyncOpType: string
             ],
             // Managers/admins additionally own the individual-loan approve/
             // reject/disburse decisions, every write-off and schedule
-            // recalculation, and withdrawal approve/reject/pay.
+            // recalculation, withdrawal approve/reject/pay and susu group
+            // setup and payouts.
             'branch_manager', 'company_admin' => self::cases(),
             default => [],
         };

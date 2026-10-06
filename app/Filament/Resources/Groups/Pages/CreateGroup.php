@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\Groups\Pages;
 
+use App\Actions\Groups\CreateGroupAction;
 use App\Filament\Resources\Groups\GroupResource;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class CreateGroup extends CreateRecord
 {
@@ -12,17 +14,9 @@ class CreateGroup extends CreateRecord
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
      */
-    protected function mutateFormDataBeforeCreate(array $data): array
+    protected function handleRecordCreation(array $data): Model
     {
-        $branch = Filament::getTenant();
-
-        $data['company_id'] = $branch->company_id;
-        $data['branch_id'] = $branch->id;
-        $data['created_by'] = Filament::auth()->id();
-        $data['status'] = 'draft';
-
-        return $data;
+        return app(CreateGroupAction::class)->execute(Filament::auth()->user(), Filament::getTenant(), $data);
     }
 }

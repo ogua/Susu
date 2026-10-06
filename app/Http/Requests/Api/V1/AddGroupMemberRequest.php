@@ -4,7 +4,7 @@ namespace App\Http\Requests\Api\V1;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class PayoutGroupRoundRequest extends FormRequest
+class AddGroupMemberRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -12,27 +12,27 @@ class PayoutGroupRoundRequest extends FormRequest
     }
 
     /**
+     * Only used via the sync batch (group.member.add) — there's no direct HTTP route for
+     * this op, so only payloadRules() applies.
+     *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
-        return [
-            'override' => ['nullable', 'boolean'],
-        ];
+        return [];
     }
 
     /**
-     * group.payout sync op. Rounds are generated separately on each device at
-     * activation, so the round is named by group + round number, not its id.
-     *
      * @return array<string, mixed>
      */
     public static function payloadRules(): array
     {
         return [
             'group_id' => ['required', 'uuid'],
-            'round_number' => ['required', 'integer', 'min:1'],
-            'override' => ['nullable', 'boolean'],
+            'customer_id' => ['required', 'uuid'],
+            'rotation_position' => ['required', 'integer', 'min:1'],
+            // Becomes the member's id, so later group.contribution.record ops resolve it.
+            'client_reference' => ['nullable', 'uuid'],
         ];
     }
 }

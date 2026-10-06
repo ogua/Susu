@@ -11,8 +11,15 @@ use Illuminate\Validation\ValidationException;
 /** Membership is fixed once a group activates — rotation math depends on it. */
 class AddGroupMemberAction
 {
-    public function execute(Group $group, Customer $customer, int $rotationPosition): GroupMember
+    /**
+     * @param  string|null  $memberId  an offline client's id for the member, so its
+     *                                 later contribution ops resolve the same row
+     */
+    public function execute(Group $group, Customer $customer, int $rotationPosition, ?string $memberId = null): GroupMember
     {
+        if ($memberId !== null && ($existing = GroupMember::find($memberId)) !== null) {
+            return $existing;
+        }
         if ($group->status !== GroupStatus::Draft) {
             throw ValidationException::withMessages(['group' => 'Members can only be added while the group is in draft.']);
         }
@@ -26,12 +33,18 @@ class AddGroupMemberAction
             throw ValidationException::withMessages(['rotation_position' => 'This rotation position is already taken.']);
         }
 
-        return GroupMember::create([
+        $member = new GroupMember([
             'group_id' => $group->id,
             'customer_id' => $customer->id,
             'rotation_position' => $rotationPosition,
             'status' => 'active',
             'joined_at' => now(),
         ]);
+        if ($memberId !== null) {
+            $member->forceFill(['id' => $memberId]);
+        }
+        $member->save();
+
+        return $member;
     }
 }
