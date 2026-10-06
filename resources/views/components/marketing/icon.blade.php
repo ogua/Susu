@@ -1,0 +1,35 @@
+@props(['name'])
+@php
+    $paths = [
+        'arrow-right' => '<path d="M5 12h14M13 6l6 6-6 6"/>',
+        'check' => '<path d="M20 6 9 17l-5-5"/>',
+        'menu' => '<path d="M4 7h16M4 12h16M4 17h16"/>',
+        'close' => '<path d="M6 6l12 12M18 6 6 18"/>',
+        'plus' => '<path d="M12 5v14M5 12h14"/>',
+        'wifi-off' => '<path d="M2 8.8a15 15 0 0 1 4.2-2.6M10.7 5.1A15 15 0 0 1 22 8.8M5 12.9a10 10 0 0 1 5-2.7M16.8 11.2A10 10 0 0 1 19 12.9M8.5 16.4a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/>',
+        'sync' => '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>',
+        'coins' => '<circle cx="9" cy="9" r="6"/><path d="M15.1 9.3A6 6 0 1 1 9.3 15.1M9 7v4M7.5 8h2.7"/>',
+        'savings' => '<path d="M5 11a7 7 0 0 1 12.2-4.6L20 6v4l-1.5 1a7 7 0 0 1-1.5 4V18h-3v-1.5a7.3 7.3 0 0 1-4 0V18H7v-2.4A7 7 0 0 1 5 11Z"/><path d="M15 9h.01M2 10a3 3 0 0 0 3 3"/>',
+        'loan' => '<path d="M3 11l4-4 3 2 4-4 3 3"/><path d="M3 15h4l3 2h4a2 2 0 0 0 0-4h-3M3 20h18"/>',
+        'group' => '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.9.2 5 2.2 5 5"/>',
+        'ledger' => '<path d="M5 3h12a2 2 0 0 1 2 2v16H7a2 2 0 0 1-2-2V3Z"/><path d="M5 17a2 2 0 0 1 2-2h12M9 7h6M9 11h6"/>',
+        'sms' => '<path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/>',
+        'momo' => '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M10 18h4M9.5 9.5 12 7l2.5 2.5M12 7v6"/>',
+        'map-pin' => '<path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>',
+        'branches' => '<path d="M4 21V9l5-3 5 3v12M14 21v-8l3-2 3 2v8M2 21h20M8 12h2M8 16h2"/>',
+        'shield' => '<path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3Z"/><path d="m9 12 2 2 4-4"/>',
+        'wallet' => '<path d="M4 7a2 2 0 0 1 2-2h12v4M4 7v10a2 2 0 0 0 2 2h14V9H6a2 2 0 0 1-2-2Z"/><path d="M16 14h.01"/>',
+        'chart' => '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+        'phone' => '<path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A17 17 0 0 1 4.5 5.2 2 2 0 0 1 6.5 3Z"/>',
+        'mail' => '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/>',
+        'whatsapp' => '<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19l-4 1Z"/><path d="M9 9.5c.3 2.4 2.1 4.2 4.5 4.5l1-1 2 .8v1.2c-3.9.4-8-3.7-7.6-7.6H10l.8 2-1 1Z"/>',
+        'monitor' => '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+        'smartphone' => '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+        'globe' => '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18-2.5-2.6-2.5-15.4 0-18Z"/>',
+        'user-check' => '<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5 1.5 0 2.9.4 4 1.2M16 18l2 2 4-4"/>',
+        'calendar-check' => '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/>',
+        'file-report' => '<path d="M6 2h9l5 5v15H6V2Z"/><path d="M14 2v6h6M9 17v-3M12 17v-5M15 17v-2"/>',
+        'building' => '<path d="M4 21V5l8-3 8 3v16M2 21h20M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/>',
+    ];
+@endphp
+<svg {{ $attributes->merge(['class' => 'h-5 w-5']) }} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $paths[$name] ?? '' !!}</svg>

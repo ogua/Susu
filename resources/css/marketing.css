@@ -1,0 +1,285 @@
+/*
+ * OguaFinance public website — "Susu passbook" design.
+ *
+ * A standalone Tailwind entry so nothing here leaks into app.css or the
+ * Filament themes. Sources are scoped to the marketing views only.
+ *
+ * Palette: ivory ledger paper, cocoa ink, amber gold (the app's own panel
+ * colour), deep teal for money and trust, terracotta for the ledger margin.
+ * Gold is a fill/decoration colour — it fails AA as text on paper, so gold
+ * *text* always uses --color-fin-gold-ink.
+ */
+@import 'tailwindcss' source(none);
+
+@source '../views/marketing';
+@source '../views/components/marketing';
+@source '../views/components/ogua-family';
+@source '../js/marketing.js';
+
+@theme {
+    --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Fraunces', ui-serif, Georgia, serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --color-fin-paper: #fbf8f1;
+    --color-fin-paper-deep: #f4eee1;
+    --color-fin-card: #ffffff;
+    --color-fin-ink: #1c1712;
+    --color-fin-ink-soft: #2a231c;
+    --color-fin-body: #4a4037;
+    --color-fin-muted: #6b6257;
+    --color-fin-line: #e9e1d2;
+    --color-fin-gold: #d99a1e;
+    --color-fin-gold-ink: #8f5a0f;
+    --color-fin-gold-soft: #f6e7c6;
+    --color-fin-teal: #0f5e5a;
+    --color-fin-teal-soft: #e3efec;
+    --color-fin-clay: #c2532f;
+
+    --animate-stamp: stamp 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+
+    @keyframes stamp {
+        0% {
+            opacity: 0;
+            transform: scale(1.8) rotate(-18deg);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1) rotate(-8deg);
+        }
+    }
+}
+
+@layer base {
+    html {
+        scroll-padding-top: 6rem;
+    }
+
+    body {
+        background-color: var(--color-fin-paper);
+    }
+
+    ::selection {
+        background: var(--color-fin-gold-soft);
+        color: var(--color-fin-ink);
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-fin-teal);
+        outline-offset: 3px;
+    }
+
+    .on-dark :focus-visible {
+        outline-color: var(--color-fin-gold);
+    }
+}
+
+@layer components {
+    /* Ruled ledger paper with a terracotta margin line — the site's texture. */
+    .ledger-paper {
+        background-color: var(--color-fin-paper);
+        background-image:
+            linear-gradient(to right, transparent 2.75rem, color-mix(in srgb, var(--color-fin-clay) 35%, transparent) 2.75rem, color-mix(in srgb, var(--color-fin-clay) 35%, transparent) calc(2.75rem + 1px), transparent calc(2.75rem + 1px)),
+            repeating-linear-gradient(to bottom, transparent 0, transparent 31px, color-mix(in srgb, var(--color-fin-line) 80%, transparent) 31px, color-mix(in srgb, var(--color-fin-line) 80%, transparent) 32px);
+    }
+
+    /* Double rule used as a section divider, like a ledger's totals line. */
+    .ledger-rule {
+        height: 5px;
+        border-top: 1px solid var(--color-fin-ink);
+        border-bottom: 1px solid var(--color-fin-ink);
+        opacity: 0.18;
+    }
+
+    .eyebrow {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 500;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--color-fin-gold-ink);
+    }
+
+    .on-dark .eyebrow {
+        color: var(--color-fin-gold);
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border-radius: 999px;
+        padding: 0.8rem 1.4rem;
+        font-weight: 700;
+        font-size: 0.95rem;
+        transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .btn:hover {
+        transform: translateY(-1px);
+    }
+
+    .btn-gold {
+        background: var(--color-fin-gold);
+        color: var(--color-fin-ink);
+        box-shadow: 0 1px 0 rgb(0 0 0 / 0.15), 0 10px 24px -12px color-mix(in srgb, var(--color-fin-gold) 80%, transparent);
+    }
+
+    .btn-gold:hover {
+        background: #e5a62a;
+    }
+
+    .btn-ink {
+        background: var(--color-fin-ink);
+        color: var(--color-fin-paper);
+    }
+
+    .btn-ink:hover {
+        background: var(--color-fin-ink-soft);
+    }
+
+    .btn-ghost {
+        border: 1px solid color-mix(in srgb, var(--color-fin-ink) 25%, transparent);
+        color: var(--color-fin-ink);
+    }
+
+    .btn-ghost:hover {
+        background: color-mix(in srgb, var(--color-fin-ink) 5%, transparent);
+    }
+
+    .on-dark .btn-ghost {
+        border-color: rgb(251 248 241 / 0.3);
+        color: var(--color-fin-paper);
+    }
+
+    .on-dark .btn-ghost:hover {
+        background: rgb(251 248 241 / 0.08);
+    }
+
+    /* The susu collector's card: 31 daily cells, stamped as the day is collected. */
+    .passbook-cell {
+        position: relative;
+        aspect-ratio: 1;
+        border: 1px dashed color-mix(in srgb, var(--color-fin-ink) 22%, transparent);
+        border-radius: 0.4rem;
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        color: var(--color-fin-muted);
+        padding: 0.2rem 0.25rem;
+    }
+
+    .passbook-stamp {
+        position: absolute;
+        inset: 14%;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        border: 2px solid var(--color-fin-gold-ink);
+        color: var(--color-fin-gold-ink);
+        background: color-mix(in srgb, var(--color-fin-gold) 22%, transparent);
+        transform: rotate(-8deg);
+    }
+
+    .js .passbook-stamp {
+        animation: var(--animate-stamp);
+        animation-delay: calc(var(--i, 0) * 70ms + 400ms);
+    }
+
+    /* Header goes solid once the page scrolls. */
+    [data-site-header] {
+        transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    [data-site-header].is-scrolled {
+        background: color-mix(in srgb, var(--color-fin-paper) 92%, transparent);
+        backdrop-filter: blur(10px);
+        border-color: var(--color-fin-line);
+        box-shadow: 0 8px 24px -18px rgb(28 23 18 / 0.35);
+    }
+
+    [data-mobile-nav] {
+        display: none;
+    }
+
+    [data-mobile-nav].is-open {
+        display: block;
+    }
+
+    /* FAQ: animate the panel height with a grid-rows trick, no JS measuring. */
+    [data-faq-panel] {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.25s ease;
+    }
+
+    [data-faq-panel] > div {
+        overflow: hidden;
+    }
+
+    [data-faq-item].is-open [data-faq-panel] {
+        grid-template-rows: 1fr;
+    }
+
+    [data-faq-item].is-open [data-faq-icon] {
+        transform: rotate(45deg);
+    }
+
+    /* Scroll reveal — only hides content once JS has confirmed it can reveal it. */
+    .js [data-reveal] {
+        opacity: 0;
+        transform: translateY(14px);
+        transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .js [data-reveal].is-visible {
+        opacity: 1;
+        transform: none;
+    }
+
+    .prose-legal h2 {
+        font-family: var(--font-display);
+        font-size: 1.35rem;
+        font-weight: 600;
+        color: var(--color-fin-ink);
+        margin-top: 2.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .prose-legal p,
+    .prose-legal li {
+        line-height: 1.75;
+        color: var(--color-fin-body);
+    }
+
+    .prose-legal p + p {
+        margin-top: 0.9rem;
+    }
+
+    .prose-legal ul {
+        list-style: disc;
+        padding-left: 1.25rem;
+        margin-top: 0.6rem;
+    }
+
+    .prose-legal a {
+        color: var(--color-fin-teal);
+        text-decoration: underline;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .js [data-reveal] {
+        opacity: 1;
+        transform: none;
+    }
+}

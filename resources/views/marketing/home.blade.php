@@ -1,0 +1,11 @@
+<x-marketing.layout>
+    @include('marketing.sections.hero')
+    @include('marketing.sections.how-it-works')
+    @include('marketing.sections.features')
+    @include('marketing.sections.offline')
+    @include('marketing.sections.audience')
+    @include('marketing.sections.pricing')
+    @include('marketing.sections.download')
+    @include('marketing.sections.faq')
+    @include('marketing.sections.final-cta')
+</x-marketing.layout>

@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Filament\SuperAdmin\Pages\Devices;
 use App\Models\Company;
 use App\Models\CompanyExport;
+use App\Models\DemoRequest;
 use App\Models\NotificationLog;
 use App\Models\SubscriptionInvoice;
 use App\Models\SyncOp;
@@ -49,6 +50,7 @@ class BuildPlatformDigestAction
             $this->item('Rejected sync operations (24h)', (string) ($rejected = SyncOp::query()->where('status', 'rejected')->where('created_at', '>=', $since)->count()), $rejected > 0),
             $this->item('Failed SMS (24h)', (string) ($failedSms = NotificationLog::query()->where('status', 'failed')->where('created_at', '>=', $since)->count()), $failedSms > 0),
             $this->item('Failed data exports (24h)', (string) ($failedExports = CompanyExport::query()->where('status', CompanyExport::STATUS_FAILED)->where('updated_at', '>=', $since)->count()), $failedExports > 0),
+            $this->item('Open demo requests', (string) DemoRequest::query()->open()->count(), DemoRequest::query()->open()->where('created_at', '<', now()->subDays(2))->exists()),
             $this->item('Stale devices', (string) (clone $tokens)->where(fn ($query) => $query->whereNull('last_used_at')->orWhere('last_used_at', '<', now()->subDays(Devices::STALE_AFTER_DAYS)))->count(), false),
         ];
 

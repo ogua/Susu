@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\BillingPeriod;
 use Database\Factories\PlanFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -62,6 +63,16 @@ class Plan extends Model
     public function subscriptions(): HasMany
     {
         return $this->hasMany(CompanySubscription::class);
+    }
+
+    /**
+     * Plans on sale, in display order (the public pricing section).
+     *
+     * @param  Builder<Plan>  $query
+     */
+    public function scopeActive(Builder $query): void
+    {
+        $query->where('is_active', true)->orderBy('sort')->orderBy('price_amount');
     }
 
     public function limitFor(string $resource): ?int

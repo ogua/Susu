@@ -1,6 +1,6 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-CeG-rWdw.css",
+    "file": "assets/app-DgxEmr69.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -9,11 +9,11 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-CYUBgx3V.css",
+    "file": "assets/theme-tmG9klef.css",
     "src": "resources/css/filament/admin/theme.css"
   },
   "resources/css/filament/superAdmin/theme.css": {
-    "file": "assets/theme-DXEsx3cS.css",
+    "file": "assets/theme-Abv461XG.css",
     "src": "resources/css/filament/superAdmin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -21,10 +21,25 @@
       "theme.css"
     ]
   },
+  "resources/css/marketing.css": {
+    "file": "assets/marketing-CzbmJ4JR.css",
+    "src": "resources/css/marketing.css",
+    "isEntry": true,
+    "name": "marketing",
+    "names": [
+      "marketing.css"
+    ]
+  },
   "resources/js/app.js": {
     "file": "assets/app-CIomGrQN.js",
     "name": "app",
     "src": "resources/js/app.js",
+    "isEntry": true
+  },
+  "resources/js/marketing.js": {
+    "file": "assets/marketing-Ch_8fkZl.js",
+    "name": "marketing",
+    "src": "resources/js/marketing.js",
     "isEntry": true
   }
 }
