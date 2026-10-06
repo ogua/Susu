@@ -52,6 +52,31 @@ public class ApiClient {
         return json;
     }
 
+    /**
+     * Replaces the signed-in user's password. The server refuses every other
+     * call (403, code "password_change_required") while the account is still
+     * on a temporary password sent at onboarding or after an admin reset.
+     */
+    public JSONObject changePassword(String currentPassword, String newPassword) throws ApiException {
+        String token = requireToken();
+
+        JSONObject body = new JSONObject()
+                .put("current_password", currentPassword)
+                .put("password", newPassword)
+                .put("password_confirmation", newPassword);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/v1/auth/password"))
+                .timeout(Duration.ofSeconds(20))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer " + token)
+                .PUT(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
+
+        return send(request);
+    }
+
     /** Full snapshot of the caller's working set (accounts/customers/products). Requires a cached token. */
     public JSONObject bootstrap() throws ApiException {
         String token = requireToken();
