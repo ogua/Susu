@@ -47,6 +47,11 @@ class SuperAdminPanelProvider extends PanelProvider
             ->pages([
                 Dashboard::class,
             ])
+            ->navigationGroups([
+                'Billing',
+                'Reports',
+                'Operations',
+            ])
             ->discoverWidgets(in: app_path('Filament/SuperAdmin/Widgets'), for: 'App\Filament\SuperAdmin\Widgets')
             ->widgets([
                 AccountWidget::class,
