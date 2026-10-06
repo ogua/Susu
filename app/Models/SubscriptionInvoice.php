@@ -26,6 +26,8 @@ class SubscriptionInvoice extends Model
         'due_at',
         'status',
         'paid_at',
+        'reminder_sent_at',
+        'overdue_notice_sent_at',
         'payment_method',
         'payment_reference',
         'provider_reference',
@@ -45,6 +47,8 @@ class SubscriptionInvoice extends Model
             'due_at' => 'datetime',
             'status' => InvoiceStatus::class,
             'paid_at' => 'datetime',
+            'reminder_sent_at' => 'datetime',
+            'overdue_notice_sent_at' => 'datetime',
             'raw_response' => 'array',
         ];
     }

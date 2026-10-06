@@ -8,6 +8,7 @@ use App\Enums\SubscriptionStatus;
 use App\Models\Company;
 use App\Models\SubscriptionInvoice;
 use App\Models\User;
+use App\Notifications\SubscriptionInvoiceNotice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -20,7 +21,10 @@ use Illuminate\Validation\ValidationException;
  */
 class RecordInvoicePaymentAction
 {
-    public function __construct(private readonly SetCompanyActiveStatusAction $setCompanyStatus) {}
+    public function __construct(
+        private readonly SetCompanyActiveStatusAction $setCompanyStatus,
+        private readonly NotifyInvoiceAction $notifyInvoice,
+    ) {}
 
     /**
      * @param  array<string, mixed>|null  $rawResponse
@@ -63,6 +67,10 @@ class RecordInvoicePaymentAction
             $company = $locked->company;
             if (! $stillOverdue && ! $company->is_active && $company->suspended_reason === Company::SUSPENDED_FOR_NON_PAYMENT) {
                 $this->setCompanyStatus->execute($company, true);
+            }
+
+            if ($method !== 'waived') {
+                $this->notifyInvoice->execute($locked, SubscriptionInvoiceNotice::PAID);
             }
 
             return $locked;

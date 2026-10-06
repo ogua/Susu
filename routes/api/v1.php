@@ -67,6 +67,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RecordClientDev
             ->middleware('throttle:10,1')->name('company.subscription.invoices.checkout');
         Route::post('/company/subscription/invoices/{invoice}/verify', [CompanySubscriptionController::class, 'verify'])
             ->middleware('throttle:20,1')->name('company.subscription.invoices.verify');
+        Route::get('/company/subscription/invoices/{invoice}/pdf-url', [CompanySubscriptionController::class, 'pdfUrl'])
+            ->name('company.subscription.invoices.pdf-url');
     });
 
     Route::prefix('agent')->name('agent.')->middleware('role:field_agent|branch_manager|company_admin')->group(function (): void {

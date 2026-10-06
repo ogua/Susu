@@ -10,6 +10,7 @@ use App\Models\SubscriptionInvoice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 
 /**
  * The signed-in company admin's subscription, usage and open invoices, and
@@ -45,6 +46,16 @@ class CompanySubscriptionController extends Controller
         }
 
         return $this->show($request);
+    }
+
+    /** A 10-minute signed link to the invoice PDF, for the app's in-app browser. */
+    public function pdfUrl(Request $request, SubscriptionInvoice $invoice): JsonResponse
+    {
+        $this->assertOwnInvoice($request, $invoice);
+
+        return response()->json([
+            'url' => URL::temporarySignedRoute('billing.invoices.pdf', now()->addMinutes(10), ['invoice' => $invoice]),
+        ]);
     }
 
     private function company(Request $request): Company

@@ -6,6 +6,8 @@ use App\Enums\InvoiceStatus;
 use App\Filament\SuperAdmin\Resources\SubscriptionInvoices\InvoiceActions;
 use App\Models\SubscriptionInvoice;
 use App\Support\Money;
+use Filament\Actions\Action;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -46,6 +48,11 @@ class SubscriptionInvoicesTable
                     ->query(fn (Builder $query): Builder => $query->where('status', InvoiceStatus::Unpaid)->where('due_at', '<', now())),
             ])
             ->recordActions([
+                Action::make('pdf')
+                    ->label('PDF')
+                    ->icon(Heroicon::OutlinedDocumentArrowDown)
+                    ->url(fn (SubscriptionInvoice $record): string => route('billing.invoices.pdf', $record))
+                    ->openUrlInNewTab(),
                 InvoiceActions::recordPayment(),
                 InvoiceActions::void(),
             ])

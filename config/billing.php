@@ -21,6 +21,9 @@ return [
     */
     'suspend_after_days' => (int) env('BILLING_SUSPEND_AFTER_DAYS', 7),
 
+    /* Days before an invoice's due date that the payment reminder email goes out. */
+    'reminder_days_before' => (int) env('BILLING_REMINDER_DAYS_BEFORE', 3),
+
     'currency' => env('BILLING_CURRENCY', 'GHS'),
 
     /*

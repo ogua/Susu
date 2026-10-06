@@ -116,6 +116,11 @@ class Billing extends Page implements HasTable
                 TextColumn::make('paid_at')->label('Paid')->date()->placeholder('—'),
             ])
             ->recordActions([
+                Action::make('pdf')
+                    ->label(fn (SubscriptionInvoice $record): string => $record->status === InvoiceStatus::Paid ? 'Receipt' : 'Invoice')
+                    ->icon(Heroicon::OutlinedDocumentArrowDown)
+                    ->url(fn (SubscriptionInvoice $record): string => route('billing.invoices.pdf', $record))
+                    ->openUrlInNewTab(),
                 Action::make('pay')
                     ->label('Pay now')
                     ->icon(Heroicon::OutlinedCreditCard)

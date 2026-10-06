@@ -17,11 +17,13 @@ class RunBillingCycle extends Command
         $summary = $runBillingCycle->execute();
 
         $this->info(sprintf(
-            'Trials converted: %d · periods renewed: %d · newly past due: %d · suspended: %d',
+            'Trials converted: %d · periods renewed: %d · newly past due: %d · suspended: %d · reminders: %d · overdue notices: %d',
             $summary['trials_converted'],
             $summary['renewed'],
             $summary['past_due'],
             $summary['suspended'],
+            $summary['reminders'],
+            $summary['overdue_notices'],
         ));
 
         return self::SUCCESS;

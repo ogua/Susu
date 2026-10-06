@@ -20,6 +20,7 @@ use App\Http\Controllers\Reports\TrialBalanceReportController;
 use App\Http\Controllers\Reports\WithdrawalsReportController;
 use App\Http\Controllers\SavingsAccountStatementController;
 use App\Http\Controllers\SignedAccountStatementController;
+use App\Http\Controllers\SubscriptionInvoicePdfController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -80,6 +81,11 @@ Route::get('/billing/callback', BillingCallbackController::class)
 Route::get('/billing/return', BillingReturnController::class)
     ->middleware('throttle:20,1')
     ->name('billing.return');
+
+// Subscription invoice / receipt PDF: session users (auth checked in the
+// controller) or a signed URL minted by the API for the apps.
+Route::get('/billing/invoices/{invoice}/pdf', SubscriptionInvoicePdfController::class)
+    ->name('billing.invoices.pdf');
 
 // Platform-wide reports for the super admin panel (no branch in the URL).
 Route::middleware('auth')->prefix('platform-reports')->name('platform-reports.')->group(function (): void {
