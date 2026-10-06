@@ -22,21 +22,30 @@ use App\Actions\Loans\RejectLoanAction;
 use App\Actions\Loans\RestructureLoanAction;
 use App\Actions\Loans\TopUpLoanAction;
 use App\Actions\Loans\WriteOffLoanAction;
+use App\Actions\Savings\BuySharesAction;
+use App\Actions\Savings\DecideWithdrawalAction;
 use App\Actions\Savings\OpenSavingsAccountAction;
+use App\Actions\Savings\PayWithdrawalAction;
 use App\Actions\Savings\RecordCollectionAction;
+use App\Actions\Savings\RequestWithdrawalAction;
 use App\Enums\ClientOrigin;
 use App\Enums\LoanFrequency;
 use App\Enums\SyncOpType;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
 use App\Http\Requests\Api\V1\ApproveLoanRequest;
+use App\Http\Requests\Api\V1\ApproveWithdrawalRequest;
+use App\Http\Requests\Api\V1\BuySharesRequest;
 use App\Http\Requests\Api\V1\CancelGroupLoanRequest;
 use App\Http\Requests\Api\V1\DisburseLoanRequest;
 use App\Http\Requests\Api\V1\IssueGroupMemberLoanRequest;
+use App\Http\Requests\Api\V1\PayWithdrawalRequest;
 use App\Http\Requests\Api\V1\RecalculateScheduleRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanDepositRequest;
 use App\Http\Requests\Api\V1\RecordGroupLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\RecordLoanRepaymentRequest;
 use App\Http\Requests\Api\V1\RejectLoanRequest;
+use App\Http\Requests\Api\V1\RejectWithdrawalRequest;
+use App\Http\Requests\Api\V1\RequestWithdrawalRequest;
 use App\Http\Requests\Api\V1\RestructureLoanRequest;
 use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
@@ -58,6 +67,7 @@ use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\SyncOp;
 use App\Models\User;
+use App\Models\WithdrawalRequest;
 use App\Support\StaffBranch;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -99,6 +109,10 @@ class ProcessSyncBatchAction
         private WriteOffGroupLoanAction $writeOffGroupLoan,
         private CancelGroupLoanAction $cancelGroupLoan,
         private RecalculateRepaymentScheduleAction $recalculateSchedule,
+        private RequestWithdrawalAction $requestWithdrawal,
+        private DecideWithdrawalAction $decideWithdrawal,
+        private PayWithdrawalAction $payWithdrawal,
+        private BuySharesAction $buyShares,
     ) {}
 
     /**
@@ -253,6 +267,11 @@ class ProcessSyncBatchAction
             SyncOpType::CancelGroupLoan => $this->applyCancelGroupLoan($actor, $payload),
             SyncOpType::RecalculateLoanSchedule => $this->applyRecalculateSchedule($actor, $this->scoped(Loan::class, $actor)->findOrFail($payload['loan_id']), $payload),
             SyncOpType::RecalculateGroupLoanSchedule => $this->applyRecalculateSchedule($actor, $this->scoped(GroupLoan::class, $actor)->findOrFail($payload['group_loan_id']), $payload),
+            SyncOpType::RequestWithdrawal => $this->applyRequestWithdrawal($actor, $payload, $op['op_id']),
+            SyncOpType::ApproveWithdrawal => $this->withdrawalResult($this->decideWithdrawal->approve($actor, $this->scoped(WithdrawalRequest::class, $actor)->findOrFail($payload['withdrawal_request_id']))),
+            SyncOpType::RejectWithdrawal => $this->withdrawalResult($this->decideWithdrawal->reject($actor, $this->scoped(WithdrawalRequest::class, $actor)->findOrFail($payload['withdrawal_request_id']), $payload['reason'])),
+            SyncOpType::PayWithdrawal => $this->withdrawalResult($this->payWithdrawal->execute($actor, $this->scoped(WithdrawalRequest::class, $actor)->findOrFail($payload['withdrawal_request_id']))),
+            SyncOpType::BuyShares => $this->applyBuyShares($actor, $origin, $payload, $op['op_id'], $recordedAt),
         };
     }
 
@@ -285,6 +304,11 @@ class ProcessSyncBatchAction
             SyncOpType::CancelGroupLoan => CancelGroupLoanRequest::payloadRules(),
             SyncOpType::RecalculateLoanSchedule => RecalculateScheduleRequest::payloadRules(),
             SyncOpType::RecalculateGroupLoanSchedule => RecalculateScheduleRequest::groupPayloadRules(),
+            SyncOpType::RequestWithdrawal => RequestWithdrawalRequest::payloadRules(),
+            SyncOpType::ApproveWithdrawal => ApproveWithdrawalRequest::payloadRules(),
+            SyncOpType::RejectWithdrawal => RejectWithdrawalRequest::payloadRules(),
+            SyncOpType::PayWithdrawal => PayWithdrawalRequest::payloadRules(),
+            SyncOpType::BuyShares => BuySharesRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -444,6 +468,60 @@ class ProcessSyncBatchAction
         $loan = $this->approveLoan->execute($loan, $actor);
 
         return ['loan_id' => $loan->id, 'status' => $loan->status->value];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyRequestWithdrawal(User $actor, array $payload, string $opId): array
+    {
+        $account = $this->scoped(SavingsAccount::class, $actor)->findOrFail($payload['savings_account_id']);
+
+        return $this->withdrawalResult($this->requestWithdrawal->execute(
+            $actor,
+            $account,
+            (int) $payload['amount'],
+            $payload['reason'] ?? null,
+            $payload['client_reference'] ?? $opId,
+        ));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function withdrawalResult(WithdrawalRequest $withdrawal): array
+    {
+        return [
+            'withdrawal_request_id' => $withdrawal->id,
+            'status' => $withdrawal->status->value,
+            'penalty_amount' => $withdrawal->penalty_amount,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyBuyShares(User $actor, ClientOrigin $origin, array $payload, string $opId, Carbon $recordedAt): array
+    {
+        $account = $this->scoped(SavingsAccount::class, $actor)->findOrFail($payload['savings_account_id']);
+
+        $result = $this->buyShares->execute(
+            agent: $actor,
+            account: $account,
+            shares: (int) $payload['shares'],
+            clientReference: $payload['client_reference'] ?? $opId,
+            recordedAt: $recordedAt,
+            origin: $origin,
+        );
+
+        return [
+            'entry_id' => $result->entry->id,
+            'reference' => $result->entry->reference,
+            'share_count' => $result->account->share_count,
+            'balance' => $result->account->balance,
+        ];
     }
 
     /**

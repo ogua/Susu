@@ -66,7 +66,7 @@ class RequestWithdrawalAction
                     ]);
                 }
 
-                return WithdrawalRequest::create([
+                $withdrawal = new WithdrawalRequest([
                     'company_id' => $account->company_id,
                     'branch_id' => $account->branch_id,
                     'savings_account_id' => $account->id,
@@ -78,6 +78,14 @@ class RequestWithdrawalAction
                     'requested_by' => $requestedBy->id,
                     'client_reference' => $clientReference,
                 ]);
+                // Offline clients use their reference as the id, so a later
+                // approve/pay op from the same device resolves this row.
+                if ($clientReference !== null) {
+                    $withdrawal->forceFill(['id' => $clientReference]);
+                }
+                $withdrawal->save();
+
+                return $withdrawal;
             });
         } catch (UniqueConstraintViolationException $e) {
             // A concurrent retry with the same reference won the race.

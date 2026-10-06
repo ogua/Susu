@@ -26,6 +26,11 @@ enum SyncOpType: string
     case WriteOffLoan = 'loan.write_off';
     case RecalculateLoanSchedule = 'loan.schedule.recalculate';
     case RecalculateGroupLoanSchedule = 'group_loan.schedule.recalculate';
+    case RequestWithdrawal = 'withdrawal.request';
+    case ApproveWithdrawal = 'withdrawal.approve';
+    case RejectWithdrawal = 'withdrawal.reject';
+    case PayWithdrawal = 'withdrawal.pay';
+    case BuyShares = 'shares.purchase';
 
     /**
      * Op types each role may push through /sync/batch.
@@ -51,9 +56,14 @@ enum SyncOpType: string
                 self::ActivateGroupLoan,
                 self::RecordGroupLoanRepayment,
                 self::CancelGroupLoan,
+                // Agents raise withdrawals for their customers (a manager
+                // decides and pays them) and sell shares in the field.
+                self::RequestWithdrawal,
+                self::BuyShares,
             ],
             // Managers/admins additionally own the individual-loan approve/
-            // reject/disburse decisions, every write-off and schedule recalculation.
+            // reject/disburse decisions, every write-off and schedule
+            // recalculation, and withdrawal approve/reject/pay.
             'branch_manager', 'company_admin' => self::cases(),
             default => [],
         };
