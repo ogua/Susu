@@ -1,6 +1,11 @@
-import { AxiosError, create, isAxiosError } from 'axios';
+import { AxiosError, create, isAxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 import { useAuthStore } from '@/stores/authStore';
+import { debugLog, errorLog } from '@/utils/debugLog';
+
+function requestLabel(config: InternalAxiosRequestConfig): string {
+  return `${(config.method ?? 'get').toUpperCase()} ${config.baseURL ?? ''}${config.url ?? ''}`;
+}
 
 /**
  * Shared axios instance. The base URL and bearer token are resolved per
@@ -20,12 +25,24 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
+  debugLog('API', `→ ${requestLabel(config)}${token ? '' : ' (no token)'}`, config.params ?? config.data);
+
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    debugLog('API', `← ${response.status} ${requestLabel(response.config)}`, response.data);
+
+    return response;
+  },
   async (error: AxiosError) => {
+    errorLog(
+      'API',
+      `✗ ${error.response?.status ?? error.code ?? 'NETWORK'} ${error.config ? requestLabel(error.config) : ''} — ${error.message}`,
+      error.response?.data,
+    );
+
     if (error.response?.status === 401 && useAuthStore.getState().token) {
       // Token revoked or expired server-side: drop the local session.
       await useAuthStore.getState().clearSession();
