@@ -1,4 +1,5 @@
 import { AxiosError, create, isAxiosError, type InternalAxiosRequestConfig } from 'axios';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 
 import { useAuthStore } from '@/stores/authStore';
@@ -13,9 +14,16 @@ function requestLabel(config: InternalAxiosRequestConfig): string {
  * request from the auth store so they can change at runtime (cloud vs
  * on-prem/LAN backends, login/logout) without rebuilding the client.
  */
+/** Lets the server show which app version each signed-in device runs. */
+const APP_VERSION = Constants.expoConfig?.version ?? 'unknown';
+
 export const api = create({
   timeout: 20_000,
-  headers: { Accept: 'application/json' },
+  headers: {
+    Accept: 'application/json',
+    'X-Client-Platform': 'mobile',
+    'X-App-Version': APP_VERSION,
+  },
 });
 
 api.interceptors.request.use((config) => {
