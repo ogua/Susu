@@ -40,7 +40,7 @@ class ApiTwoFactorChallenge
     /**
      * @return array{challenge_token: string, methods: list<string>, code_sent_to: array{email: ?string, phone: ?string}}
      */
-    public function start(User $user): array
+    public function start(User $user, bool $sendCode = true): array
     {
         $token = Str::random(48);
         $usesApp = filled($user->app_authentication_secret);
@@ -48,7 +48,7 @@ class ApiTwoFactorChallenge
         $this->put($token, ['user_id' => $user->id, 'code_hash' => null, 'attempts' => 0]);
 
         $sentTo = ['email' => null, 'phone' => null];
-        if (! $usesApp) {
+        if (! $usesApp && $sendCode) {
             $sentTo = $this->sendCode($token, $user);
         }
 

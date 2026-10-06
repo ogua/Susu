@@ -20,7 +20,8 @@ class AuthController extends Controller
      * Authenticate by email or phone. Users who need a second factor (see
      * ApiTwoFactorChallenge) get {two_factor_required, challenge_token, …}
      * and finish at POST /auth/login/two-factor; everyone else gets a Sanctum
-     * token whose ability is their primary role.
+     * token whose ability is their primary role. `silent: true` (the desktop's
+     * background re-sign-in) starts the challenge without sending a code.
      */
     public function login(LoginRequest $request): JsonResponse
     {
@@ -47,7 +48,7 @@ class AuthController extends Controller
         if ($this->twoFactor->requiredFor($user)) {
             return response()->json([
                 'two_factor_required' => true,
-                ...$this->twoFactor->start($user),
+                ...$this->twoFactor->start($user, sendCode: ! $request->boolean('silent')),
             ]);
         }
 

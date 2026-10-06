@@ -106,3 +106,14 @@ it('locks the challenge after too many wrong codes', function (): void {
         ->assertUnprocessable()
         ->assertJsonPath('errors.code.0', 'Too many wrong codes. Sign in again.');
 });
+
+it('starts a silent challenge without sending a code', function (): void {
+    User::factory()->companyAdmin($this->company)->create(['email' => 'boss3@x.test']);
+
+    $this->postJson('/api/v1/auth/login', ['login' => 'boss3@x.test', 'password' => 'password', 'device_name' => 'desk', 'silent' => true])
+        ->assertOk()
+        ->assertJsonPath('two_factor_required', true)
+        ->assertJsonPath('code_sent_to.email', null);
+
+    Notification::assertNothingSent();
+});
