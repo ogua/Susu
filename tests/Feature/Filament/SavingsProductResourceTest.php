@@ -3,12 +3,14 @@
 use App\Actions\Savings\RecordCollectionAction;
 use App\Enums\CommissionType;
 use App\Enums\SavingsProductType;
+use App\Filament\Resources\SavingsAccounts\Pages\ListSavingsAccounts;
 use App\Filament\Resources\SavingsProducts\Pages\CreateSavingsProduct;
 use App\Filament\Resources\SavingsProducts\Pages\EditSavingsProduct;
 use App\Models\Branch;
 use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\User;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Validation\ValidationException;
 
@@ -134,3 +136,27 @@ it('rejects susu collections on a shares account', function (): void {
 
     app(RecordCollectionAction::class)->execute($this->admin, $account, 10_00);
 })->throws(ValidationException::class, 'Share accounts are funded by buying shares');
+
+it('only offers Record Collection on accounts that can take one', function (): void {
+    $company = $this->branch->company_id;
+    $account = fn (SavingsProduct $product, array $attributes = []): SavingsAccount => SavingsAccount::factory()->create([
+        'company_id' => $company,
+        'branch_id' => $this->branch->id,
+        'savings_product_id' => $product->id,
+        ...$attributes,
+    ]);
+
+    $susu = $account(SavingsProduct::factory()->create(['company_id' => $company]));
+    $shares = $account(SavingsProduct::factory()->shares()->create(['company_id' => $company]));
+    $fixedDeposit = SavingsProduct::factory()->fixedDeposit()->create(['company_id' => $company]);
+    $unfunded = $account($fixedDeposit, ['balance' => 0, 'contribution_amount' => 1_000_00]);
+    $funded = $account($fixedDeposit, ['balance' => 1_000_00, 'contribution_amount' => 1_000_00]);
+
+    livewire(ListSavingsAccounts::class)
+        ->assertActionVisible(TestAction::make('recordCollection')->table($susu))
+        ->assertActionHidden(TestAction::make('recordCollection')->table($shares))
+        ->assertActionVisible(TestAction::make('recordCollection')->table($unfunded))
+        ->assertActionHidden(TestAction::make('recordCollection')->table($funded))
+        ->mountAction(TestAction::make('recordCollection')->table($unfunded))
+        ->assertSchemaStateSet(['amount' => 1000]);
+});

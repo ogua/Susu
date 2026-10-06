@@ -20,6 +20,19 @@ use Filament\Tables\Table;
 
 class SavingsAccountsTable
 {
+    /** A fixed deposit is funded with exactly its principal, so that amount is fixed. */
+    public static function collectionAmountField(SavingsAccount $record): TextInput
+    {
+        $isFixedDeposit = $record->product->type === SavingsProductType::FixedDeposit;
+
+        return TextInput::make('amount')
+            ->label($isFixedDeposit ? 'Principal (GHS)' : 'Amount (GHS)')
+            ->numeric()
+            ->required()
+            ->default($isFixedDeposit ? $record->contribution_amount / 100 : null)
+            ->readOnly($isFixedDeposit);
+    }
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -56,13 +69,10 @@ class SavingsAccountsTable
             ->recordActions([
                 Action::make('recordCollection')
                     ->label('Record Collection')
-                    ->visible(fn (SavingsAccount $record): bool => $record->product->type !== SavingsProductType::Shares)
+                    ->visible(fn (SavingsAccount $record): bool => $record->acceptsCollections())
                     ->authorize('recordCollection')
-                    ->schema([
-                        TextInput::make('amount')
-                            ->label('Amount (GHS)')
-                            ->numeric()
-                            ->required(),
+                    ->schema(fn (SavingsAccount $record): array => [
+                        self::collectionAmountField($record),
                     ])
                     ->action(function (array $data, SavingsAccount $record): void {
                         app(RecordCollectionAction::class)->execute(

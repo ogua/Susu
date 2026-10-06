@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AccountStatus;
+use App\Enums\SavingsProductType;
 use Database\Factories\SavingsAccountFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -98,6 +99,20 @@ class SavingsAccount extends Model
     }
 
     /** Null for non-target accounts; capped at 100 once the balance meets or exceeds the target. */
+    /**
+     * Whether a susu collection can be posted here at all — UI hint only;
+     * RecordCollectionAction enforces the same rules. Shares are bought, and a
+     * fixed deposit is funded once before it matures.
+     */
+    public function acceptsCollections(): bool
+    {
+        return match ($this->product->type) {
+            SavingsProductType::Shares => false,
+            SavingsProductType::FixedDeposit => $this->matured_at === null && $this->balance === 0,
+            default => true,
+        } && $this->status !== AccountStatus::Closed;
+    }
+
     public function targetProgressPercent(): ?float
     {
         if ($this->target_amount === null || $this->target_amount <= 0) {
