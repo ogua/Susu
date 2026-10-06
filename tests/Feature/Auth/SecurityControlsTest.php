@@ -4,7 +4,11 @@ use App\Filament\SuperAdmin\Pages\PlatformAuditLog;
 use App\Filament\SuperAdmin\Resources\Users\Pages\ListUsers;
 use App\Models\Branch;
 use App\Models\User;
+use App\Notifications\Channels\SmsChannel;
+use App\Notifications\TwoFactorCode;
+use App\Services\Auth\EmailAndSmsAuthentication;
 use Filament\Actions\Testing\TestAction;
+use Illuminate\Support\Facades\Notification;
 use Spatie\Activitylog\Models\Activity;
 use STS\FilamentImpersonate\Facades\Impersonation;
 
@@ -77,4 +81,30 @@ it('lets a super admin reset a user\'s two-factor and logs it', function (): voi
     expect($manager->app_authentication_secret)->toBeNull()
         ->and($manager->app_authentication_recovery_codes)->toBeNull()
         ->and(Activity::where('event', 'two_factor_reset')->exists())->toBeTrue();
+});
+
+it('sends two-factor codes to both email and phone, and verifies them', function (): void {
+    Notification::fake();
+    $this->superAdmin->update(['phone' => '+233244000111']);
+    $provider = EmailAndSmsAuthentication::make();
+
+    $this->actingAs($this->superAdmin);
+    expect($provider->sendCode($this->superAdmin))->toBeTrue();
+
+    $sentCode = null;
+    Notification::assertSentTo($this->superAdmin, TwoFactorCode::class, function (TwoFactorCode $notification, array $channels) use (&$sentCode): bool {
+        $sentCode = $notification->code;
+
+        return $channels === ['mail', SmsChannel::class];
+    });
+
+    expect($provider->verifyCode('000000x'))->toBeFalse()
+        ->and($provider->verifyCode($sentCode))->toBeTrue()
+        ->and($provider->verifyCode($sentCode))->toBeFalse();
+});
+
+it('accepts email and SMS codes as a super admin\'s required two-factor method', function (): void {
+    $this->superAdmin->toggleEmailAuthentication(true);
+
+    $this->actingAs($this->superAdmin)->get('/super-admin')->assertOk();
 });

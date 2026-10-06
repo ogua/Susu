@@ -6,6 +6,7 @@ use App\Filament\Pages\Auth\EditProfile;
 use App\Http\Middleware\RequirePasswordChange;
 use App\Models\Branch;
 use App\Models\User;
+use App\Services\Auth\EmailAndSmsAuthentication;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
@@ -45,6 +46,7 @@ class AdminPanelProvider extends PanelProvider
             ->passwordReset()
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
+                EmailAndSmsAuthentication::make(),
             ])
             ->profile(EditProfile::class)
             ->globalSearch()

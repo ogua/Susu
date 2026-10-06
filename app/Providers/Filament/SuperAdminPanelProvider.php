@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\Auth\EditProfile;
 use App\Http\Middleware\RequirePasswordChange;
+use App\Services\Auth\EmailAndSmsAuthentication;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
@@ -37,6 +38,7 @@ class SuperAdminPanelProvider extends PanelProvider
             ->passwordReset()
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable(),
+                EmailAndSmsAuthentication::make(),
             ], isRequired: true)
             ->profile(EditProfile::class)
             ->colors([

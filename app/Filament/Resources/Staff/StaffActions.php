@@ -25,11 +25,12 @@ class StaffActions
             ->color('warning')
             ->requiresConfirmation()
             ->modalDescription(fn (User $record): string => "{$record->name} will sign in with their password only and can set up an authenticator app again from their profile.")
-            ->visible(fn (User $record): bool => filled($record->app_authentication_secret)
+            ->visible(fn (User $record): bool => (filled($record->app_authentication_secret) || $record->hasEmailAuthentication())
                 && (Filament::auth()->user()?->hasRole('super_admin') ?? false))
             ->action(function (User $record): void {
                 $record->saveAppAuthenticationSecret(null);
                 $record->saveAppAuthenticationRecoveryCodes(null);
+                $record->toggleEmailAuthentication(false);
 
                 activity('security')
                     ->causedBy(Filament::auth()->user())
