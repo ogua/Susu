@@ -12,7 +12,7 @@ class LicenseRevenueChart extends ChartWidget
 {
     protected ?string $heading = 'License Revenue — Last 12 Months';
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 4;
 
     protected ?string $pollingInterval = null;
 

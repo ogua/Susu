@@ -11,7 +11,7 @@ class CompanyGrowthChart extends ChartWidget
 {
     protected ?string $heading = 'Company Growth — Last 12 Months';
 
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 3;
 
     protected ?string $pollingInterval = null;
 

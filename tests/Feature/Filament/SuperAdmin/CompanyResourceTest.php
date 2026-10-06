@@ -36,6 +36,13 @@ it('lets a super admin create a company', function (): void {
             'contact_email' => 'ops@kumasi-susu.test',
             'contact_phone' => '+233244000000',
             'is_active' => true,
+            'branch' => ['name' => 'Head Office', 'slug' => 'head-office'],
+            'admin' => [
+                'name' => 'Kumasi Admin',
+                'email' => 'admin@kumasi-susu.test',
+                'password' => 'secret-pass',
+                'password_confirmation' => 'secret-pass',
+            ],
         ])
         ->call('create')
         ->assertHasNoFormErrors();

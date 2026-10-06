@@ -155,9 +155,22 @@ class User extends Authenticatable implements HasAvatar, HasTenants
         return $branchId !== null && in_array($branchId, $this->accessibleBranchIds(), true);
     }
 
-    public function canAccessPanel(Panel $panel): bool
+    /**
+     * Whether the user may sign in at all: their own account is active and,
+     * for tenant users, their company has not been suspended by the platform.
+     */
+    public function hasActiveAccess(): bool
     {
         if (! $this->is_active) {
+            return false;
+        }
+
+        return $this->company_id === null || (bool) $this->company?->is_active;
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        if (! $this->hasActiveAccess()) {
             return false;
         }
 

@@ -84,3 +84,42 @@ it('revokes the current token on logout', function (): void {
 it('requires authentication for /auth/me', function (): void {
     $this->getJson('/api/v1/auth/me')->assertUnauthorized();
 });
+
+it('rejects users of a suspended company at login', function (): void {
+    $branch = Branch::factory()->create();
+    User::factory()->fieldAgent($branch)->create(['email' => 'agent@suspended.test']);
+    $branch->company->update(['is_active' => false]);
+
+    $this->postJson('/api/v1/auth/login', [
+        'login' => 'agent@suspended.test',
+        'password' => 'password',
+        'device_name' => 'pest-device',
+    ])->assertUnprocessable()->assertJsonValidationErrors('login');
+});
+
+it('revokes an existing token once the company is suspended', function (): void {
+    $branch = Branch::factory()->create();
+    $agent = User::factory()->fieldAgent($branch)->create();
+    $token = $agent->createToken('phone')->plainTextToken;
+
+    $this->withToken($token)->getJson('/api/v1/auth/me')->assertOk();
+
+    $branch->company->update(['is_active' => false]);
+    app('auth')->forgetGuards();
+
+    $this->withToken($token)->getJson('/api/v1/auth/me')->assertUnauthorized();
+
+    expect($agent->tokens()->count())->toBe(0);
+});
+
+it('revokes an existing token once the user is deactivated', function (): void {
+    $branch = Branch::factory()->create();
+    $agent = User::factory()->fieldAgent($branch)->create();
+    $token = $agent->createToken('phone')->plainTextToken;
+
+    $agent->update(['is_active' => false]);
+
+    $this->withToken($token)->getJson('/api/v1/auth/me')
+        ->assertUnauthorized()
+        ->assertJsonPath('message', 'This account has been deactivated.');
+});

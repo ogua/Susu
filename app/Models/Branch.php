@@ -9,11 +9,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Branch extends Model
 {
     /** @use HasFactory<BranchFactory> */
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, LogsActivity;
 
     protected $fillable = [
         'company_id',
@@ -59,5 +61,14 @@ class Branch extends Model
     public function journalEntries(): HasMany
     {
         return $this->hasMany(JournalEntry::class);
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['company_id', 'name', 'slug', 'code', 'contact_phone', 'contact_email'])
+            ->logOnlyDirty()
+            ->useLogName('branch')
+            ->dontSubmitEmptyLogs();
     }
 }

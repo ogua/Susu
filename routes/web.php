@@ -5,6 +5,7 @@ use App\Http\Controllers\Reports\AgentPerformanceReportController;
 use App\Http\Controllers\Reports\BalanceSheetReportController;
 use App\Http\Controllers\Reports\CashPositionReportController;
 use App\Http\Controllers\Reports\CollectionsReportController;
+use App\Http\Controllers\Reports\CompanyUsageReportController;
 use App\Http\Controllers\Reports\CustomerBalancesReportController;
 use App\Http\Controllers\Reports\DefaultersReportController;
 use App\Http\Controllers\Reports\GeneralLedgerReportController;
@@ -65,6 +66,12 @@ Route::middleware('auth')->prefix('reports/{branch}')->name('reports.')->group(f
     Route::get('/income-statement.xlsx', [IncomeStatementReportController::class, 'excel'])->name('income-statement.excel');
     Route::get('/balance-sheet.pdf', [BalanceSheetReportController::class, 'pdf'])->name('balance-sheet.pdf');
     Route::get('/balance-sheet.xlsx', [BalanceSheetReportController::class, 'excel'])->name('balance-sheet.excel');
+});
+
+// Platform-wide reports for the super admin panel (no branch in the URL).
+Route::middleware('auth')->prefix('platform-reports')->name('platform-reports.')->group(function (): void {
+    Route::get('/company-usage.pdf', [CompanyUsageReportController::class, 'pdf'])->name('company-usage.pdf');
+    Route::get('/company-usage.xlsx', [CompanyUsageReportController::class, 'excel'])->name('company-usage.excel');
 });
 
 // Headerless report downloads for the mobile/desktop apps — the API mints a

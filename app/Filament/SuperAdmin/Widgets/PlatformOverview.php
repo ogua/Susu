@@ -2,10 +2,14 @@
 
 namespace App\Filament\SuperAdmin\Widgets;
 
+use App\Enums\EntryStatus;
 use App\Enums\LicenseSaleStatus;
+use App\Enums\TransactionType;
 use App\Models\Branch;
 use App\Models\Company;
+use App\Models\Customer;
 use App\Models\DesktopLicenseSale;
+use App\Models\JournalLine;
 use App\Models\User;
 use App\Support\Money;
 use Filament\Widgets\StatsOverviewWidget;
@@ -17,6 +21,8 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  */
 class PlatformOverview extends StatsOverviewWidget
 {
+    protected static ?int $sort = 1;
+
     /**
      * @return array<int, Stat>
      */
@@ -26,6 +32,8 @@ class PlatformOverview extends StatsOverviewWidget
             $this->companies(),
             $this->branches(),
             $this->platformStaff(),
+            $this->customers(),
+            $this->collectionsThisMonth(),
             $this->licenseRevenueThisMonth(),
         ];
     }
@@ -34,9 +42,10 @@ class PlatformOverview extends StatsOverviewWidget
     {
         $total = Company::count();
         $active = Company::where('is_active', true)->count();
+        $incomplete = Company::query()->onboardingIncomplete()->count();
 
         return Stat::make('Companies', (string) $total)
-            ->description($active.' active')
+            ->description($active.' active'.($incomplete > 0 ? ' · '.$incomplete.' onboarding incomplete' : ''))
             ->icon('heroicon-o-building-office-2')
             ->color('success');
     }
@@ -58,6 +67,32 @@ class PlatformOverview extends StatsOverviewWidget
         return Stat::make('Platform Staff', (string) $count)
             ->icon('heroicon-o-users')
             ->color('info');
+    }
+
+    private function customers(): Stat
+    {
+        $newThisMonth = Customer::query()->where('created_at', '>=', now()->startOfMonth())->count();
+
+        return Stat::make('Customers', number_format(Customer::count()))
+            ->description($newThisMonth.' new this month')
+            ->icon('heroicon-o-user-group')
+            ->color('info');
+    }
+
+    /** Completed susu collections across every tenant, month to date. */
+    private function collectionsThisMonth(): Stat
+    {
+        $amount = (int) JournalLine::query()
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
+            ->where('journal_entries.type', TransactionType::Collection)
+            ->where('journal_entries.status', EntryStatus::Completed)
+            ->where('journal_entries.recorded_at', '>=', now()->startOfMonth())
+            ->sum('journal_lines.debit');
+
+        return Stat::make('Collections (This Month)', Money::format($amount))
+            ->description('Across all companies')
+            ->icon('heroicon-o-arrow-trending-up')
+            ->color('success');
     }
 
     private function licenseRevenueThisMonth(): Stat

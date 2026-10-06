@@ -33,6 +33,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if (! $user->hasActiveAccess()) {
+            throw ValidationException::withMessages([
+                'login' => ['This company\'s account has been suspended. Please contact your administrator.'],
+            ]);
+        }
+
         $role = $user->getRoleNames()->first() ?? 'none';
 
         $token = $user->createToken(
