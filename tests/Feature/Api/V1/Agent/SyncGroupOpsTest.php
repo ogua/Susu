@@ -5,6 +5,7 @@ use App\Enums\GroupStatus;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\Group;
+use App\Models\LoanGroup;
 use App\Models\User;
 use Illuminate\Support\Str;
 
@@ -86,3 +87,36 @@ it('rejects group setup ops from a field agent', function (string $type): void {
         'ops' => [groupOp($type, ['group_id' => (string) Str::uuid()])],
     ])->assertJsonPath('results.0.result.errors.0', 'This operation is not allowed for your role.');
 })->with(['group.create', 'group.member.add', 'group.activate', 'group.payout']);
+
+it('lets an agent create a customer group offline and manage its roster by client id', function (): void {
+    $loanGroupId = (string) Str::uuid();
+    $customer = Customer::factory()->forBranch($this->branch)->create();
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [
+            groupOp('loan_group.create', ['name' => 'Kejetia Traders', 'code' => 'KT-01', 'client_reference' => $loanGroupId]),
+            groupOp('loan_group.member.add', ['loan_group_id' => $loanGroupId, 'customer_id' => $customer->id]),
+            groupOp('loan_group.member.remove', ['loan_group_id' => $loanGroupId, 'customer_id' => $customer->id]),
+            // A customer who left can rejoin (the member row is unique per group + customer).
+            groupOp('loan_group.member.add', ['loan_group_id' => $loanGroupId, 'customer_id' => $customer->id]),
+        ],
+    ])->assertOk()
+        ->assertJsonPath('results.0.result.loan_group_id', $loanGroupId)
+        ->assertJsonPath('results.1.status', 'applied')
+        ->assertJsonPath('results.2.result.status', 'left')
+        ->assertJsonPath('results.3.result.status', 'active');
+
+    $loanGroup = LoanGroup::findOrFail($loanGroupId);
+    expect($loanGroup->branch_id)->toBe($this->branch->id)
+        ->and($loanGroup->members()->count())->toBe(1)
+        ->and($loanGroup->members()->first()->left_at)->toBeNull();
+});
+
+it('rejects a duplicate customer group code as a validation error', function (): void {
+    LoanGroup::factory()->create(['company_id' => $this->branch->company_id, 'branch_id' => $this->branch->id, 'code' => 'KT-01']);
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [groupOp('loan_group.create', ['name' => 'Kejetia Traders', 'code' => 'KT-01'])],
+    ])->assertJsonPath('results.0.status', 'rejected')
+        ->assertJsonMissingPath('results.0.retryable');
+});

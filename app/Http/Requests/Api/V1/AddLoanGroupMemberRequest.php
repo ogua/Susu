@@ -20,4 +20,18 @@ class AddLoanGroupMemberRequest extends FormRequest
             'customer_id' => ['required', 'uuid'],
         ];
     }
+
+    /**
+     * loan_group.member.add / loan_group.member.remove sync ops. Members are
+     * named by group + customer (stable across devices), not a member id.
+     *
+     * @return array<string, mixed>
+     */
+    public static function payloadRules(): array
+    {
+        return [
+            'loan_group_id' => ['required', 'uuid'],
+            'customer_id' => ['required', 'uuid'],
+        ];
+    }
 }

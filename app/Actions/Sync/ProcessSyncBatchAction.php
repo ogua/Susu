@@ -17,6 +17,9 @@ use App\Actions\Groups\AddGroupMemberAction;
 use App\Actions\Groups\CreateGroupAction;
 use App\Actions\Groups\PayoutGroupRoundAction;
 use App\Actions\Groups\RecordGroupContributionAction;
+use App\Actions\LoanGroups\AddLoanGroupMemberAction;
+use App\Actions\LoanGroups\CreateLoanGroupAction;
+use App\Actions\LoanGroups\RemoveLoanGroupMemberAction;
 use App\Actions\Loans\ApplyForLoanAction;
 use App\Actions\Loans\ApproveLoanAction;
 use App\Actions\Loans\DisburseLoanAction;
@@ -39,6 +42,7 @@ use App\Enums\SyncOpType;
 use App\Http\Requests\Api\V1\ActivateGroupLoanRequest;
 use App\Http\Requests\Api\V1\ActivateGroupRequest;
 use App\Http\Requests\Api\V1\AddGroupMemberRequest;
+use App\Http\Requests\Api\V1\AddLoanGroupMemberRequest;
 use App\Http\Requests\Api\V1\ApproveLoanRequest;
 use App\Http\Requests\Api\V1\ApproveWithdrawalRequest;
 use App\Http\Requests\Api\V1\BuySharesRequest;
@@ -60,6 +64,7 @@ use App\Http\Requests\Api\V1\StoreCollectionRequest;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
 use App\Http\Requests\Api\V1\StoreGroupContributionRequest;
 use App\Http\Requests\Api\V1\StoreLoanApplicationRequest;
+use App\Http\Requests\Api\V1\StoreLoanGroupRequest;
 use App\Http\Requests\Api\V1\StoreLocationPingsRequest;
 use App\Http\Requests\Api\V1\StoreSavingsAccountRequest;
 use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
@@ -130,6 +135,9 @@ class ProcessSyncBatchAction
         private AddGroupMemberAction $addGroupMember,
         private ActivateGroupAction $activateGroup,
         private PayoutGroupRoundAction $payoutGroupRound,
+        private CreateLoanGroupAction $createLoanGroup,
+        private AddLoanGroupMemberAction $addLoanGroupMember,
+        private RemoveLoanGroupMemberAction $removeLoanGroupMember,
     ) {}
 
     /**
@@ -294,6 +302,9 @@ class ProcessSyncBatchAction
             SyncOpType::AddGroupMember => $this->applyAddGroupMember($actor, $payload, $op['op_id']),
             SyncOpType::ActivateGroup => $this->applyActivateGroup($actor, $payload),
             SyncOpType::PayoutGroupRound => $this->applyPayoutGroupRound($actor, $payload),
+            SyncOpType::CreateLoanGroup => $this->applyCreateLoanGroup($actor, $payload, $op['op_id']),
+            SyncOpType::AddLoanGroupMember => $this->applyLoanGroupMember($actor, $payload, add: true),
+            SyncOpType::RemoveLoanGroupMember => $this->applyLoanGroupMember($actor, $payload, add: false),
         };
     }
 
@@ -336,6 +347,8 @@ class ProcessSyncBatchAction
             SyncOpType::AddGroupMember => AddGroupMemberRequest::payloadRules(),
             SyncOpType::ActivateGroup => ActivateGroupRequest::payloadRules(),
             SyncOpType::PayoutGroupRound => PayoutGroupRoundRequest::payloadRules(),
+            SyncOpType::CreateLoanGroup => StoreLoanGroupRequest::payloadRules(),
+            SyncOpType::AddLoanGroupMember, SyncOpType::RemoveLoanGroupMember => AddLoanGroupMemberRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -567,6 +580,42 @@ class ProcessSyncBatchAction
         $round = $this->payoutGroupRound->execute($round, $actor, (bool) ($payload['override'] ?? false));
 
         return ['round_id' => $round->id, 'status' => $round->status->value, 'payout_entry_id' => $round->payout_entry_id];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyCreateLoanGroup(User $actor, array $payload, string $opId): array
+    {
+        $loanGroup = $this->createLoanGroup->execute(
+            $actor,
+            StaffBranch::resolve($actor, $payload['branch_id'] ?? null),
+            Arr::only($payload, ['name', 'code']),
+            $payload['client_reference'] ?? $opId,
+        );
+
+        return ['loan_group_id' => $loanGroup->id, 'code' => $loanGroup->code];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyLoanGroupMember(User $actor, array $payload, bool $add): array
+    {
+        $loanGroup = $this->scoped(LoanGroup::class, $actor)->findOrFail($payload['loan_group_id']);
+
+        if ($add) {
+            $customer = $this->scoped(Customer::class, $actor)->findOrFail($payload['customer_id']);
+            $member = $this->addLoanGroupMember->execute($loanGroup, $customer);
+        } else {
+            $member = $this->removeLoanGroupMember->execute(
+                $loanGroup->members()->where('customer_id', $payload['customer_id'])->firstOrFail(),
+            );
+        }
+
+        return ['loan_group_member_id' => $member->id, 'status' => $member->status];
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\LoanGroups\AddLoanGroupMemberAction;
 use App\Actions\LoanGroups\BuildLoanGroupHistoryAction;
 use App\Actions\LoanGroups\BuildLoanGroupSummaryAction;
+use App\Actions\LoanGroups\CreateLoanGroupAction;
 use App\Actions\LoanGroups\IssueLoansToGroupAction;
 use App\Actions\LoanGroups\OpenSavingsForGroupAction;
 use App\Actions\LoanGroups\RemoveLoanGroupMemberAction;
@@ -100,18 +101,13 @@ class LoanGroupController extends Controller
         return response()->json(['data' => $action->execute($group, $product, contributionAmount: $request->validated('contribution_amount'))], 201);
     }
 
-    public function store(StoreLoanGroupRequest $request): JsonResponse
+    public function store(StoreLoanGroupRequest $request, CreateLoanGroupAction $action): JsonResponse
     {
-        $user = $request->user();
-
-        $loanGroup = LoanGroup::create([
-            'company_id' => $user->company_id,
-            'branch_id' => $this->resolveBranch($request)->id,
-            'created_by' => $user->id,
-            'name' => $request->validated('name'),
-            'code' => $request->validated('code'),
-            'is_active' => true,
-        ]);
+        $loanGroup = $action->execute(
+            $request->user(),
+            $this->resolveBranch($request),
+            ['name' => $request->validated('name'), 'code' => $request->validated('code')],
+        );
 
         return LoanGroupResource::make($loanGroup)->response()->setStatusCode(201);
     }

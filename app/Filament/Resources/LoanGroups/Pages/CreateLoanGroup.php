@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\LoanGroups\Pages;
 
+use App\Actions\LoanGroups\CreateLoanGroupAction;
 use App\Filament\Resources\LoanGroups\LoanGroupResource;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 
 class CreateLoanGroup extends CreateRecord
 {
@@ -12,17 +14,9 @@ class CreateLoanGroup extends CreateRecord
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
      */
-    protected function mutateFormDataBeforeCreate(array $data): array
+    protected function handleRecordCreation(array $data): Model
     {
-        $branch = Filament::getTenant();
-
-        $data['company_id'] = $branch->company_id;
-        $data['branch_id'] = $branch->id;
-        $data['created_by'] = Filament::auth()->id();
-        $data['is_active'] = true;
-
-        return $data;
+        return app(CreateLoanGroupAction::class)->execute(Filament::auth()->user(), Filament::getTenant(), $data);
     }
 }

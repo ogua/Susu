@@ -36,6 +36,9 @@ enum SyncOpType: string
     case AddGroupMember = 'group.member.add';
     case ActivateGroup = 'group.activate';
     case PayoutGroupRound = 'group.payout';
+    case CreateLoanGroup = 'loan_group.create';
+    case AddLoanGroupMember = 'loan_group.member.add';
+    case RemoveLoanGroupMember = 'loan_group.member.remove';
 
     /**
      * Op types each role may push through /sync/batch.
@@ -66,6 +69,10 @@ enum SyncOpType: string
                 self::RequestWithdrawal,
                 self::BuyShares,
                 self::UpdateCustomer,
+                // Customer-group rosters are field work (same as the REST routes).
+                self::CreateLoanGroup,
+                self::AddLoanGroupMember,
+                self::RemoveLoanGroupMember,
             ],
             // Managers/admins additionally own the individual-loan approve/
             // reject/disburse decisions, every write-off and schedule

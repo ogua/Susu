@@ -24,11 +24,17 @@ class AddLoanGroupMemberAction
             throw ValidationException::withMessages(['customer' => 'This customer is already a member of the loan group.']);
         }
 
-        return LoanGroupMember::create([
-            'loan_group_id' => $loanGroup->id,
-            'customer_id' => $customer->id,
+        // (loan_group_id, customer_id) is unique, so a customer who left
+        // rejoins on their old row rather than a new one.
+        $member = $loanGroup->members()->where('customer_id', $customer->id)->first()
+            ?? new LoanGroupMember(['loan_group_id' => $loanGroup->id, 'customer_id' => $customer->id]);
+
+        $member->forceFill([
             'status' => 'active',
             'joined_at' => now(),
-        ]);
+            'left_at' => null,
+        ])->save();
+
+        return $member;
     }
 }
