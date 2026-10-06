@@ -86,6 +86,10 @@ export interface SavingsProduct {
   commission_type: string;
   commission_value: number;
   interest_rate_bps: number;
+  /** Added server-side 2026-10; optional so older servers still type-check. */
+  early_withdrawal_penalty_bps?: number;
+  /** Target / fixed deposit only: default days from opening to maturity. */
+  term_days?: number | null;
   par_value: number | null;
   is_active: boolean;
 }

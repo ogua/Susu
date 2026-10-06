@@ -22,15 +22,18 @@ import { displayFormatted, formatMoney, parseAmountToMinor } from '@/utils/money
 
 export default function WithdrawScreen() {
   const online = useOnline();
-  const { accountId, accountNumber, balanceFormatted, productType, maturesAt, maturedAt } = useLocalSearchParams<{
+  const { accountId, accountNumber, balanceFormatted, productType, maturesAt, maturedAt, parValue } = useLocalSearchParams<{
     accountId: string;
     accountNumber?: string;
     balanceFormatted?: string;
     productType?: SavingsProductType | '';
     maturesAt?: string;
     maturedAt?: string;
+    parValue?: string;
   }>();
   const isBlockedFd = productType === 'fixed_deposit' && !maturedAt;
+  // Share capital is redeemed in whole shares (mirrors RequestWithdrawalAction).
+  const shareParValue = productType === 'shares' ? Number(parValue) || 0 : 0;
 
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
@@ -70,6 +73,10 @@ export default function WithdrawScreen() {
     setError(null);
     if (amountMinor === null || amountMinor <= 0) {
       setError('Enter the amount you want to withdraw.');
+      return;
+    }
+    if (shareParValue > 0 && amountMinor % shareParValue !== 0) {
+      setError(`Share withdrawals must be a whole number of shares (${formatMoney(shareParValue)} each).`);
       return;
     }
     confirmAction({
@@ -130,6 +137,7 @@ export default function WithdrawScreen() {
         }}
         editable={!isBlockedFd}
         error={error}
+        hint={shareParValue > 0 ? `Whole shares only: multiples of ${formatMoney(shareParValue)}.` : undefined}
       />
       <Input
         label="Reason"

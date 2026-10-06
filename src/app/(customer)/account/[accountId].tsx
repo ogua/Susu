@@ -97,6 +97,7 @@ export default function AccountDetailScreen() {
             productType: productType ?? '',
             maturesAt: maturesAt ?? '',
             maturedAt: maturedAt ?? '',
+            parValue: params.parValue ?? '',
           },
         }),
     },

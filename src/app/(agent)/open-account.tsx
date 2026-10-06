@@ -62,6 +62,18 @@ export default function OpenAccountScreen() {
   const selectedProduct = activeProducts.find((product) => product.id === selectedProductId) ?? null;
   const needsMaturity = selectedProduct?.type === 'target' || selectedProduct?.type === 'fixed_deposit';
 
+  /** A product's default term pre-fills the maturity date; the agent can still change it. */
+  function selectProduct(productId: string) {
+    setSelectedProductId(productId);
+    const product = activeProducts.find((candidate) => candidate.id === productId);
+    if ((product?.type === 'target' || product?.type === 'fixed_deposit') && product.term_days) {
+      const date = new Date();
+      date.setDate(date.getDate() + product.term_days);
+      const pad = (value: number) => String(value).padStart(2, '0');
+      setMaturesAt(`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`);
+    }
+  }
+
   async function handleSubmit() {
     if (submittingRef.current || saved) {
       return;
@@ -168,7 +180,7 @@ export default function OpenAccountScreen() {
               description: PRODUCT_TYPE_LABELS[product.type] ?? humanize(product.type),
             }))}
             value={selectedProductId}
-            onChange={setSelectedProductId}
+            onChange={selectProduct}
           />
         )}
         {errors.product ? (
@@ -207,7 +219,13 @@ export default function OpenAccountScreen() {
               keyboardType="number-pad"
               maxLength={10}
               error={errors.maturity}
-              hint={selectedProduct.type === 'fixed_deposit' ? 'Funds cannot be withdrawn before this date.' : undefined}
+              hint={
+                selectedProduct.type === 'fixed_deposit'
+                  ? 'Funds cannot be withdrawn before this date. The principal is deposited once, in full.'
+                  : selectedProduct.term_days
+                    ? `Defaults to the product's ${selectedProduct.term_days}-day term.`
+                    : undefined
+              }
             />
           ) : null}
         </Card>

@@ -66,11 +66,23 @@ export default function CollectScreen() {
     customerPhone?: string;
     productName?: string;
     contributionAmount?: string;
+    productType?: string;
+    balance?: string;
+    maturedAt?: string;
     balanceFormatted?: string;
     status?: string;
   }>();
 
   const agreed = Number(params.contributionAmount) || 0;
+  // Mirrors RecordCollectionAction: shares are bought, not collected, and a
+  // fixed deposit takes exactly its principal once, before it matures.
+  const isFixedDeposit = params.productType === 'fixed_deposit';
+  const blockedReason =
+    params.productType === 'shares'
+      ? 'Share accounts are funded by buying shares, not by collections.'
+      : isFixedDeposit && ((Number(params.balance) || 0) > 0 || !!params.maturedAt)
+        ? 'This fixed deposit is already funded and cannot take further deposits.'
+        : null;
   const [method, setMethod] = useState<Method>('cash');
   const [amount, setAmount] = useState(agreed > 0 ? minorToInput(agreed) : '');
   const [phone, setPhone] = useState(params.customerPhone ?? '');
@@ -85,7 +97,7 @@ export default function CollectScreen() {
 
   const amountMinor = parseAmountToMinor(amount);
   const customerName = params.customerName || 'Customer';
-  const quickAmounts = agreed > 0 ? [agreed, agreed * 2, agreed * 5, agreed * 10] : undefined;
+  const quickAmounts = agreed > 0 ? (isFixedDeposit ? [agreed] : [agreed, agreed * 2, agreed * 5, agreed * 10]) : undefined;
 
   function changeMomoInput<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -132,8 +144,16 @@ export default function CollectScreen() {
     setError(null);
     setPhoneError(null);
 
+    if (blockedReason) {
+      setError(blockedReason);
+      return;
+    }
     if (amountMinor === null || amountMinor <= 0) {
       setError('Enter the amount the customer is paying.');
+      return;
+    }
+    if (isFixedDeposit && amountMinor !== agreed) {
+      setError(`A fixed deposit must be funded with exactly its principal of ${formatMoney(agreed)}.`);
       return;
     }
     if (method === 'mobile_money') {
@@ -207,7 +227,7 @@ export default function CollectScreen() {
             icon={method === 'cash' ? 'cash' : 'phone'}
             size="lg"
             loading={submitting}
-            disabled={method === 'mobile_money' && !online}
+            disabled={!!blockedReason || (method === 'mobile_money' && !online)}
             onPress={handleSubmit}
           />
           <ThemedText type="caption" themeColor="textMuted" style={styles.center}>
@@ -236,7 +256,7 @@ export default function CollectScreen() {
         </View>
         <View style={[styles.divider, { backgroundColor: theme.border }]} />
         <KeyValueRow label="Current savings balance" value={displayFormatted(params.balanceFormatted)} emphasis />
-        {agreed > 0 ? <KeyValueRow label="Agreed contribution" value={formatMoney(agreed)} /> : null}
+        {agreed > 0 ? <KeyValueRow label={isFixedDeposit ? 'Principal' : 'Agreed contribution'} value={formatMoney(agreed)} /> : null}
         <View style={styles.secondaryActions}>
           <Button
             title="Statement"
@@ -260,6 +280,8 @@ export default function CollectScreen() {
           />
         </View>
       </Card>
+
+      {blockedReason ? <Notice tone="warning" message={blockedReason} /> : null}
 
       {params.status && params.status !== 'active' ? (
         <Notice
