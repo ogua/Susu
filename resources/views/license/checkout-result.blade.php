@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>SusuApp Desktop Activation</title>
+    <title>OguaFinance Desktop Activation</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: sans-serif; background: #f5f5f7; margin: 0; padding: 40px 16px; color: #1a1a1a; }
@@ -24,7 +24,7 @@
             <h1>Payment successful</h1>
             <p>Your activation key:</p>
             <div class="key-box">{{ $sale->license_key }}</div>
-            <p class="muted">Also sent to {{ $sale->customer_email }}{{ $sale->customer_phone ? ' and by SMS' : '' }}. Paste it into the "Activate SusuApp Desktop" screen.</p>
+            <p class="muted">Also sent to {{ $sale->customer_email }}{{ $sale->customer_phone ? ' and by SMS' : '' }}. Paste it into the "Activate OguaFinance Desktop" screen.</p>
         @elseif ($sale->status->value === 'failed')
             <h1 class="fail">Payment failed</h1>
             <p class="muted">No charge was completed. Please try again from the desktop app.</p>

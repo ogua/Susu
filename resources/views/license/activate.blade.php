@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Activate SusuApp Desktop</title>
+    <title>Activate OguaFinance Desktop</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: sans-serif; background: #f5f5f7; margin: 0; padding: 40px 16px; color: #1a1a1a; }
@@ -22,7 +22,7 @@
 </head>
 <body>
     <div class="card">
-        <h1>Activate SusuApp Desktop</h1>
+        <h1>Activate OguaFinance Desktop</h1>
         <div class="price">{{ $currency }} {{ number_format($price / 100, 2) }}</div>
         <div class="price-sub">Valid for {{ $durationDays }} days from activation</div>
 

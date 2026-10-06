@@ -12,7 +12,7 @@
 <body>
     <p>Hi {{ $sale->customer_name }},</p>
 
-    <p>Thanks for your payment. Here is your SusuApp Desktop activation key:</p>
+    <p>Thanks for your payment. Here is your OguaFinance Desktop activation key:</p>
 
     <div class="key-box">{{ $sale->license_key }}</div>
 
@@ -21,7 +21,7 @@
         Valid until: {{ $sale->expires_at?->toFormattedDateString() }}
     </p>
 
-    <p>Paste this key into the "Activate SusuApp Desktop" screen and click Activate.</p>
+    <p>Paste this key into the "Activate OguaFinance Desktop" screen and click Activate.</p>
 
     <p>If you didn't request this, please ignore this email.</p>
 </body>

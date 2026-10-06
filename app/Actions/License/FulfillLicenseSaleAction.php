@@ -102,7 +102,7 @@ class FulfillLicenseSaleAction
         if ($sale->customer_phone) {
             $this->sms->sendSystem(
                 $sale->customer_phone,
-                "Your SusuApp Desktop activation key: {$sale->license_key}",
+                "Your OguaFinance Desktop activation key: {$sale->license_key}",
             );
         }
 

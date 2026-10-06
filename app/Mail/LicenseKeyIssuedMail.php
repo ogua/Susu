@@ -18,7 +18,7 @@ class LicenseKeyIssuedMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your SusuApp Desktop activation key',
+            subject: 'Your OguaFinance Desktop activation key',
         );
     }
 

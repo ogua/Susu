@@ -9,7 +9,7 @@
 
         @if ($subscription === null)
             <p class="text-sm text-gray-600 dark:text-gray-400">
-                Your company is not on a subscription plan yet. Contact the SusuApp team to choose one.
+                Your company is not on a subscription plan yet. Contact the OguaFinance team to choose one.
             </p>
         @else
             <dl class="grid grid-cols-1 gap-4 sm:grid-cols-4">
@@ -79,7 +79,7 @@
 
     @if (config('platform.support_email') || config('platform.support_phone'))
         <p class="text-sm text-gray-600 dark:text-gray-400">
-            Questions about your subscription? Contact the SusuApp team
+            Questions about your subscription? Contact the OguaFinance team
             @if (config('platform.support_email'))
                 at <a href="mailto:{{ config('platform.support_email') }}" class="underline">{{ config('platform.support_email') }}</a>
             @endif
