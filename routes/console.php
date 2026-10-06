@@ -18,3 +18,4 @@ Schedule::command('billing:run')->dailyAt('03:00')
     ->onFailure(fn () => PlatformAlert::toSuperAdmins('Billing run failed', 'The daily billing:run command failed. Invoices, reminders and suspensions did not go out — check the logs and run it again.'));
 Schedule::command('platform:digest')->dailyAt('07:00');
 Schedule::command('exports:prune')->dailyAt('04:00');
+Schedule::command('ogua-family:refresh')->dailyAt('05:00');
