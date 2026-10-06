@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Matures a fixed-deposit account: credits principal-held interest
- * (rate * term_days / 365, using the account's own snapshotted
+ * (rate * days-from-funding-to-maturity / 365, using the account's own snapshotted
  * interest_rate_bps, not the product's current one) into the account's
  * balance and flips matured_at, unlocking withdrawal. Idempotent — a
  * second call on an already-matured account is a no-op, safe against
@@ -39,7 +39,10 @@ class MatureFixedDepositAction
                 return $account;
             }
 
-            $termDays = $account->opened_at->diffInDays($account->matures_at);
+            // Interest runs from the day the principal was actually deposited
+            // (the funding collection sets cycle_started_at), not from opening.
+            $fundedOn = ($account->cycle_started_at ?? $account->opened_at)->copy()->startOfDay();
+            $termDays = max(0, (int) $fundedOn->diffInDays($account->matures_at->copy()->startOfDay()));
             $rateBps = $account->interest_rate_bps ?? 0;
             $interest = intdiv($account->balance * $rateBps * $termDays, 10_000 * 365);
 

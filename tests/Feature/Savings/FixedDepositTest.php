@@ -78,6 +78,7 @@ it('matures a fixed deposit, crediting prorated interest into the balance and re
     app(RecordCollectionAction::class)->execute($this->agent, $account, 5_000_00);
     $account->refresh()->forceFill([
         'opened_at' => '2026-01-01 00:00:00',
+        'cycle_started_at' => '2026-01-01',
         'matures_at' => '2026-07-01',
     ])->save();
 
@@ -101,6 +102,27 @@ it('matures a fixed deposit, crediting prorated interest into the balance and re
     // Post-maturity withdrawal is a completely ordinary, zero-penalty flow.
     $request = app(RequestWithdrawalAction::class)->execute($this->manager, $matured->fresh(), $matured->balance);
     expect($request->penalty_amount)->toBe(0);
+});
+
+it('earns interest only from the day the principal was deposited, not from opening', function (): void {
+    $account = app(OpenSavingsAccountAction::class)->execute(
+        customer: $this->customer,
+        product: $this->product,
+        agent: $this->agent,
+        contributionAmount: 5_000_00,
+        maturesAt: now()->subDay(),
+    );
+    app(RecordCollectionAction::class)->execute($this->agent, $account, 5_000_00);
+    $account->refresh()->forceFill([
+        'opened_at' => '2026-01-01 00:00:00',
+        'cycle_started_at' => '2026-03-01',
+        'matures_at' => '2026-07-01',
+    ])->save();
+
+    $matured = app(MatureFixedDepositAction::class)->execute($account->fresh());
+
+    // 122 days funded: intdiv(500000 * 1200 * 122, 10000 * 365) = 20054 pesewas.
+    expect($matured->balance)->toBe(5_000_00 + 20_054);
 });
 
 it('does not let a later product rate change affect an already-open fixed deposit account', function (): void {
