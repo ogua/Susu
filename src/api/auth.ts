@@ -47,6 +47,21 @@ export async function removeProfilePhoto(): Promise<User> {
   return data.user;
 }
 
+/** Replaces the signed-in user's password (required after a temporary one). */
+export async function changePassword(
+  currentPassword: string,
+  password: string,
+  passwordConfirmation: string,
+): Promise<User> {
+  const { data } = await api.put<{ user: User }>('/auth/password', {
+    current_password: currentPassword,
+    password,
+    password_confirmation: passwordConfirmation,
+  });
+
+  return data.user;
+}
+
 export async function me(): Promise<User> {
   const { data } = await api.get<{ user: User }>('/auth/me');
 

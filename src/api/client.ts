@@ -1,4 +1,5 @@
 import { AxiosError, create, isAxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { router } from 'expo-router';
 
 import { useAuthStore } from '@/stores/authStore';
 import { debugLog, errorLog } from '@/utils/debugLog';
@@ -46,6 +47,15 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && useAuthStore.getState().token) {
       // Token revoked or expired server-side: drop the local session.
       await useAuthStore.getState().clearSession();
+    }
+
+    const code = (error.response?.data as { code?: string } | undefined)?.code;
+    const { user } = useAuthStore.getState();
+    if (error.response?.status === 403 && code === 'password_change_required' && user) {
+      // An admin reset the password while this session was open: the server
+      // answers nothing else until a new one is chosen.
+      await useAuthStore.getState().setUser({ ...user, must_change_password: true });
+      router.replace('/(auth)/change-password');
     }
 
     return Promise.reject(error);

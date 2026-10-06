@@ -57,7 +57,11 @@ export default function LoginScreen() {
       // records they left unsynced last time.
       void useOutboxStatus.getState().refresh();
       void drainOutbox();
-      router.replace(response.user.role === 'customer' ? '/(customer)' : '/(agent)');
+      if (response.user.must_change_password) {
+        router.replace('/(auth)/change-password');
+      } else {
+        router.replace(response.user.role === 'customer' ? '/(customer)' : '/(agent)');
+      }
     } catch (err) {
       const fieldError = apiFieldError(err, 'login');
       if (fieldError) {

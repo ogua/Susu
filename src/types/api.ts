@@ -35,6 +35,8 @@ export interface User {
   /** Absent on users cached before the API added it. */
   photo_url?: string | null;
   is_active: boolean;
+  /** Set while the user is on a temporary password; absent on older servers. */
+  must_change_password?: boolean;
   role: Role | null;
   /** Every role the user holds; absent on users cached before the API added it. */
   roles?: Role[];

@@ -11,6 +11,10 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
 
+  if (user.must_change_password) {
+    return <Redirect href="/(auth)/change-password" />;
+  }
+
   if (user.role === 'customer') {
     return <Redirect href="/(customer)" />;
   }
