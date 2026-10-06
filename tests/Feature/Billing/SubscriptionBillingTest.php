@@ -282,3 +282,53 @@ it('lets a super admin create a plan, subscribe a company and record a payment',
     expect($invoice->refresh()->status)->toBe(InvoiceStatus::Paid)
         ->and($invoice->recorded_by)->toBe($superAdmin->id);
 });
+
+it('lets a company admin pay an invoice from the apps through the API', function (): void {
+    $subscription = app(SubscribeCompanyAction::class)->execute($this->company, Plan::factory()->create(['price_amount' => 100_00]));
+    $invoice = $subscription->invoices()->sole();
+    $admin = User::factory()->companyAdmin($this->company)->create();
+
+    Http::fake([
+        'https://api.paystack.co/transaction/initialize' => Http::response(['status' => true, 'data' => ['authorization_url' => 'https://checkout.paystack.com/app']]),
+        'https://api.paystack.co/transaction/verify/*' => Http::response(['status' => true, 'data' => ['status' => 'success', 'amount' => 100_00]]),
+    ]);
+
+    $this->actingAs($admin, 'sanctum')
+        ->postJson("/api/v1/company/subscription/invoices/{$invoice->id}/checkout")
+        ->assertOk()
+        ->assertJsonPath('authorization_url', 'https://checkout.paystack.com/app');
+
+    Http::assertSent(fn ($request): bool => str_contains($request->url(), 'initialize')
+        && $request['callback_url'] === route('billing.return'));
+
+    $this->actingAs($admin, 'sanctum')
+        ->postJson("/api/v1/company/subscription/invoices/{$invoice->id}/verify")
+        ->assertOk()
+        ->assertJsonCount(0, 'data.open_invoices');
+
+    expect($invoice->refresh()->status)->toBe(InvoiceStatus::Paid);
+});
+
+it('refuses checkout of another company\'s invoice', function (): void {
+    $other = Company::factory()->create();
+    Branch::factory()->for($other)->create();
+    $invoice = app(SubscribeCompanyAction::class)->execute($other, Plan::factory()->create())->invoices()->sole();
+    $admin = User::factory()->companyAdmin($this->company)->create();
+
+    $this->actingAs($admin, 'sanctum')
+        ->postJson("/api/v1/company/subscription/invoices/{$invoice->id}/checkout")
+        ->assertNotFound();
+});
+
+it('shows a no-session return page after paying in the app browser', function (): void {
+    $invoice = app(SubscribeCompanyAction::class)->execute($this->company, Plan::factory()->create(['price_amount' => 100_00]))->invoices()->sole();
+    $invoice->update(['provider_reference' => 'SUSULIC-SUB-ret']);
+
+    Http::fake([
+        'https://api.paystack.co/transaction/verify/*' => Http::response(['status' => true, 'data' => ['status' => 'success', 'amount' => 100_00]]),
+    ]);
+
+    $this->get('/billing/return?reference=SUSULIC-SUB-ret')->assertOk()->assertSee('Payment received');
+
+    expect($invoice->refresh()->status)->toBe(InvoiceStatus::Paid);
+});

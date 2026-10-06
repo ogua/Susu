@@ -51,6 +51,10 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RecordClientDev
         Route::get('/company/integrations', [CompanyIntegrationController::class, 'show'])->name('company.integrations.show');
         Route::put('/company/integrations', [CompanyIntegrationController::class, 'update'])->name('company.integrations.update');
         Route::get('/company/subscription', [CompanySubscriptionController::class, 'show'])->name('company.subscription.show');
+        Route::post('/company/subscription/invoices/{invoice}/checkout', [CompanySubscriptionController::class, 'checkout'])
+            ->middleware('throttle:10,1')->name('company.subscription.invoices.checkout');
+        Route::post('/company/subscription/invoices/{invoice}/verify', [CompanySubscriptionController::class, 'verify'])
+            ->middleware('throttle:20,1')->name('company.subscription.invoices.verify');
     });
 
     Route::prefix('agent')->name('agent.')->middleware('role:field_agent|branch_manager|company_admin')->group(function (): void {

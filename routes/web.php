@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BillingCallbackController;
+use App\Http\Controllers\BillingReturnController;
 use App\Http\Controllers\CompanyExportDownloadController;
 use App\Http\Controllers\License\LicenseCheckoutController;
 use App\Http\Controllers\Reports\AgentPerformanceReportController;
@@ -74,6 +75,11 @@ Route::middleware('auth')->prefix('reports/{branch}')->name('reports.')->group(f
 Route::get('/billing/callback', BillingCallbackController::class)
     ->middleware('auth')
     ->name('billing.callback');
+
+// Paystack's return when an invoice is paid from the mobile/desktop app (no session).
+Route::get('/billing/return', BillingReturnController::class)
+    ->middleware('throttle:20,1')
+    ->name('billing.return');
 
 // Platform-wide reports for the super admin panel (no branch in the URL).
 Route::middleware('auth')->prefix('platform-reports')->name('platform-reports.')->group(function (): void {

@@ -38,6 +38,10 @@ class CompanySubscriptionResource extends JsonResource
             'trial_ends_at' => $subscription?->trial_ends_at?->toIso8601String(),
             'current_period_end' => $subscription?->current_period_end?->toIso8601String(),
             'usage' => app(PlanLimits::class)->summary($this->resource),
+            'support' => [
+                'email' => config('platform.support_email'),
+                'phone' => config('platform.support_phone'),
+            ],
             'open_invoices' => $this->subscriptionInvoices
                 ->where('status', InvoiceStatus::Unpaid)
                 ->sortBy('due_at')
