@@ -3,9 +3,11 @@
 namespace App\Filament\Pages;
 
 use App\Actions\Billing\InvoiceCheckoutAction;
+use App\Actions\Billing\SubscribeCompanyAction;
 use App\Enums\InvoiceStatus;
 use App\Models\Company;
 use App\Models\CompanySubscription;
+use App\Models\Plan;
 use App\Models\SubscriptionInvoice;
 use App\Models\User;
 use App\Services\Billing\PlanLimits;
@@ -13,6 +15,8 @@ use App\Support\Money;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Radio;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -69,6 +73,36 @@ class Billing extends Page implements HasTable
 
         return "Invoice {$invoice->number} (".Money::format($invoice->amount, $invoice->currency).') is overdue. '
             ."Pay it by {$suspendsOn->format('d M Y')} to avoid your company's account being suspended.";
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('changePlan')
+                ->label(fn (): string => $this->subscription() === null ? 'Choose a plan' : 'Change plan')
+                ->icon(Heroicon::OutlinedRectangleStack)
+                ->modalDescription('Upgrades apply now and are billed pro rata for the rest of this period. Downgrades apply now and take their lower price from the next period. Switching between monthly and yearly starts a new period today.')
+                ->schema([
+                    Radio::make('plan_id')
+                        ->label('Plan')
+                        ->options(fn (): array => Plan::query()->where('is_active', true)->orderBy('sort')->orderBy('price_amount')->get()
+                            ->mapWithKeys(fn (Plan $plan): array => [$plan->id => $plan->name.' — '.Money::format($plan->price_amount, $plan->currency).' / '.($plan->billing_period->value === 'yearly' ? 'year' : 'month')])
+                            ->all())
+                        ->descriptions(fn (): array => Plan::query()->where('is_active', true)->get()
+                            ->mapWithKeys(fn (Plan $plan): array => [$plan->id => collect(Plan::LIMITS)->keys()
+                                ->map(fn (string $resource): string => ($plan->limitFor($resource) ?? 'Unlimited').' '.$resource)
+                                ->join(' · ')])
+                            ->all())
+                        ->default(fn (): ?string => $this->subscription()?->plan_id)
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    $plan = Plan::findOrFail($data['plan_id']);
+                    app(SubscribeCompanyAction::class)->execute($this->company(), $plan);
+
+                    Notification::make()->title("You are now on the {$plan->name} plan")->success()->send();
+                }),
+        ];
     }
 
     public function company(): Company

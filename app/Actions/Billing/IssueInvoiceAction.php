@@ -19,7 +19,11 @@ class IssueInvoiceAction
 {
     public function __construct(private readonly NotifyInvoiceAction $notifyInvoice) {}
 
-    public function execute(CompanySubscription $subscription, CarbonInterface $periodStart): SubscriptionInvoice
+    /**
+     * @param  ?int  $amount  Override the plan price (pro-rata upgrade invoices).
+     * @param  ?CarbonInterface  $periodEnd  Override the period end (pro-rata invoices end with the current period).
+     */
+    public function execute(CompanySubscription $subscription, CarbonInterface $periodStart, ?int $amount = null, ?CarbonInterface $periodEnd = null): SubscriptionInvoice
     {
         $existing = $subscription->invoices()->where('period_start', $periodStart)->first();
         if ($existing !== null) {
@@ -27,16 +31,17 @@ class IssueInvoiceAction
         }
 
         $plan = $subscription->plan;
-        $isFree = $plan->price_amount === 0;
+        $amount ??= $plan->price_amount;
+        $isFree = $amount === 0;
 
         $invoice = $subscription->invoices()->create([
             'company_id' => $subscription->company_id,
             'plan_id' => $plan->id,
             'number' => 'INV-'.$periodStart->format('Ymd').'-'.Str::upper(Str::random(6)),
-            'amount' => $plan->price_amount,
+            'amount' => $amount,
             'currency' => $plan->currency,
             'period_start' => $periodStart,
-            'period_end' => $plan->billing_period->endFrom($periodStart),
+            'period_end' => $periodEnd ?? $plan->billing_period->endFrom($periodStart),
             'due_at' => $periodStart->copy()->addDays((int) config('billing.grace_days')),
             'status' => $isFree ? InvoiceStatus::Paid : InvoiceStatus::Unpaid,
             'paid_at' => $isFree ? now() : null,

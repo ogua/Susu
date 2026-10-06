@@ -3,14 +3,19 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Billing\InvoiceCheckoutAction;
+use App\Actions\Billing\SubscribeCompanyAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\CompanySubscriptionResource;
+use App\Http\Resources\V1\PlanResource;
 use App\Models\Company;
+use App\Models\Plan;
 use App\Models\SubscriptionInvoice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 
 /**
  * The signed-in company admin's subscription, usage and open invoices, and
@@ -44,6 +49,26 @@ class CompanySubscriptionController extends Controller
         if (InvoiceCheckoutAction::isInvoiceReference($invoice->provider_reference)) {
             $checkout->verifyAndComplete($invoice->provider_reference);
         }
+
+        return $this->show($request);
+    }
+
+    /** Plans the company can switch to (active ones, cheapest first). */
+    public function plans(Request $request): AnonymousResourceCollection
+    {
+        $this->company($request);
+
+        return PlanResource::collection(Plan::query()->where('is_active', true)->orderBy('sort')->orderBy('price_amount')->get());
+    }
+
+    /** Self-service plan change (see SubscribeCompanyAction for proration and limits). */
+    public function changePlan(Request $request, SubscribeCompanyAction $subscribe): CompanySubscriptionResource
+    {
+        $validated = $request->validate([
+            'plan_id' => ['required', 'uuid', Rule::exists('plans', 'id')->where('is_active', true)],
+        ]);
+
+        $subscribe->execute($this->company($request), Plan::findOrFail($validated['plan_id']));
 
         return $this->show($request);
     }
