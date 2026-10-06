@@ -60,6 +60,7 @@ class StaffRelationManager extends RelationManager
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->url(fn (User $record): string => UserResource::getUrl('edit', ['record' => $record])),
                 StaffActions::resetPassword(),
+                StaffActions::resetTwoFactor(),
             ])
             ->defaultSort('name');
     }

@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Pages\Auth\EditProfile;
 use App\Http\Middleware\RequirePasswordChange;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -34,6 +35,9 @@ class SuperAdminPanelProvider extends PanelProvider
             ->viteTheme('resources/css/filament/superAdmin/theme.css')
             ->login()
             ->passwordReset()
+            ->multiFactorAuthentication([
+                AppAuthentication::make()->recoverable(),
+            ], isRequired: true)
             ->profile(EditProfile::class)
             ->colors([
                 'primary' => Color::Amber,

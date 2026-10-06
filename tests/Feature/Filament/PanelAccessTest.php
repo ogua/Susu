@@ -51,8 +51,8 @@ it('refuses the admin panel to staff of a suspended company', function (): void 
     $this->actingAs($manager)->get('/admin/'.$branch->slug)->assertForbidden();
 });
 
-it('lets a super admin into the super-admin panel over HTTP', function (): void {
+it('makes a super admin set up two-factor authentication before using the panel', function (): void {
     $superAdmin = User::factory()->superAdmin()->create();
 
-    $this->actingAs($superAdmin)->get('/super-admin')->assertOk();
+    $this->actingAs($superAdmin)->get('/super-admin')->assertRedirectContains('multi-factor-authentication');
 });

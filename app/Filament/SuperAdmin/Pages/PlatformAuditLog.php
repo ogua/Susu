@@ -69,6 +69,7 @@ class PlatformAuditLog extends Page implements HasTable
                         default => 'Deleted record',
                     }),
                 TextColumn::make('event')->badge(),
+                TextColumn::make('description')->wrap()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('causer.name')->label('Changed By')->default('System'),
                 TextColumn::make('changes')
                     ->label('Fields Changed')
@@ -101,7 +102,12 @@ class PlatformAuditLog extends Page implements HasTable
                     'created' => 'Created',
                     'updated' => 'Updated',
                     'deleted' => 'Deleted',
+                    'impersonation_started' => 'Impersonation started',
+                    'impersonation_ended' => 'Impersonation ended',
                 ]),
+                SelectFilter::make('log_name')
+                    ->label('Log')
+                    ->options(fn (): array => Activity::query()->distinct()->orderBy('log_name')->pluck('log_name', 'log_name')->filter()->all()),
                 Filter::make('period')
                     ->schema([
                         DatePicker::make('from'),

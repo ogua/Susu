@@ -41,6 +41,7 @@ class UsersTable
                     }),
                 EditAction::make(),
                 StaffActions::resetPassword(),
+                StaffActions::resetTwoFactor(),
             ])
             ->defaultSort('name');
     }

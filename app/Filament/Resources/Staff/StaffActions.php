@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Staff;
 use App\Actions\Staff\IssueTemporaryPasswordAction;
 use App\Models\User;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Gate;
@@ -15,6 +16,31 @@ use Illuminate\Support\Facades\Gate;
  */
 class StaffActions
 {
+    /** Super admin only: clears a user's authenticator app so they can set it up again (lost phone). */
+    public static function resetTwoFactor(): Action
+    {
+        return Action::make('resetTwoFactor')
+            ->label('Reset two-factor')
+            ->icon(Heroicon::OutlinedDevicePhoneMobile)
+            ->color('warning')
+            ->requiresConfirmation()
+            ->modalDescription(fn (User $record): string => "{$record->name} will sign in with their password only and can set up an authenticator app again from their profile.")
+            ->visible(fn (User $record): bool => filled($record->app_authentication_secret)
+                && (Filament::auth()->user()?->hasRole('super_admin') ?? false))
+            ->action(function (User $record): void {
+                $record->saveAppAuthenticationSecret(null);
+                $record->saveAppAuthenticationRecoveryCodes(null);
+
+                activity('security')
+                    ->causedBy(Filament::auth()->user())
+                    ->performedOn($record)
+                    ->event('two_factor_reset')
+                    ->log("Two-factor authentication reset for {$record->name}");
+
+                Notification::make()->title("Two-factor reset for {$record->name}")->success()->send();
+            });
+    }
+
     public static function resetPassword(): Action
     {
         return Action::make('resetPassword')
