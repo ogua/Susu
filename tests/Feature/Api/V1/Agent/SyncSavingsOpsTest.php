@@ -142,3 +142,35 @@ it('lets an agent sell shares offline, idempotently on replay', function (): voi
 
     expect($sharesAccount->refresh()->share_count)->toBe(5);
 });
+
+it('applies a partial customer update from the sync batch, leaving other fields alone', function (): void {
+    $lastName = $this->customer->last_name;
+
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [savingsOp('customer.update', [
+            'customer_id' => $this->customer->id,
+            'first_name' => 'Abena',
+            'occupation' => 'Trader',
+            'beneficiaries' => [['name' => 'Kojo Mensah', 'relationship' => 'Son']],
+        ])],
+    ])->assertJsonPath('results.0.status', 'applied');
+
+    $customer = $this->customer->refresh();
+    expect($customer->first_name)->toBe('Abena')
+        ->and($customer->last_name)->toBe($lastName)
+        ->and($customer->occupation)->toBe('Trader')
+        ->and($customer->beneficiaries()->pluck('name')->all())->toBe(['Kojo Mensah']);
+});
+
+it('rejects a customer update that blanks a required field', function (): void {
+    $this->actingAs($this->agent, 'sanctum')->postJson('/api/v1/sync/batch', [
+        'ops' => [savingsOp('customer.update', ['customer_id' => $this->customer->id, 'first_name' => null])],
+    ])->assertJsonPath('results.0.status', 'rejected');
+});
+
+it('lets a manager update a customer over REST', function (): void {
+    $this->actingAs($this->manager, 'sanctum')
+        ->patchJson("/api/v1/customers/{$this->customer->id}", ['phone' => '+233200000001'])
+        ->assertOk()
+        ->assertJsonPath('data.phone', '+233200000001');
+});

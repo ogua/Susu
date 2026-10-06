@@ -31,6 +31,7 @@ enum SyncOpType: string
     case RejectWithdrawal = 'withdrawal.reject';
     case PayWithdrawal = 'withdrawal.pay';
     case BuyShares = 'shares.purchase';
+    case UpdateCustomer = 'customer.update';
 
     /**
      * Op types each role may push through /sync/batch.
@@ -60,6 +61,7 @@ enum SyncOpType: string
                 // decides and pays them) and sell shares in the field.
                 self::RequestWithdrawal,
                 self::BuyShares,
+                self::UpdateCustomer,
             ],
             // Managers/admins additionally own the individual-loan approve/
             // reject/disburse decisions, every write-off and schedule

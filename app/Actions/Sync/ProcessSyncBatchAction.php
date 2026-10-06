@@ -5,6 +5,7 @@ namespace App\Actions\Sync;
 use App\Actions\Agents\RecordLocationPingsAction;
 use App\Actions\Agents\SubmitAgentDailySummaryAction;
 use App\Actions\Customers\CreateCustomerAction;
+use App\Actions\Customers\UpdateCustomerAction;
 use App\Actions\GroupLoans\ActivateGroupLoanAction;
 use App\Actions\GroupLoans\CancelGroupLoanAction;
 use App\Actions\GroupLoans\IssueGroupMemberLoanAction;
@@ -55,6 +56,7 @@ use App\Http\Requests\Api\V1\StoreLocationPingsRequest;
 use App\Http\Requests\Api\V1\StoreSavingsAccountRequest;
 use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
 use App\Http\Requests\Api\V1\TopUpLoanRequest;
+use App\Http\Requests\Api\V1\UpdateCustomerRequest;
 use App\Http\Requests\Api\V1\WriteOffGroupLoanRequest;
 use App\Http\Requests\Api\V1\WriteOffLoanRequest;
 use App\Models\Customer;
@@ -74,6 +76,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -113,6 +116,7 @@ class ProcessSyncBatchAction
         private DecideWithdrawalAction $decideWithdrawal,
         private PayWithdrawalAction $payWithdrawal,
         private BuySharesAction $buyShares,
+        private UpdateCustomerAction $updateCustomer,
     ) {}
 
     /**
@@ -272,6 +276,7 @@ class ProcessSyncBatchAction
             SyncOpType::RejectWithdrawal => $this->withdrawalResult($this->decideWithdrawal->reject($actor, $this->scoped(WithdrawalRequest::class, $actor)->findOrFail($payload['withdrawal_request_id']), $payload['reason'])),
             SyncOpType::PayWithdrawal => $this->withdrawalResult($this->payWithdrawal->execute($actor, $this->scoped(WithdrawalRequest::class, $actor)->findOrFail($payload['withdrawal_request_id']))),
             SyncOpType::BuyShares => $this->applyBuyShares($actor, $origin, $payload, $op['op_id'], $recordedAt),
+            SyncOpType::UpdateCustomer => $this->applyUpdateCustomer($actor, $payload),
         };
     }
 
@@ -309,6 +314,7 @@ class ProcessSyncBatchAction
             SyncOpType::RejectWithdrawal => RejectWithdrawalRequest::payloadRules(),
             SyncOpType::PayWithdrawal => PayWithdrawalRequest::payloadRules(),
             SyncOpType::BuyShares => BuySharesRequest::payloadRules(),
+            SyncOpType::UpdateCustomer => UpdateCustomerRequest::payloadRules(),
         };
 
         return Validator::make($payload, $rules)->validate();
@@ -485,6 +491,20 @@ class ProcessSyncBatchAction
             $payload['reason'] ?? null,
             $payload['client_reference'] ?? $opId,
         ));
+    }
+
+    /**
+     * Only the fields present in the payload change (partial update).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyUpdateCustomer(User $actor, array $payload): array
+    {
+        $customer = $this->scoped(Customer::class, $actor)->findOrFail($payload['customer_id']);
+        $customer = $this->updateCustomer->execute($customer, Arr::except($payload, ['customer_id']));
+
+        return ['customer_id' => $customer->id, 'updated_at' => $customer->updated_at?->toISOString()];
     }
 
     /**

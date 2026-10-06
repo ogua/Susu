@@ -104,6 +104,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RecordClientDev
             Route::post('/transfer', [CustomerController::class, 'bulkTransfer'])->name('transfer.bulk');
             Route::post('/{customer}/transfer', [CustomerController::class, 'transfer'])->name('transfer');
             Route::post('/{customer}/assign-agent', [CustomerController::class, 'assignAgent'])->name('assign-agent');
+            Route::patch('/{customer}', [CustomerController::class, 'update'])->name('update');
         });
 
     // Shared by agent (collect screen) and customer (deposit screen) roles —

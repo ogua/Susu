@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Customers\AssignCustomerAgentAction;
 use App\Actions\Customers\BuildCustomerOverviewAction;
 use App\Actions\Customers\TransferCustomerAction;
+use App\Actions\Customers\UpdateCustomerAction;
 use App\Enums\AccountStatus;
 use App\Enums\CustomerSegment;
 use App\Enums\GroupLoanStatus;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AssignCustomerAgentRequest;
 use App\Http\Requests\Api\V1\TransferCustomersRequest;
+use App\Http\Requests\Api\V1\UpdateCustomerRequest;
 use App\Http\Resources\V1\CustomerResource;
 use App\Models\Branch;
 use App\Models\Customer;
@@ -64,6 +66,15 @@ class CustomerController extends Controller
     public function overview(Request $request, BuildCustomerOverviewAction $action): JsonResponse
     {
         return response()->json(['data' => $action->execute($this->scope($request))]);
+    }
+
+    /** Partial update: only the fields sent change (same rules as the customer.update sync op). */
+    public function update(UpdateCustomerRequest $request, string $customer, UpdateCustomerAction $action): CustomerResource
+    {
+        $model = $this->scope($request)->findOrFail($customer);
+        Gate::authorize('update', $model);
+
+        return CustomerResource::make($action->execute($model, $request->validated())->load('branch', 'assignedAgent'));
     }
 
     public function transfer(TransferCustomersRequest $request, string $customer, TransferCustomerAction $action): CustomerResource
