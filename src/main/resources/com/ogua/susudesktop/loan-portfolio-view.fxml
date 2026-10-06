@@ -37,7 +37,7 @@
     </VBox>
 
     <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
-        <TableView fx:id="table" prefHeight="420" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" prefHeight="420" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
                 <TableColumn fx:id="loanNumberColumn" prefWidth="120" text="Loan #"/>
                 <TableColumn fx:id="customerColumn" prefWidth="160" text="Customer"/>

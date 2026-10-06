@@ -34,7 +34,7 @@
     </VBox>
 
     <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
-        <TableView fx:id="table" prefHeight="420" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" prefHeight="420" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
                 <TableColumn fx:id="agentColumn" prefWidth="170" text="Agent"/>
                 <TableColumn fx:id="daysColumn" prefWidth="100" text="Days Worked"/>

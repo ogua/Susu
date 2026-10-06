@@ -26,7 +26,7 @@
     </VBox>
 
     <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
-        <TableView fx:id="table" prefHeight="420" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" prefHeight="420" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
                 <TableColumn fx:id="nameColumn" prefWidth="220" text="Account"/>
                 <TableColumn fx:id="heldByColumn" prefWidth="140" text="Held By"/>

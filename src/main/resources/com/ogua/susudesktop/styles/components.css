@@ -143,6 +143,10 @@
     -fx-background-color: -ogua-surface;
     -fx-border-color: -ogua-border;
     -fx-border-radius: 8;
+    -fx-fixed-cell-size: 36;
+}
+.table-view .table-cell {
+    -fx-padding: 8 12 8 12;
 }
 .table-view .column-header-background {
     -fx-background-color: -ogua-neutral-bg;

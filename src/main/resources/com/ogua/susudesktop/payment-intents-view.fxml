@@ -3,13 +3,15 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox spacing="16" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.ogua.susudesktop.PaymentIntentsController">
+<ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: -ogua-bg;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ogua.susudesktop.PaymentIntentsController">
+<VBox spacing="16" style="-fx-background-color: -ogua-bg;">
     <padding><Insets bottom="20" left="20" right="20" top="20"/></padding>
 
     <HBox alignment="CENTER_LEFT" spacing="10">
@@ -18,8 +20,8 @@
     </HBox>
     <Label styleClass="text-muted" text="Read-only — payments are initiated from the mobile app or web, synced here for visibility." wrapText="true"/>
 
-    <VBox spacing="10" styleClass="card">
-        <TableView fx:id="table" prefHeight="480">
+    <VBox spacing="10" styleClass="card" VBox.vgrow="ALWAYS">
+        <TableView fx:id="table" styleClass="table-view" VBox.vgrow="ALWAYS">
             <columns>
                 <TableColumn fx:id="channelColumn" prefWidth="90" text="Channel"/>
                 <TableColumn fx:id="phoneColumn" prefWidth="120" text="Phone"/>
@@ -31,3 +33,4 @@
         <Label fx:id="statusLabel" styleClass="text-danger" wrapText="true"/>
     </VBox>
 </VBox>
+</ScrollPane>

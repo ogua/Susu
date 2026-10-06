@@ -36,7 +36,7 @@
 
         <VBox spacing="10" styleClass="card">
             <Label styleClass="card-title" text="Pending Withdrawals"/>
-            <TableView fx:id="withdrawalsTable" prefHeight="220">
+            <TableView fx:id="withdrawalsTable" prefHeight="220" styleClass="table-view">
                 <columns>
                     <TableColumn fx:id="amountColumn" prefWidth="120" text="Amount"/>
                     <TableColumn fx:id="reasonColumn" prefWidth="220" text="Reason"/>
