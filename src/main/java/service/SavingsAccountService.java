@@ -37,6 +37,10 @@ public class SavingsAccountService {
         if (product == null || !product.isActive()) {
             throw new IllegalArgumentException("This product is no longer offered.");
         }
+        // A product with a default term fills in a maturity date the opener left blank.
+        if (maturesAt == null && product.hasMaturity() && product.getTermDays() != null) {
+            maturesAt = java.time.LocalDate.now().plusDays(product.getTermDays()).toString();
+        }
         if (product.isTarget() && (targetAmount == null || maturesAt == null)) {
             throw new IllegalArgumentException("Target savings accounts require a target amount and maturity date.");
         }

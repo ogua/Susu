@@ -16,6 +16,8 @@ public class SavingsProduct {
     private int earlyWithdrawalPenaltyBps;
     /** Annual rate (basis points) snapshotted onto a fixed-deposit account at open time. */
     private int interestRateBps;
+    /** Target / fixed deposit only: default days from opening to maturity; null when unset. */
+    private Integer termDays;
     /** Minor units per share; null for non-Shares products. */
     private Long parValue;
     private boolean active;
@@ -55,6 +57,8 @@ public class SavingsProduct {
     public int getInterestRateBps() { return interestRateBps; }
     public void setInterestRateBps(int interestRateBps) { this.interestRateBps = interestRateBps; }
 
+    public Integer getTermDays() { return termDays; }
+    public void setTermDays(Integer termDays) { this.termDays = termDays; }
     public Long getParValue() { return parValue; }
     public void setParValue(Long parValue) { this.parValue = parValue; }
 
@@ -62,6 +66,25 @@ public class SavingsProduct {
     public boolean isTarget() { return TYPE_TARGET.equals(type); }
     public boolean isFixedDeposit() { return TYPE_FIXED_DEPOSIT.equals(type); }
     public boolean isShares() { return TYPE_SHARES.equals(type); }
+
+    /** Only susu-style products are collected in cycles and carry commission. An unset type means the column default, daily susu. */
+    public boolean isCycleBased() { return type == null || isDailySusu() || isTarget(); }
+
+    public boolean hasMaturity() { return isTarget() || isFixedDeposit(); }
+
+    /**
+     * Mirrors the backend model's saving hook: fixed deposits and shares never
+     * carry commission, and only target/fixed deposit products keep a term.
+     */
+    public void normalize() {
+        if (!isCycleBased()) {
+            commissionType = CommissionType.NONE;
+            commissionValue = 0;
+        }
+        if (!hasMaturity()) {
+            termDays = null;
+        }
+    }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

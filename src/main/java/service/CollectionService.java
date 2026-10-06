@@ -53,13 +53,28 @@ public class CollectionService {
         if (account.getStatus() == AccountStatus.CLOSED) {
             throw new IllegalArgumentException("This savings account is closed.");
         }
-        if (amount <= 0 || amount % account.getContributionAmount() != 0) {
+
+        SavingsProduct product = productService.findById(account.getSavingsProductId());
+        if (product != null && product.isShares()) {
+            throw new IllegalArgumentException("Share accounts are funded by buying shares, not by collections.");
+        }
+        if (amount <= 0 || account.getContributionAmount() <= 0 || amount % account.getContributionAmount() != 0) {
             throw new IllegalArgumentException(
                     "Amount must be a positive multiple of the daily contribution ("
                     + account.getContributionAmount() + ").");
         }
-
-        SavingsProduct product = productService.findById(account.getSavingsProductId());
+        // Mirrors RecordCollectionAction: a fixed deposit is funded once, with
+        // exactly its principal, before it matures.
+        if (product != null && product.isFixedDeposit()) {
+            if (account.getMaturedAt() != null || account.getBalance() > 0) {
+                throw new IllegalArgumentException("This fixed deposit is already funded and cannot take further deposits.");
+            }
+            if (amount != account.getContributionAmount()) {
+                throw new IllegalArgumentException(
+                        "A fixed deposit must be funded with exactly its principal ("
+                        + account.getContributionAmount() + ").");
+            }
+        }
         Instant effectiveRecordedAt = recordedAt != null ? recordedAt : Instant.now();
         int units = (int) (amount / account.getContributionAmount());
         CycleResult cycle = commissionCalculator.simulate(account, product, units, amount);

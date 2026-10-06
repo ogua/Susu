@@ -38,6 +38,16 @@ public class WithdrawalService {
             throw new IllegalStateException("Fixed deposits cannot be withdrawn before their maturity date.");
         }
 
+        // Share capital is redeemed in whole shares so the balance always
+        // stays share_count * par_value (mirrors RequestWithdrawalAction).
+        if (product != null && product.isShares()) {
+            long parValue = product.getParValue() == null ? 0 : product.getParValue();
+            if (parValue <= 0 || amount % parValue != 0) {
+                throw new IllegalArgumentException(
+                        "Share withdrawals must be a whole number of shares (" + parValue + " per share).");
+            }
+        }
+
         long held = heldAmount(accountId);
         if (amount <= 0 || amount > account.getBalance() - held) {
             throw new IllegalArgumentException("Requested amount exceeds the available balance.");
@@ -111,6 +121,11 @@ public class WithdrawalService {
 
         long balanceAfter = account.getBalance() - request.getAmount();
         long netCash = request.getAmount() - request.getPenaltyAmount();
+        // Resolved before the write block below opens its connection (single-connection pool).
+        SavingsProduct product = productService.findById(account.getSavingsProductId());
+        long sharesRedeemed = product != null && product.isShares() && product.getParValue() != null && product.getParValue() > 0
+                ? request.getAmount() / product.getParValue()
+                : 0;
 
         List<LedgerLine> lines = new ArrayList<>(List.of(
                 LedgerLine.debit(account.getLedgerAccountId(), request.getAmount()),
@@ -127,10 +142,11 @@ public class WithdrawalService {
 
         try (Connection conn = DatabaseConnection.getConnection()) {
             try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE savings_accounts SET balance = ?, updated_at = ? WHERE id = ?")) {
+                    "UPDATE savings_accounts SET balance = ?, share_count = ?, updated_at = ? WHERE id = ?")) {
                 ps.setLong(1, balanceAfter);
-                ps.setString(2, Instant.now().toString());
-                ps.setString(3, account.getId());
+                ps.setLong(2, Math.max(0, account.getShareCount() - sharesRedeemed));
+                ps.setString(3, Instant.now().toString());
+                ps.setString(4, account.getId());
                 ps.executeUpdate();
             }
             try (PreparedStatement ps = conn.prepareStatement(

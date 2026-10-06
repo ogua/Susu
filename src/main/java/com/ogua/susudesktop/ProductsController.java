@@ -15,6 +15,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.VBox;
 import models.LoanProduct;
 import models.SavingsProduct;
 import service.LoanProductService;
@@ -45,6 +46,18 @@ public class ProductsController {
     @FXML private TextField spCommissionValueField;
     @FXML private TextField spInterestRateBpsField;
     @FXML private TextField spParValueField;
+    @FXML private TextField spPenaltyBpsField;
+    @FXML private TextField spTermDaysField;
+    @FXML private Label spContributionLabel;
+    @FXML private Label spCommissionValueLabel;
+    @FXML private VBox spContributionBox;
+    @FXML private VBox spCycleBox;
+    @FXML private VBox spCommissionBox;
+    @FXML private VBox spCommissionValueBox;
+    @FXML private VBox spPenaltyBox;
+    @FXML private VBox spInterestBox;
+    @FXML private VBox spTermBox;
+    @FXML private VBox spParValueBox;
     @FXML private Button spEditButton;
     @FXML private Button spToggleButton;
     @FXML private Label spStatusLabel;
@@ -95,8 +108,12 @@ public class ProductsController {
         spTypeCombo.setItems(FXCollections.observableArrayList("daily_susu", "target", "fixed_deposit", "shares"));
         spTypeCombo.getSelectionModel().selectFirst();
         spCommissionTypeCombo.setItems(FXCollections.observableArrayList(
-                "first_contribution_per_cycle", "flat_per_cycle", "percentage"));
+                "none", "first_contribution_per_cycle", "percentage", "percentage_of_balance_per_cycle",
+                "flat_per_cycle"));
         spCommissionTypeCombo.getSelectionModel().selectFirst();
+        spTypeCombo.valueProperty().addListener((obs, old, type) -> updateSavingsFieldVisibility());
+        spCommissionTypeCombo.valueProperty().addListener((obs, old, type) -> updateSavingsFieldVisibility());
+        updateSavingsFieldVisibility();
         savingsTable.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) ->
                 spToggleButton.setText(selected != null && selected.isActive() ? "Deactivate" : "Activate"));
 
@@ -153,24 +170,41 @@ public class ProductsController {
     private void onSaveSavingsProduct() {
         spStatusLabel.setText("");
         try {
-            if (spNameField.getText().isBlank() || spCodeField.getText().isBlank()
-                    || spContributionField.getText().isBlank()) {
-                spStatusLabel.setText("Name, code, and contribution amount are required.");
+            String type = spTypeCombo.getValue();
+            boolean isShares = SavingsProduct.TYPE_SHARES.equals(type);
+            if (spNameField.getText().isBlank() || spCodeField.getText().isBlank()) {
+                spStatusLabel.setText("Name and code are required.");
+                return;
+            }
+            if (!isShares && spContributionField.getText().isBlank()) {
+                spStatusLabel.setText("Contribution amount is required.");
+                return;
+            }
+            if (isShares && spParValueField.getText().isBlank()) {
+                spStatusLabel.setText("Shares products need a par value per share.");
                 return;
             }
 
             SavingsProduct product = new SavingsProduct();
             product.setName(spNameField.getText().trim());
             product.setCode(spCodeField.getText().trim());
-            product.setType(spTypeCombo.getValue());
-            product.setContributionAmount(parseMoney(spContributionField.getText()));
+            product.setType(type);
+            product.setContributionAmount(isShares ? 0 : parseMoney(spContributionField.getText()));
             product.setCycleLengthDays(spCycleDaysField.getText().isBlank()
                     ? 31 : Integer.parseInt(spCycleDaysField.getText().trim()));
-            product.setCommissionType(CommissionType.fromValue(spCommissionTypeCombo.getValue()));
-            product.setCommissionValue(spCommissionValueField.getText().isBlank()
-                    ? 0 : Long.parseLong(spCommissionValueField.getText().trim()));
+            CommissionType commissionType = CommissionType.fromValue(spCommissionTypeCombo.getValue());
+            product.setCommissionType(commissionType);
+            // Flat commission is entered in GHS like every other money field; rates stay in bps.
+            String commissionText = spCommissionValueField.getText().trim();
+            product.setCommissionValue(commissionText.isEmpty() ? 0
+                    : commissionType == CommissionType.FLAT_PER_CYCLE ? parseMoney(commissionText)
+                    : Long.parseLong(commissionText));
+            product.setEarlyWithdrawalPenaltyBps(spPenaltyBpsField.getText().isBlank()
+                    ? 0 : Integer.parseInt(spPenaltyBpsField.getText().trim()));
             product.setInterestRateBps(spInterestRateBpsField.getText().isBlank()
                     ? 0 : Integer.parseInt(spInterestRateBpsField.getText().trim()));
+            product.setTermDays(spTermDaysField.getText().isBlank()
+                    ? null : Integer.parseInt(spTermDaysField.getText().trim()));
             product.setParValue(spParValueField.getText().isBlank()
                     ? null : parseMoney(spParValueField.getText()));
 
@@ -204,14 +238,51 @@ public class ProductsController {
         spContributionField.setText(String.format("%.2f", selected.getContributionAmount() / 100.0));
         spCycleDaysField.setText(String.valueOf(selected.getCycleLengthDays()));
         spCommissionTypeCombo.setValue(selected.getCommissionType().value());
-        spCommissionValueField.setText(String.valueOf(selected.getCommissionValue()));
+        spCommissionValueField.setText(selected.getCommissionType() == CommissionType.FLAT_PER_CYCLE
+                ? String.format("%.2f", selected.getCommissionValue() / 100.0)
+                : String.valueOf(selected.getCommissionValue()));
+        spPenaltyBpsField.setText(String.valueOf(selected.getEarlyWithdrawalPenaltyBps()));
         spInterestRateBpsField.setText(String.valueOf(selected.getInterestRateBps()));
+        spTermDaysField.setText(selected.getTermDays() == null ? "" : String.valueOf(selected.getTermDays()));
         spParValueField.setText(selected.getParValue() == null
                 ? "" : String.format("%.2f", selected.getParValue() / 100.0));
         spFormTitle.setText("Edit Savings Product");
         spSaveButton.setText("Update Product");
         spCancelEditButton.setVisible(true);
         spCancelEditButton.setManaged(true);
+    }
+
+    /** Shows only the fields the selected product type uses, as the web form does. */
+    private void updateSavingsFieldVisibility() {
+        String type = spTypeCombo.getValue();
+        boolean isTarget = SavingsProduct.TYPE_TARGET.equals(type);
+        boolean isFixedDeposit = SavingsProduct.TYPE_FIXED_DEPOSIT.equals(type);
+        boolean isShares = SavingsProduct.TYPE_SHARES.equals(type);
+        boolean isCycleBased = !isFixedDeposit && !isShares;
+        String commission = spCommissionTypeCombo.getValue();
+        boolean hasCommissionValue = isCycleBased && commission != null
+                && !"none".equals(commission) && !"first_contribution_per_cycle".equals(commission);
+
+        show(spContributionBox, !isShares);
+        show(spCycleBox, isCycleBased);
+        show(spCommissionBox, isCycleBased);
+        show(spCommissionValueBox, hasCommissionValue);
+        show(spPenaltyBox, isTarget);
+        show(spInterestBox, isFixedDeposit);
+        show(spTermBox, isTarget || isFixedDeposit);
+        show(spParValueBox, isShares);
+
+        spContributionLabel.setText(isFixedDeposit ? "Principal amount (GHS)" : "Daily contribution (GHS)");
+        spCommissionValueLabel.setText("flat_per_cycle".equals(commission)
+                ? "Commission per cycle (GHS)"
+                : "percentage".equals(commission)
+                        ? "Commission rate — bps of each deposit (100 = 1%)"
+                        : "Commission rate — bps of balance per cycle (100 = 1%)");
+    }
+
+    private static void show(VBox box, boolean visible) {
+        box.setVisible(visible);
+        box.setManaged(visible);
     }
 
     @FXML
@@ -228,6 +299,8 @@ public class ProductsController {
         spCommissionValueField.clear();
         spInterestRateBpsField.clear();
         spParValueField.clear();
+        spPenaltyBpsField.clear();
+        spTermDaysField.clear();
         spFormTitle.setText("New Savings Product");
         spSaveButton.setText("Save Product");
         spCancelEditButton.setVisible(false);

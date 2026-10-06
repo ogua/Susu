@@ -37,9 +37,13 @@ public class CommissionCalculator {
             cycleNumber++;
         }
 
-        long commission = switch (product.getCommissionType()) {
+        // Fixed deposits and shares are not susu cycles: whatever an old
+        // product row still says, they never carry commission.
+        long commission = !product.isCycleBased() ? 0 : switch (product.getCommissionType()) {
+            case NONE -> 0;
             case FIRST_CONTRIBUTION_PER_CYCLE -> (long) cyclesStarted * account.getContributionAmount();
             case PERCENTAGE -> (amount * product.getCommissionValue()) / 10_000;
+            case PERCENTAGE_OF_BALANCE_PER_CYCLE -> (long) cyclesStarted * ((account.getBalance() * product.getCommissionValue()) / 10_000);
             case FLAT_PER_CYCLE -> (long) cyclesStarted * product.getCommissionValue();
         };
 

@@ -37,10 +37,13 @@ public class SavingsProductService {
             if (findById(conn, id) != null) {
                 String sql = "UPDATE savings_products SET name = ?, code = ?, type = ?, contribution_amount = ?,"
                         + " cycle_length_days = ?, commission_type = ?, commission_value = ?, interest_rate_bps = ?,"
-                        + " par_value = ?, is_active = ?, updated_at = ? WHERE id = ?";
+                        + " par_value = ?, is_active = ?, updated_at = ?, early_withdrawal_penalty_bps = ?,"
+                        + " term_days = ? WHERE id = ?";
                 try (PreparedStatement ps = conn.prepareStatement(sql)) {
                     bindProduct(ps, product);
-                    ps.setString(12, id);
+                    ps.setInt(12, product.optInt("early_withdrawal_penalty_bps", 0));
+                    bindTermDays(ps, 13, product);
+                    ps.setString(14, id);
                     ps.executeUpdate();
                 }
                 return;
@@ -49,7 +52,8 @@ public class SavingsProductService {
             String now = Instant.now().toString();
             String sql = "INSERT INTO savings_products (id, name, code, type, contribution_amount,"
                     + " cycle_length_days, commission_type, commission_value, interest_rate_bps, par_value,"
-                    + " is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                    + " is_active, created_at, updated_at, early_withdrawal_penalty_bps, term_days)"
+                    + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, id);
                 ps.setString(2, product.getString("name"));
@@ -68,8 +72,27 @@ public class SavingsProductService {
                 ps.setInt(11, product.optBoolean("is_active", true) ? 1 : 0);
                 ps.setString(12, now);
                 ps.setString(13, now);
+                ps.setInt(14, product.optInt("early_withdrawal_penalty_bps", 0));
+                bindTermDays(ps, 15, product);
                 ps.executeUpdate();
             }
+        }
+    }
+
+    /** term_days arrives null (or absent, from servers older than 2026-10) for products without a term. */
+    private void bindTermDays(PreparedStatement ps, int index, JSONObject product) throws SQLException {
+        if (!product.has("term_days") || product.isNull("term_days")) {
+            ps.setNull(index, java.sql.Types.INTEGER);
+        } else {
+            ps.setInt(index, product.getInt("term_days"));
+        }
+    }
+
+    private void bindTermDays(PreparedStatement ps, int index, SavingsProduct product) throws SQLException {
+        if (product.getTermDays() == null) {
+            ps.setNull(index, java.sql.Types.INTEGER);
+        } else {
+            ps.setInt(index, product.getTermDays());
         }
     }
 
@@ -137,14 +160,15 @@ public class SavingsProductService {
 
     /** Creates a product from the management screen. Returns the stored row. */
     public SavingsProduct create(SavingsProduct product) throws SQLException {
+        product.normalize();
         String id = UUID.randomUUID().toString();
         String now = Instant.now().toString();
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "INSERT INTO savings_products (id, name, code, type, contribution_amount,"
                      + " cycle_length_days, commission_type, commission_value, early_withdrawal_penalty_bps,"
-                     + " interest_rate_bps, par_value, is_active, created_at, updated_at)"
-                     + " VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?)")) {
+                     + " interest_rate_bps, par_value, is_active, created_at, updated_at, term_days)"
+                     + " VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)")) {
             ps.setString(1, id);
             ps.setString(2, product.getName());
             ps.setString(3, product.getCode());
@@ -162,6 +186,7 @@ public class SavingsProductService {
             }
             ps.setString(12, now);
             ps.setString(13, now);
+            bindTermDays(ps, 14, product);
             ps.executeUpdate();
         }
         return findById(id);
@@ -169,11 +194,12 @@ public class SavingsProductService {
 
     /** Updates a product from the management screen's edit form. */
     public void update(SavingsProduct product) throws SQLException {
+        product.normalize();
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "UPDATE savings_products SET name = ?, code = ?, type = ?, contribution_amount = ?,"
                      + " cycle_length_days = ?, commission_type = ?, commission_value = ?, interest_rate_bps = ?,"
-                     + " par_value = ?, updated_at = ? WHERE id = ?")) {
+                     + " par_value = ?, updated_at = ?, early_withdrawal_penalty_bps = ?, term_days = ? WHERE id = ?")) {
             ps.setString(1, product.getName());
             ps.setString(2, product.getCode());
             ps.setString(3, product.getType());
@@ -188,7 +214,9 @@ public class SavingsProductService {
                 ps.setNull(9, java.sql.Types.BIGINT);
             }
             ps.setString(10, Instant.now().toString());
-            ps.setString(11, product.getId());
+            ps.setInt(11, product.getEarlyWithdrawalPenaltyBps());
+            bindTermDays(ps, 12, product);
+            ps.setString(13, product.getId());
             ps.executeUpdate();
         }
     }
@@ -246,6 +274,8 @@ public class SavingsProductService {
         product.setInterestRateBps(rs.getInt("interest_rate_bps"));
         long parValue = rs.getLong("par_value");
         product.setParValue(rs.wasNull() ? null : parValue);
+        int termDays = rs.getInt("term_days");
+        product.setTermDays(rs.wasNull() ? null : termDays);
         product.setActive(rs.getInt("is_active") != 0);
         return product;
     }
@@ -312,7 +342,7 @@ public class SavingsProductService {
                 ps.setString(4, SavingsProduct.TYPE_FIXED_DEPOSIT);
                 ps.setLong(5, 0);
                 ps.setInt(6, 31);
-                ps.setString(7, CommissionType.FLAT_PER_CYCLE.value());
+                ps.setString(7, CommissionType.NONE.value());
                 ps.setLong(8, 0);
                 ps.setInt(9, 1000); // 10% p.a. placeholder rate
                 ps.setString(10, now);
@@ -348,7 +378,7 @@ public class SavingsProductService {
                 ps.setString(4, SavingsProduct.TYPE_SHARES);
                 ps.setLong(5, 0);
                 ps.setInt(6, 31);
-                ps.setString(7, CommissionType.FLAT_PER_CYCLE.value());
+                ps.setString(7, CommissionType.NONE.value());
                 ps.setLong(8, 0);
                 ps.setLong(9, 1000); // GHS 10.00/share placeholder par value
                 ps.setString(10, now);

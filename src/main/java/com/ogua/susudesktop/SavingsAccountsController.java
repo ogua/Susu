@@ -106,6 +106,10 @@ public class SavingsAccountsController {
             fdFieldsBox.setVisible(isFixedDeposit);
             fdFieldsBox.setManaged(isFixedDeposit);
             contributionLabel.setText(isFixedDeposit ? "Principal amount (GHS)" : "Daily contribution (GHS)");
+            if (selected != null && selected.hasMaturity() && selected.getTermDays() != null) {
+                LocalDate defaultMaturity = LocalDate.now().plusDays(selected.getTermDays());
+                (isFixedDeposit ? fdMaturesAtPicker : maturesAtPicker).setValue(defaultMaturity);
+            }
         });
         loadProducts();
 

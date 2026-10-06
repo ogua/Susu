@@ -15,3 +15,4 @@ V012__group_loan_redesign.sql
 V013__deposits_into_savings.sql
 V014__group_loan_cancellation.sql
 V015__loan_application_details.sql
+V016__savings_product_term_days.sql

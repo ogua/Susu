@@ -50,18 +50,38 @@
                     <TextField fx:id="spCodeField"/>
                     <Label styleClass="text-muted" text="Type"/>
                     <ComboBox fx:id="spTypeCombo" maxWidth="Infinity"/>
-                    <Label styleClass="text-muted" text="Contribution (GHS)"/>
-                    <TextField fx:id="spContributionField" promptText="5.00"/>
-                    <Label styleClass="text-muted" text="Cycle length (days)"/>
-                    <TextField fx:id="spCycleDaysField" promptText="31"/>
-                    <Label styleClass="text-muted" text="Commission type"/>
-                    <ComboBox fx:id="spCommissionTypeCombo" maxWidth="Infinity"/>
-                    <Label styleClass="text-muted" text="Commission value (bps or minor units)"/>
-                    <TextField fx:id="spCommissionValueField" promptText="0"/>
-                    <Label styleClass="text-muted" text="Interest rate — fixed deposit only (bps, e.g. 1000 = 10% p.a.)"/>
-                    <TextField fx:id="spInterestRateBpsField" promptText="1000"/>
-                    <Label styleClass="text-muted" text="Par value per share — shares only (GHS)"/>
-                    <TextField fx:id="spParValueField" promptText="10.00"/>
+                    <VBox fx:id="spContributionBox" spacing="4">
+                        <Label fx:id="spContributionLabel" styleClass="text-muted" text="Daily contribution (GHS)"/>
+                        <TextField fx:id="spContributionField" promptText="5.00"/>
+                    </VBox>
+                    <VBox fx:id="spCycleBox" spacing="4">
+                        <Label styleClass="text-muted" text="Cycle length (contributions)"/>
+                        <TextField fx:id="spCycleDaysField" promptText="31"/>
+                    </VBox>
+                    <VBox fx:id="spCommissionBox" spacing="4">
+                        <Label styleClass="text-muted" text="Commission type"/>
+                        <ComboBox fx:id="spCommissionTypeCombo" maxWidth="Infinity"/>
+                    </VBox>
+                    <VBox fx:id="spCommissionValueBox" spacing="4">
+                        <Label fx:id="spCommissionValueLabel" styleClass="text-muted" text="Commission rate (bps, 100 = 1%)"/>
+                        <TextField fx:id="spCommissionValueField" promptText="0"/>
+                    </VBox>
+                    <VBox fx:id="spPenaltyBox" spacing="4">
+                        <Label styleClass="text-muted" text="Early withdrawal penalty (bps, 100 = 1%)"/>
+                        <TextField fx:id="spPenaltyBpsField" promptText="1000"/>
+                    </VBox>
+                    <VBox fx:id="spInterestBox" spacing="4">
+                        <Label styleClass="text-muted" text="Annual interest rate (bps, 1000 = 10% p.a.)"/>
+                        <TextField fx:id="spInterestRateBpsField" promptText="1000"/>
+                    </VBox>
+                    <VBox fx:id="spTermBox" spacing="4">
+                        <Label styleClass="text-muted" text="Default term (days) — optional, pre-fills maturity"/>
+                        <TextField fx:id="spTermDaysField" promptText="365"/>
+                    </VBox>
+                    <VBox fx:id="spParValueBox" spacing="4">
+                        <Label styleClass="text-muted" text="Par value per share (GHS)"/>
+                        <TextField fx:id="spParValueField" promptText="10.00"/>
+                    </VBox>
                     <Button fx:id="spSaveButton" maxWidth="Infinity" onAction="#onSaveSavingsProduct" styleClass="button-primary" text="Save Product"/>
                     <Button fx:id="spCancelEditButton" maxWidth="Infinity" managed="false" onAction="#onCancelSavingsEdit" styleClass="button-secondary" text="Cancel" visible="false"/>
                 </VBox>
