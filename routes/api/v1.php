@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\AgentPositionController;
 use App\Http\Controllers\Api\V1\AgentRouteController;
+use App\Http\Controllers\Api\V1\AnnouncementController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
@@ -37,6 +38,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RecordClientDev
     Route::post('/auth/me/photo', [ProfilePhotoController::class, 'update'])
         ->middleware('throttle:10,1')->name('auth.me.photo.update');
     Route::delete('/auth/me/photo', [ProfilePhotoController::class, 'destroy'])->name('auth.me.photo.destroy');
+    Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
 
     // Offline sync (agents now; desktop back-office roles reuse the same protocol)
     Route::middleware(['role:field_agent|branch_manager|company_admin', 'throttle:30,1'])->group(function (): void {

@@ -76,4 +76,17 @@
     </x-filament::section>
 
     {{ $this->table }}
+
+    @if (config('platform.support_email') || config('platform.support_phone'))
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+            Questions about your subscription? Contact the SusuApp team
+            @if (config('platform.support_email'))
+                at <a href="mailto:{{ config('platform.support_email') }}" class="underline">{{ config('platform.support_email') }}</a>
+            @endif
+            @if (config('platform.support_phone'))
+                or {{ config('platform.support_phone') }}
+            @endif
+            .
+        </p>
+    @endif
 </x-filament-panels::page>

@@ -98,6 +98,7 @@ class AdminPanelProvider extends PanelProvider
                             ->directory('images/backgrounds')
                     ),
             ])
+            ->renderHook(PanelsRenderHook::CONTENT_START, fn (): View => view('filament.partials.announcements-banner'))
             ->renderHook(PanelsRenderHook::CONTENT_START, fn (): View => view('filament.partials.billing-overdue-banner'))
             ->databaseNotifications()
             ->databaseNotificationsPolling('30s');
