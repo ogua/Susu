@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logout, me } from '@/api/auth';
 import { getAgentDashboard } from '@/api/dashboard';
 import { setDuty } from '@/api/duty';
+import { AnnouncementsFeed } from '@/components/announcements-feed';
 import { ThemedText } from '@/components/themed-text';
 import {
   Avatar,
@@ -212,6 +213,7 @@ export default function AgentDashboard() {
         </View>
 
         <OfflineBanner mode="agent" />
+        <AnnouncementsFeed />
 
         <Animated.View entering={FadeInDown.duration(260)}>
           {dashboard.isLoading && !data ? (
