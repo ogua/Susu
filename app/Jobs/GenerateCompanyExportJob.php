@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Actions\Company\ExportCompanyDataAction;
 use App\Models\CompanyExport;
+use App\Notifications\PlatformAlert;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -20,6 +21,13 @@ class GenerateCompanyExportJob implements ShouldQueue
 
     public function handle(ExportCompanyDataAction $exportCompanyData): void
     {
-        $exportCompanyData->build($this->export);
+        $export = $exportCompanyData->build($this->export);
+
+        if ($export->status === CompanyExport::STATUS_FAILED) {
+            PlatformAlert::toSuperAdmins(
+                'Data export failed',
+                "The data export for {$export->company->name} failed: {$export->error}",
+            );
+        }
     }
 }
