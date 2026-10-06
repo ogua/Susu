@@ -48,7 +48,11 @@ class CustomerForm
 
         $components[] = $clientType === ClientType::Business
             ? Section::make('Client details')->columns(2)->schema(CustomerFormFields::businessClientDetailsFields())
-            : Section::make('Client details')->columns(2)->schema(CustomerFormFields::individualClientDetailsFields());
+            : Section::make('Client details')
+                ->columns(2)
+                ->schema(
+                    CustomerFormFields::individualClientDetailsFields()
+                );
 
         $components[] = Section::make('Status & photo')
             ->columns(2)
@@ -116,6 +120,8 @@ class CustomerForm
             ])
             ->visibleOn('edit');
 
-        return $schema->components($components);
+        return $schema->components(
+            Section::make('Customer form')->schema($components)
+        );
     }
 }

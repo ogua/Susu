@@ -5,7 +5,6 @@ namespace App\Filament\Resources\Customers\Schemas;
 use App\Enums\ClientType;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Placeholder;
 use Filament\Schemas\Components\Wizard\Step;
 
 /**
@@ -19,11 +18,10 @@ use Filament\Schemas\Components\Wizard\Step;
  * the "New Individual Client" / "New Business Client" actions on the
  * customer list page — rather than a Select the user changes mid-wizard.
  *
- * Individual = 7 steps (Client Type, Client Details, Identification, Other
- * Info, Employment/Business Details, Beneficiaries, Preview — "Branch Info"
- * is folded into the Client Type step since this app already scopes creation
- * to the current tenant/branch). Business = 4 steps (Client Type, Client
- * Details, Principal Contact, Preview).
+ * Individual = 6 steps (Client Details, Identification, Other Info,
+ * Employment/Business Details, Beneficiaries, Preview). Business = 3 steps
+ * (Client Details, Principal Contact, Preview). Creation is scoped to the
+ * current tenant branch, so there is no branch step.
  */
 class CustomerWizardSteps
 {
@@ -32,23 +30,15 @@ class CustomerWizardSteps
      */
     public static function steps(ClientType $clientType): array
     {
-        $clientTypeStep = Step::make('Client Type')
-            ->schema([
-                Hidden::make('client_type')->default($clientType),
-                Placeholder::make('client_type_display')
-                    ->label('Client type')
-                    ->content($clientType === ClientType::Business ? 'Business' : 'Individual'),
-                Placeholder::make('branch')
-                    ->label('Branch')
-                    ->content(fn (): string => Filament::getTenant()?->name ?? '—'),
-            ]);
+        // No separate Client Type step: the type is fixed by the list-page
+        // action, so it rides along as a hidden field on the first step.
+        $clientTypeField = Hidden::make('client_type')->default($clientType);
 
         if ($clientType === ClientType::Business) {
             return [
-                $clientTypeStep,
-
                 Step::make('Client Details')
                     ->schema([
+                        $clientTypeField,
                         ...CustomerFormFields::businessClientDetailsFields(),
                         ...CustomerFormFields::addressLocationFields(),
                     ])
@@ -64,10 +54,9 @@ class CustomerWizardSteps
         }
 
         return [
-            $clientTypeStep,
-
             Step::make('Client Details')
                 ->schema([
+                    $clientTypeField,
                     ...CustomerFormFields::individualClientDetailsFields(),
                     ...CustomerFormFields::addressLocationFields(),
                 ])
