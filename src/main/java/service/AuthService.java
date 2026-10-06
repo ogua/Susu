@@ -136,6 +136,27 @@ public class AuthService {
         thread.start();
     }
 
+    /**
+     * After the user changes their server password from this computer, the
+     * offline login uses the same new password — otherwise the old temporary
+     * one would keep working (and the new one fail) whenever the app is offline.
+     *
+     * @return whether a local account with that email was updated
+     */
+    public boolean updateLocalPassword(String email, String newPassword) {
+        String sql = "UPDATE local_users SET password_hash = ?, updated_at = ? WHERE email = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, BCrypt.hashpw(newPassword, BCrypt.gensalt()));
+            ps.setString(2, Instant.now().toString());
+            ps.setString(3, email.trim().toLowerCase());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not update the local password: {0}", e.getMessage());
+            return false;
+        }
+    }
+
     private void registerFailedAttempt(String userId, int currentFailures) {
         int failures = currentFailures + 1;
         String lockedUntil = failures >= MAX_FAILED_ATTEMPTS

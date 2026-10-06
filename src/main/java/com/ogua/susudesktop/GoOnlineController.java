@@ -18,6 +18,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.json.JSONObject;
 import service.ApiClient;
+import service.AuthService;
 import service.GoOnlineService;
 import service.OutboxService;
 import service.SyncService;
@@ -32,6 +33,7 @@ public class GoOnlineController {
     @FXML private Button goOnlineButton;
 
     private final ApiClient apiClient = new ApiClient();
+    private final AuthService authService = new AuthService();
     private final GoOnlineService goOnlineService = new GoOnlineService();
     private final SyncService syncService = new SyncService();
     private final OutboxService outbox = new OutboxService();
@@ -109,8 +111,8 @@ public class GoOnlineController {
 
     /**
      * The server account is on a temporary password: ask for a new one, set
-     * it on the server, then retry going online with it. The offline login
-     * password on this computer is not changed.
+     * it on the server (and for this computer's offline login), then retry
+     * going online with it.
      */
     private void promptForNewPassword(String temporaryPassword) {
         Dialog<String> dialog = new Dialog<>();
@@ -143,6 +145,7 @@ public class GoOnlineController {
             @Override
             protected Void call() throws Exception {
                 apiClient.changePassword(temporaryPassword, chosen.get());
+                authService.updateLocalPassword(emailField.getText(), chosen.get());
                 return null;
             }
         };
