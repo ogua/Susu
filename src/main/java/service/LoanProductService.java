@@ -97,6 +97,27 @@ public class LoanProductService {
         return findById(id);
     }
 
+    /** Updates a product from the management screen's edit form. */
+    public void update(LoanProduct product) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE loan_products SET name = ?, code = ?, interest_method = ?, interest_rate_bps = ?,"
+                     + " term_period_count = ?, repayment_frequency = ?, min_amount = ?, max_amount = ?,"
+                     + " updated_at = ? WHERE id = ?")) {
+            ps.setString(1, product.getName());
+            ps.setString(2, product.getCode());
+            ps.setString(3, product.getInterestMethod().value());
+            ps.setInt(4, product.getInterestRateBps());
+            ps.setInt(5, product.getTermPeriodCount());
+            ps.setString(6, product.getRepaymentFrequency().value());
+            ps.setLong(7, product.getMinAmount());
+            ps.setLong(8, product.getMaxAmount());
+            ps.setString(9, Instant.now().toString());
+            ps.setString(10, product.getId());
+            ps.executeUpdate();
+        }
+    }
+
     public void setActive(String id, boolean active) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
