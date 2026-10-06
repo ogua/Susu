@@ -40,6 +40,7 @@ public class SavingsAccountsController {
     @FXML private TableColumn<SavingsAccount, String> targetColumn;
     @FXML private TableColumn<SavingsAccount, String> statusColumn;
     @FXML private Label statusLabel;
+    @FXML private Button recordCollectionButton;
 
     @FXML private TextField customerSearchField;
     @FXML private ComboBox<Customer> customerCombo;
@@ -112,6 +113,8 @@ public class SavingsAccountsController {
             }
         });
         loadProducts();
+        table.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) ->
+                updateRecordCollectionButton(selected));
 
         refresh();
     }
@@ -249,6 +252,31 @@ public class SavingsAccountsController {
         task.setOnFailed(event -> openStatusLabel.setText(
                 "Could not open account: " + task.getException().getMessage()));
         new Thread(task, "account-open").start();
+    }
+
+    /**
+     * Shares are bought and a funded fixed deposit takes nothing more, so the
+     * button is disabled for those rather than letting the service reject it.
+     * The product is read off the FX thread.
+     */
+    private void updateRecordCollectionButton(SavingsAccount selected) {
+        if (selected == null) {
+            recordCollectionButton.setDisable(false);
+            return;
+        }
+        Task<Boolean> task = new Task<>() {
+            @Override
+            protected Boolean call() throws Exception {
+                return selected.acceptsCollections(productService.findById(selected.getSavingsProductId()));
+            }
+        };
+        task.setOnSucceeded(event -> {
+            if (selected == table.getSelectionModel().getSelectedItem()) {
+                recordCollectionButton.setDisable(!task.getValue());
+            }
+        });
+        task.setOnFailed(event -> recordCollectionButton.setDisable(false));
+        new Thread(task, "collection-eligibility").start();
     }
 
     @FXML

@@ -99,4 +99,25 @@ public class SavingsAccount {
 
     public SavingsProduct getProduct() { return product; }
     public void setProduct(SavingsProduct product) { this.product = product; }
+
+    /**
+     * Whether a susu collection can be posted here at all (mirrors the
+     * backend's SavingsAccount::acceptsCollections). UI hint only;
+     * CollectionService enforces the same rules.
+     */
+    public boolean acceptsCollections(SavingsProduct product) {
+        if (status == AccountStatus.CLOSED) {
+            return false;
+        }
+        if (product == null) {
+            return true;
+        }
+        if (product.isShares()) {
+            return false;
+        }
+        if (product.isFixedDeposit()) {
+            return maturedAt == null && balance == 0;
+        }
+        return true;
+    }
 }

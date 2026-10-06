@@ -32,7 +32,7 @@
         </TableView>
 
         <HBox spacing="8">
-            <Button onAction="#onRecordCollection" styleClass="button-primary" text="Record Collection"/>
+            <Button fx:id="recordCollectionButton" onAction="#onRecordCollection" styleClass="button-primary" text="Record Collection"/>
             <Button onAction="#onBuyShares" styleClass="button-primary" text="Buy Shares"/>
             <Button onAction="#refresh" styleClass="button-secondary" text="Refresh"/>
         </HBox>
