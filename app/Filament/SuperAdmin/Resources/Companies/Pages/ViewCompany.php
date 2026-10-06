@@ -33,6 +33,7 @@ class ViewCompany extends ViewRecord
             CompanyActions::addBranch()->after($reload),
             EditAction::make(),
             ActionGroup::make([
+                CompanyActions::changePlan()->after($reload),
                 CompanyActions::addStarterProducts()->after($reload),
                 CompanyActions::toggleActive(),
             ]),

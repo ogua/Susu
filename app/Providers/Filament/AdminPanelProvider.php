@@ -15,8 +15,10 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -92,6 +94,7 @@ class AdminPanelProvider extends PanelProvider
                             ->directory('images/backgrounds')
                     ),
             ])
+            ->renderHook(PanelsRenderHook::CONTENT_START, fn (): View => view('filament.partials.billing-overdue-banner'))
             ->databaseNotifications()
             ->databaseNotificationsPolling('30s');
     }

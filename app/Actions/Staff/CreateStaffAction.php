@@ -6,6 +6,7 @@ use App\Actions\Staff\Concerns\ValidatesStaffAssignment;
 use App\Models\Branch;
 use App\Models\User;
 use App\Policies\UserPolicy;
+use App\Services\Billing\PlanLimits;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -19,6 +20,7 @@ class CreateStaffAction
     public function __construct(
         private readonly UserPolicy $policy,
         private readonly SendStaffCredentialsAction $sendCredentials,
+        private readonly PlanLimits $planLimits,
     ) {}
 
     /**
@@ -32,6 +34,7 @@ class CreateStaffAction
 
         $this->assertAssignableRole($actor, $this->policy, $data['role']);
         $branchIds = $this->assertManageableBranches($actor, $tenant, $data['branch_ids']);
+        $this->planLimits->assertCanAdd($tenant->company, 'staff');
 
         $user = User::create([
             'company_id' => $tenant->company_id,

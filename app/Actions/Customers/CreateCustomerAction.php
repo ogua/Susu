@@ -6,6 +6,7 @@ use App\Actions\Customers\Concerns\SyncsCustomerChildRecords;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Models\User;
+use App\Services\Billing\PlanLimits;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
@@ -25,6 +26,8 @@ class CreateCustomerAction
 {
     use SyncsCustomerChildRecords;
 
+    public function __construct(private readonly PlanLimits $planLimits) {}
+
     /**
      * @param  array<string, mixed>  $data  validated customer attributes
      */
@@ -36,6 +39,8 @@ class CreateCustomerAction
                 return $existing;
             }
         }
+
+        $this->planLimits->assertCanAdd($branch->company, 'customers');
 
         $identifications = Arr::pull($data, 'identifications', []);
         $beneficiaries = Arr::pull($data, 'beneficiaries', []);

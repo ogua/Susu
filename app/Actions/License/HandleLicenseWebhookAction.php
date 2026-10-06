@@ -2,6 +2,7 @@
 
 namespace App\Actions\License;
 
+use App\Actions\Billing\InvoiceCheckoutAction;
 use App\Models\DesktopLicenseSale;
 
 /**
@@ -15,7 +16,10 @@ use App\Models\DesktopLicenseSale;
  */
 class HandleLicenseWebhookAction
 {
-    public function __construct(private FulfillLicenseSaleAction $fulfill) {}
+    public function __construct(
+        private FulfillLicenseSaleAction $fulfill,
+        private InvoiceCheckoutAction $invoiceCheckout,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $payload
@@ -25,6 +29,14 @@ class HandleLicenseWebhookAction
         $data = $payload['data'] ?? [];
         $reference = $data['reference'] ?? null;
         if ($reference === null) {
+            return;
+        }
+
+        // Subscription invoices are the other platform-billing payment and
+        // share this endpoint (their SUSULIC-SUB- prefix routes them here).
+        if (InvoiceCheckoutAction::isInvoiceReference($reference)) {
+            $this->invoiceCheckout->complete($reference, $data['status'] ?? $this->statusFromEvent($payload['event'] ?? ''), $payload);
+
             return;
         }
 

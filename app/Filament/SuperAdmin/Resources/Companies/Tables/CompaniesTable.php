@@ -18,7 +18,9 @@ class CompaniesTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->withCount('activeCompanyAdmins as company_admins_count'))
+            ->modifyQueryUsing(fn (Builder $query) => $query
+                ->withCount('activeCompanyAdmins as company_admins_count')
+                ->with('subscription.plan'))
             ->columns([
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('slug')->searchable()->toggleable(isToggledHiddenByDefault: true),
@@ -26,6 +28,8 @@ class CompaniesTable
                 TextColumn::make('contact_email')->searchable(),
                 TextColumn::make('contact_phone'),
                 IconColumn::make('is_active')->label('Active')->boolean(),
+                TextColumn::make('subscription.plan.name')->label('Plan')->placeholder('—'),
+                TextColumn::make('subscription.status')->label('Billing')->badge()->placeholder('—'),
                 TextColumn::make('branches_count')->counts('branches')->label('Branches')
                     ->color(fn (int $state): ?string => $state === 0 ? 'danger' : null),
                 TextColumn::make('company_admins_count')->label('Admins')
@@ -46,6 +50,7 @@ class CompaniesTable
                 ActionGroup::make([
                     CompanyActions::addCompanyAdmin(),
                     CompanyActions::addBranch(),
+                    CompanyActions::changePlan(),
                     CompanyActions::toggleActive(),
                 ]),
             ])

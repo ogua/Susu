@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BillingCallbackController;
 use App\Http\Controllers\License\LicenseCheckoutController;
 use App\Http\Controllers\Reports\AgentPerformanceReportController;
 use App\Http\Controllers\Reports\BalanceSheetReportController;
@@ -67,6 +68,11 @@ Route::middleware('auth')->prefix('reports/{branch}')->name('reports.')->group(f
     Route::get('/balance-sheet.pdf', [BalanceSheetReportController::class, 'pdf'])->name('balance-sheet.pdf');
     Route::get('/balance-sheet.xlsx', [BalanceSheetReportController::class, 'excel'])->name('balance-sheet.excel');
 });
+
+// Paystack's return from a company admin paying a subscription invoice.
+Route::get('/billing/callback', BillingCallbackController::class)
+    ->middleware('auth')
+    ->name('billing.callback');
 
 // Platform-wide reports for the super admin panel (no branch in the URL).
 Route::middleware('auth')->prefix('platform-reports')->name('platform-reports.')->group(function (): void {

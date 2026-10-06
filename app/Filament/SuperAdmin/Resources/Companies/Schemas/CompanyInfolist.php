@@ -2,7 +2,9 @@
 
 namespace App\Filament\SuperAdmin\Resources\Companies\Schemas;
 
+use App\Enums\SubscriptionStatus;
 use App\Models\Company;
+use App\Services\Billing\PlanLimits;
 use App\Support\Money;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -45,6 +47,36 @@ class CompanyInfolist
                                 ? "{$record->savings_products_count} savings · {$record->loan_products_count} loan"
                                 : 'None — add starter products')
                             ->color(fn (Company $record): string => $record->savings_products_count > 0 && $record->loan_products_count > 0 ? 'success' : 'warning'),
+                    ]),
+
+                Section::make('Subscription')
+                    ->columns(4)
+                    ->schema([
+                        TextEntry::make('subscription.plan.name')->label('Plan')->placeholder('No plan — unlimited, not billed'),
+                        TextEntry::make('subscription.status')
+                            ->label('Billing status')
+                            ->badge()
+                            ->placeholder('—')
+                            ->color(fn (?SubscriptionStatus $state): string => match ($state) {
+                                SubscriptionStatus::Active => 'success',
+                                SubscriptionStatus::Trialing => 'info',
+                                SubscriptionStatus::PastDue => 'danger',
+                                default => 'gray',
+                            }),
+                        TextEntry::make('renews')
+                            ->label('Trial ends / renews')
+                            ->state(fn (Company $record): ?string => ($record->subscription?->trial_ends_at ?? $record->subscription?->current_period_end)?->format('d M Y'))
+                            ->placeholder('—'),
+                        TextEntry::make('suspended_reason')
+                            ->label('Suspension')
+                            ->placeholder('—')
+                            ->formatStateUsing(fn (string $state): string => $state === Company::SUSPENDED_FOR_NON_PAYMENT ? 'Non-payment (lifts when paid)' : 'By operator'),
+                        TextEntry::make('usage')
+                            ->label('Usage against plan limits')
+                            ->columnSpanFull()
+                            ->state(fn (Company $record): string => collect(app(PlanLimits::class)->summary($record))
+                                ->map(fn (array $usage, string $resource): string => ucfirst($resource).': '.$usage['used'].' / '.($usage['limit'] ?? '∞'))
+                                ->join(' · ')),
                     ]),
 
                 Section::make('Portfolio')

@@ -15,6 +15,12 @@ use Spatie\Activitylog\Traits\LogsActivity;
 
 class Company extends Model
 {
+    /** suspended_reason set by the billing run; payment lifts only this kind of suspension. */
+    public const SUSPENDED_FOR_NON_PAYMENT = 'non_payment';
+
+    /** suspended_reason set when a super admin suspends by hand. */
+    public const SUSPENDED_BY_OPERATOR = 'operator';
+
     /** @use HasFactory<CompanyFactory> */
     use HasFactory, HasUuids, LogsActivity;
 
@@ -31,6 +37,7 @@ class Company extends Model
         'contact_email',
         'contact_phone',
         'is_active',
+        'suspended_reason',
     ];
 
     /**
@@ -91,6 +98,16 @@ class Company extends Model
         return $this->hasMany(JournalEntry::class);
     }
 
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(CompanySubscription::class);
+    }
+
+    public function subscriptionInvoices(): HasMany
+    {
+        return $this->hasMany(SubscriptionInvoice::class);
+    }
+
     public function smsSetting(): HasOne
     {
         return $this->hasOne(CompanySmsSetting::class);
@@ -118,7 +135,7 @@ class Company extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'slug', 'domain_alias', 'contact_email', 'contact_phone', 'is_active'])
+            ->logOnly(['name', 'slug', 'domain_alias', 'contact_email', 'contact_phone', 'is_active', 'suspended_reason'])
             ->logOnlyDirty()
             ->useLogName('company')
             ->dontSubmitEmptyLogs();

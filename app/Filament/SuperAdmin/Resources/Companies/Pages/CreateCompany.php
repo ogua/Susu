@@ -7,6 +7,8 @@ use App\Filament\SuperAdmin\Resources\Companies\CompanyResource;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\BranchForm;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyAdminForm;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyForm;
+use App\Models\Plan;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Schemas\Components\Wizard\Step;
@@ -59,6 +61,12 @@ class CreateCompany extends CreateRecord
                 ->columns(2)
                 ->schema([
                     ...CompanyAdminForm::fields(),
+                    Select::make('plan_id')
+                        ->label('Subscription plan')
+                        ->options(fn (): array => Plan::where('is_active', true)->orderBy('sort')->pluck('name', 'id')->all())
+                        ->placeholder('No plan yet (no limits, not billed)')
+                        ->helperText('Starts the plan\'s free trial when it has one, otherwise invoices the first period.')
+                        ->columnSpanFull(),
                     Toggle::make('with_starter_products')
                         ->label('Add starter savings and loan products')
                         ->helperText('Five savings and five loan products the company can edit or switch off later.')
@@ -76,8 +84,9 @@ class CreateCompany extends CreateRecord
         return app(OnboardCompanyAction::class)->execute(
             Arr::except($data, ['branch', 'admin']),
             $data['branch'],
-            Arr::except($data['admin'], ['with_starter_products']),
+            Arr::except($data['admin'], ['with_starter_products', 'plan_id']),
             (bool) ($data['admin']['with_starter_products'] ?? true),
+            filled($data['admin']['plan_id'] ?? null) ? Plan::find($data['admin']['plan_id']) : null,
         );
     }
 

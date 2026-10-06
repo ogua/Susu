@@ -6,6 +6,7 @@ use App\Actions\Staff\IssueTemporaryPasswordAction;
 use App\Actions\Staff\SendStaffCredentialsAction;
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Billing\PlanLimits;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -22,6 +23,7 @@ class CreateCompanyAdminAction
     public function __construct(
         private readonly SyncCompanyAdminBranchAccessAction $syncBranchAccess,
         private readonly SendStaffCredentialsAction $sendCredentials,
+        private readonly PlanLimits $planLimits,
     ) {}
 
     /**
@@ -34,6 +36,8 @@ class CreateCompanyAdminAction
                 'branch' => 'Add a branch to this company before creating its admin — admins log in through a branch.',
             ]);
         }
+
+        $this->planLimits->assertCanAdd($company, 'staff');
 
         $password = filled($data['password'] ?? null) ? $data['password'] : IssueTemporaryPasswordAction::generatePassword();
 

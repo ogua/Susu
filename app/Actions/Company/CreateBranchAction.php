@@ -5,6 +5,7 @@ namespace App\Actions\Company;
 use App\Models\Branch;
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Billing\PlanLimits;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,11 +15,15 @@ use Illuminate\Support\Facades\DB;
  */
 class CreateBranchAction
 {
+    public function __construct(private readonly PlanLimits $planLimits) {}
+
     /**
      * @param  array{name: string, slug: string, code?: ?string, address?: ?string, contact_phone?: ?string, contact_email?: ?string}  $data
      */
     public function execute(Company $company, array $data): Branch
     {
+        $this->planLimits->assertCanAdd($company, 'branches');
+
         return DB::transaction(function () use ($company, $data): Branch {
             $branch = $company->branches()->create([
                 'name' => $data['name'],

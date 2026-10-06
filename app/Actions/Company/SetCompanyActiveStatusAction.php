@@ -13,9 +13,15 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 class SetCompanyActiveStatusAction
 {
-    public function execute(Company $company, bool $isActive): Company
+    /**
+     * @param  ?string  $reason  Why it was suspended (Company::SUSPENDED_*); cleared on reactivation.
+     */
+    public function execute(Company $company, bool $isActive, ?string $reason = Company::SUSPENDED_BY_OPERATOR): Company
     {
-        $company->update(['is_active' => $isActive]);
+        $company->update([
+            'is_active' => $isActive,
+            'suspended_reason' => $isActive ? null : $reason,
+        ]);
 
         if (! $isActive) {
             PersonalAccessToken::query()

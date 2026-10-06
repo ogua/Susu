@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
 use App\Http\Controllers\Api\V1\CollectionSheetController;
 use App\Http\Controllers\Api\V1\CompanyIntegrationController;
+use App\Http\Controllers\Api\V1\CompanySubscriptionController;
 use App\Http\Controllers\Api\V1\Customer;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
@@ -46,6 +47,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RequireApiPassw
     Route::middleware('role:company_admin')->group(function (): void {
         Route::get('/company/integrations', [CompanyIntegrationController::class, 'show'])->name('company.integrations.show');
         Route::put('/company/integrations', [CompanyIntegrationController::class, 'update'])->name('company.integrations.update');
+        Route::get('/company/subscription', [CompanySubscriptionController::class, 'show'])->name('company.subscription.show');
     });
 
     Route::prefix('agent')->name('agent.')->middleware('role:field_agent|branch_manager|company_admin')->group(function (): void {

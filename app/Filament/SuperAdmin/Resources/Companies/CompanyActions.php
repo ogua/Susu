@@ -2,6 +2,7 @@
 
 namespace App\Filament\SuperAdmin\Resources\Companies;
 
+use App\Actions\Billing\SubscribeCompanyAction;
 use App\Actions\Company\CreateBranchAction;
 use App\Actions\Company\CreateCompanyAdminAction;
 use App\Actions\Company\ProvisionStarterProductsAction;
@@ -9,7 +10,9 @@ use App\Actions\Company\SetCompanyActiveStatusAction;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\BranchForm;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyAdminForm;
 use App\Models\Company;
+use App\Models\Plan;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
 use Filament\Support\Icons\Heroicon;
@@ -64,6 +67,27 @@ class CompanyActions
                     ->title("Added {$added['savings']} savings and {$added['loans']} loan product(s)")
                     ->success()
                     ->send();
+            });
+    }
+
+    public static function changePlan(): Action
+    {
+        return Action::make('changePlan')
+            ->label(fn (Company $record): string => $record->subscription === null ? 'Subscribe to plan' : 'Change plan')
+            ->icon(Heroicon::OutlinedRectangleStack)
+            ->modalDescription('A first subscription starts the plan\'s trial (or invoices the first period). Changing plan applies the new limits now and the new price from the next period.')
+            ->schema([
+                Select::make('plan_id')
+                    ->label('Plan')
+                    ->options(fn (): array => Plan::where('is_active', true)->orderBy('sort')->pluck('name', 'id')->all())
+                    ->default(fn (Company $record): ?string => $record->subscription?->plan_id)
+                    ->required(),
+            ])
+            ->action(function (array $data, Company $record): void {
+                $plan = Plan::findOrFail($data['plan_id']);
+                app(SubscribeCompanyAction::class)->execute($record, $plan);
+
+                Notification::make()->title("{$record->name} is on the {$plan->name} plan")->success()->send();
             });
     }
 

@@ -2,7 +2,9 @@
 
 namespace App\Actions\Company;
 
+use App\Actions\Billing\SubscribeCompanyAction;
 use App\Models\Company;
+use App\Models\Plan;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -17,6 +19,7 @@ class OnboardCompanyAction
         private readonly CreateBranchAction $createBranch,
         private readonly CreateCompanyAdminAction $createCompanyAdmin,
         private readonly ProvisionStarterProductsAction $provisionStarterProducts,
+        private readonly SubscribeCompanyAction $subscribeCompany,
     ) {}
 
     /**
@@ -24,10 +27,11 @@ class OnboardCompanyAction
      * @param  array{name: string, slug: string, code?: ?string, address?: ?string, contact_phone?: ?string, contact_email?: ?string}  $branch
      * @param  array{name: string, email: string, phone?: ?string, password?: ?string}  $admin
      * @param  bool  $withStarterProducts  Seed the starter savings/loan catalogue (ProvisionStarterProductsAction).
+     * @param  ?Plan  $plan  Subscribe the company to this plan (trial first when the plan has one).
      */
-    public function execute(array $company, array $branch, array $admin, bool $withStarterProducts = true): Company
+    public function execute(array $company, array $branch, array $admin, bool $withStarterProducts = true, ?Plan $plan = null): Company
     {
-        return DB::transaction(function () use ($company, $branch, $admin, $withStarterProducts): Company {
+        return DB::transaction(function () use ($company, $branch, $admin, $withStarterProducts, $plan): Company {
             $record = Company::create($company);
 
             $this->createBranch->execute($record, $branch);
@@ -35,6 +39,10 @@ class OnboardCompanyAction
 
             if ($withStarterProducts) {
                 $this->provisionStarterProducts->execute($record);
+            }
+
+            if ($plan !== null) {
+                $this->subscribeCompany->execute($record, $plan);
             }
 
             return $record;
