@@ -46,6 +46,7 @@
                 <Button fx:id="navGroupLoans" maxWidth="Infinity" onAction="#showGroupLoans" styleClass="nav-button" text="Group Loans"/>
                 <Button fx:id="navDayClose" maxWidth="Infinity" onAction="#showDayClose" styleClass="nav-button" text="Day Summary"/>
                 <Button fx:id="navPayments" maxWidth="Infinity" onAction="#showPayments" styleClass="nav-button" text="Mobile Money Payments"/>
+                <Button fx:id="navSubscription" maxWidth="Infinity" onAction="#showSubscription" styleClass="nav-button" text="Subscription"/>
                 <Label styleClass="caption" text="REPORTS">
                     <padding><Insets left="8" top="10"/></padding>
                 </Label>

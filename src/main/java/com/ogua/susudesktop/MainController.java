@@ -12,7 +12,9 @@ import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -52,6 +54,7 @@ public class MainController {
     @FXML private Button navGroupLoans;
     @FXML private Button navDayClose;
     @FXML private Button navPayments;
+    @FXML private Button navSubscription;
     @FXML private Button navTrialBalance;
     @FXML private Button navDefaulters;
     @FXML private Button navCashPosition;
@@ -105,9 +108,15 @@ public class MainController {
         navProducts.setManaged(isBackOffice);
         navEngineSwitch.setVisible(isCompanyAdmin);
         navEngineSwitch.setManaged(isCompanyAdmin);
+        // Billing is the company admin's concern and needs the server.
+        boolean showSubscription = isCompanyAdmin && AppConfig.isSyncEnabled();
+        navSubscription.setVisible(showSubscription);
+        navSubscription.setManaged(showSubscription);
         boolean showGoOnline = isCompanyAdmin && !AppConfig.isSyncEnabled();
         navGoOnline.setVisible(showGoOnline);
         navGoOnline.setManaged(showGoOnline);
+
+        ApiClient.setSessionEndedListener(message -> Platform.runLater(() -> endSession(message)));
 
         refreshSyncStatus();
         pullProductsInBackground();
@@ -410,6 +419,29 @@ public class MainController {
     @FXML
     private void showGoOnline() {
         load("go-online-view.fxml", navGoOnline);
+    }
+
+    /**
+     * The server refused this user's session (deactivated, company suspended,
+     * or signed out remotely): sign out here too so the desktop never keeps
+     * working for an account the platform has shut off. Unsynced records stay
+     * in the outbox and upload after a successful sign-in.
+     */
+    private void endSession(String message) {
+        if (userLabel.getScene() == null) {
+            return;
+        }
+        ApiClient.setSessionEndedListener(null);
+        Alert alert = new Alert(Alert.AlertType.WARNING, message, ButtonType.OK);
+        alert.setTitle("Signed out");
+        alert.setHeaderText("The server ended your session");
+        alert.showAndWait();
+        onLogout();
+    }
+
+    @FXML
+    private void showSubscription() {
+        load("subscription-view.fxml", navSubscription);
     }
 
     @FXML

@@ -8,6 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -35,6 +36,18 @@ public class ApiClient {
      * carries the version in packaged builds; a dev run reports "dev".
      */
     private static final String APP_VERSION = Optional.ofNullable(ApiClient.class.getPackage().getImplementationVersion()).orElse("dev");
+
+    /**
+     * Notified (on a background thread) when the server answers 401 to an
+     * authenticated call — the user was deactivated, their company suspended,
+     * or the device signed out by an admin. The cached token is already
+     * cleared; the app shell uses this to sign the user out locally too.
+     */
+    private static volatile Consumer<String> sessionEndedListener;
+
+    public static void setSessionEndedListener(Consumer<String> listener) {
+        sessionEndedListener = listener;
+    }
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -101,6 +114,50 @@ public class ApiClient {
                 .header("X-App-Version", APP_VERSION)
                 .header("Authorization", "Bearer " + token)
                 .GET()
+                .build();
+
+        return send(request);
+    }
+
+    /** The company admin's plan, usage and unpaid invoices. Requires a cached token. */
+    public JSONObject getSubscription() throws ApiException {
+        return authorizedGet("/api/v1/company/subscription");
+    }
+
+    /** Starts a Paystack checkout for an invoice; returns authorization_url to open in a browser. */
+    public JSONObject startInvoiceCheckout(String invoiceId) throws ApiException {
+        return authorizedPost("/api/v1/company/subscription/invoices/" + invoiceId + "/checkout");
+    }
+
+    /** Asks the server to confirm an invoice payment with Paystack; returns the refreshed subscription. */
+    public JSONObject verifyInvoicePayment(String invoiceId) throws ApiException {
+        return authorizedPost("/api/v1/company/subscription/invoices/" + invoiceId + "/verify");
+    }
+
+    private JSONObject authorizedGet(String path) throws ApiException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + path))
+                .timeout(Duration.ofSeconds(20))
+                .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
+                .header("Authorization", "Bearer " + requireToken())
+                .GET()
+                .build();
+
+        return send(request);
+    }
+
+    private JSONObject authorizedPost(String path) throws ApiException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + path))
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
+                .header("Authorization", "Bearer " + requireToken())
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
                 .build();
 
         return send(request);
@@ -190,6 +247,16 @@ public class ApiClient {
             json = new JSONObject(response.body());
         } catch (Exception e) {
             throw new ApiException("Server returned an unexpected response (HTTP " + response.statusCode() + ").");
+        }
+
+        if (response.statusCode() == 401 && request.headers().firstValue("Authorization").isPresent()) {
+            String message = extractError(json, 401);
+            AppConfig.setApiToken("");
+            Consumer<String> listener = sessionEndedListener;
+            if (listener != null) {
+                listener.accept(message);
+            }
+            throw new ApiException(message);
         }
 
         if (response.statusCode() >= 400) {
