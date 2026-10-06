@@ -5,6 +5,7 @@ namespace App\Actions\Savings;
 use App\Enums\AccountStatus;
 use App\Enums\ClientOrigin;
 use App\Enums\PaymentMethod;
+use App\Enums\SavingsProductType;
 use App\Enums\TransactionType;
 use App\Models\AgentDailySummary;
 use App\Models\SavingsAccount;
@@ -155,6 +156,9 @@ class RecordCollectionAction
     {
         if ($account->status === AccountStatus::Closed) {
             throw ValidationException::withMessages(['account' => 'This savings account is closed.']);
+        }
+        if ($account->product->type === SavingsProductType::Shares) {
+            throw ValidationException::withMessages(['account' => 'Share accounts are funded by buying shares, not by collections.']);
         }
 
         $isAssignedAgent = $account->agent_id === $agent->id;

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\SavingsProducts\Schemas;
 
 use App\Enums\CommissionType;
 use App\Enums\SavingsProductType;
+use App\Models\SavingsProduct;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -24,56 +25,107 @@ class SavingsProductForm
                     ->live()
                     ->required(),
                 TextInput::make('contribution_amount')
-                    ->label(fn (Get $get): string => match ($get('type')) {
-                        SavingsProductType::FixedDeposit->value => 'Principal amount (GHS)',
-                        default => 'Daily contribution (GHS)',
-                    })
+                    ->label(fn (Get $get): string => self::type($get) === SavingsProductType::FixedDeposit
+                        ? 'Principal amount (GHS)'
+                        : 'Daily contribution (GHS)')
                     ->numeric()
-                    ->required(fn (Get $get): bool => $get('type') !== SavingsProductType::Shares->value)
-                    ->visible(fn (Get $get): bool => $get('type') !== SavingsProductType::Shares->value)
+                    ->minValue(0.01)
+                    ->required(fn (Get $get): bool => self::type($get) !== SavingsProductType::Shares)
+                    ->visible(fn (Get $get): bool => self::type($get) !== SavingsProductType::Shares)
                     ->formatStateUsing(fn (?int $state): ?float => $state === null ? null : $state / 100)
                     ->dehydrateStateUsing(fn (?float $state): int => (int) round(($state ?? 0) * 100)),
                 TextInput::make('cycle_length_days')
+                    ->label('Cycle length (contributions)')
                     ->numeric()
-                    ->required()
+                    ->minValue(1)
+                    ->required(fn (Get $get): bool => self::isCycleBased($get))
+                    ->visible(fn (Get $get): bool => self::isCycleBased($get))
                     ->default(31),
                 Select::make('commission_type')
                     ->options(CommissionType::class)
                     ->default(CommissionType::None)
                     ->live()
-                    ->required(),
+                    ->required(fn (Get $get): bool => self::isCycleBased($get))
+                    ->visible(fn (Get $get): bool => self::isCycleBased($get)),
                 TextInput::make('commission_value')
+                    ->label(fn (Get $get): string => self::commissionType($get) === CommissionType::FlatPerCycle
+                        ? 'Commission per cycle (GHS)'
+                        : 'Commission rate (basis points)')
                     ->numeric()
+                    ->minValue(0)
                     ->default(0)
-                    ->visible(fn (Get $get): bool => ! in_array($get('commission_type'), [
-                        CommissionType::FirstContributionPerCycle->value,
-                        CommissionType::None->value,
-                    ]))
-                    ->helperText(fn (Get $get): string => match ($get('commission_type')) {
-                        CommissionType::Percentage->value => 'Basis points of each deposit (100 = 1%)',
-                        CommissionType::PercentageOfBalancePerCycle->value => "Basis points of the account's current balance, charged once per cycle started (100 = 1%)",
-                        default => 'Flat amount in pesewas per cycle started',
-                    }),
+                    ->required(fn (Get $get): bool => self::hasCommissionValue($get))
+                    ->visible(fn (Get $get): bool => self::hasCommissionValue($get))
+                    ->helperText(fn (Get $get): string => match (self::commissionType($get)) {
+                        CommissionType::Percentage => 'Basis points of each deposit (100 = 1%)',
+                        CommissionType::PercentageOfBalancePerCycle => "Basis points of the account's current balance, charged once per cycle started (100 = 1%)",
+                        default => 'Flat amount charged once per cycle started',
+                    })
+                    // Flat commission is stored in pesewas but entered in GHS
+                    // like every other money field; rates stay in basis points.
+                    ->formatStateUsing(fn (?int $state, ?SavingsProduct $record): int|float|null => $state !== null && $record?->commission_type === CommissionType::FlatPerCycle
+                        ? $state / 100
+                        : $state)
+                    ->dehydrateStateUsing(fn (int|float|string|null $state, Get $get): int => self::commissionType($get) === CommissionType::FlatPerCycle
+                        ? (int) round(((float) $state) * 100)
+                        : (int) $state),
                 TextInput::make('early_withdrawal_penalty_bps')
-                    ->label('Early withdrawal penalty')
+                    ->label('Early withdrawal penalty (basis points)')
                     ->numeric()
+                    ->minValue(0)
+                    ->maxValue(10_000)
                     ->default(0)
-                    ->visible(fn (Get $get): bool => $get('type') === SavingsProductType::Target->value)
-                    ->helperText('Basis points of the withdrawn amount (100 = 1%), charged before the target matures.'),
+                    ->visible(fn (Get $get): bool => self::type($get) === SavingsProductType::Target)
+                    ->helperText('Basis points of the withdrawn amount (100 = 1%), charged before the target matures. The target amount and maturity date are set per account when it is opened.'),
                 TextInput::make('interest_rate_bps')
-                    ->label('Annual interest rate')
+                    ->label('Annual interest rate (basis points)')
                     ->numeric()
+                    ->minValue(0)
                     ->default(0)
-                    ->visible(fn (Get $get): bool => $get('type') === SavingsProductType::FixedDeposit->value)
-                    ->helperText('Basis points per annum (100 = 1%), prorated by term and paid into the balance at maturity.'),
+                    ->visible(fn (Get $get): bool => self::type($get) === SavingsProductType::FixedDeposit)
+                    ->helperText('Basis points per annum (100 = 1%), prorated by term and paid into the balance at maturity. The maturity date is set per account when it is opened.'),
                 TextInput::make('par_value')
                     ->label('Par value per share (GHS)')
                     ->numeric()
-                    ->required(fn (Get $get): bool => $get('type') === SavingsProductType::Shares->value)
-                    ->visible(fn (Get $get): bool => $get('type') === SavingsProductType::Shares->value)
+                    ->minValue(0.01)
+                    ->required(fn (Get $get): bool => self::type($get) === SavingsProductType::Shares)
+                    ->visible(fn (Get $get): bool => self::type($get) === SavingsProductType::Shares)
                     ->formatStateUsing(fn (?int $state): ?float => $state === null ? null : $state / 100)
                     ->dehydrateStateUsing(fn (?float $state): ?int => $state === null ? null : (int) round($state * 100)),
                 Toggle::make('is_active')->default(true),
             ]);
+    }
+
+    /**
+     * Select state is an enum instance once hydrated but a raw string after
+     * the user picks an option, so both shapes must be accepted.
+     */
+    private static function type(Get $get): ?SavingsProductType
+    {
+        $value = $get('type');
+
+        return $value instanceof SavingsProductType ? $value : SavingsProductType::tryFrom((string) $value);
+    }
+
+    private static function commissionType(Get $get): ?CommissionType
+    {
+        $value = $get('commission_type');
+
+        return $value instanceof CommissionType ? $value : CommissionType::tryFrom((string) $value);
+    }
+
+    /** Only susu-style products are collected in cycles and can carry commission. */
+    private static function isCycleBased(Get $get): bool
+    {
+        return in_array(self::type($get), [SavingsProductType::DailySusu, SavingsProductType::Target], true);
+    }
+
+    private static function hasCommissionValue(Get $get): bool
+    {
+        return self::isCycleBased($get) && in_array(self::commissionType($get), [
+            CommissionType::Percentage,
+            CommissionType::PercentageOfBalancePerCycle,
+            CommissionType::FlatPerCycle,
+        ], true);
     }
 }

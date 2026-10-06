@@ -52,6 +52,31 @@ class SavingsProduct extends Model
         ];
     }
 
+    /**
+     * Commission and contribution cycles only mean something for susu-style
+     * products. Fixed deposits and shares are never cycle-collected, so any
+     * commission left over from an earlier type is cleared on every save
+     * whichever client (web, API, desktop sync) wrote it.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (SavingsProduct $product): void {
+            if (! $product->isCycleBased()) {
+                $product->commission_type = CommissionType::None;
+                $product->commission_value = 0;
+            }
+
+            if ($product->type === SavingsProductType::Shares) {
+                $product->contribution_amount ??= 0;
+            }
+        });
+    }
+
+    public function isCycleBased(): bool
+    {
+        return in_array($this->type, [SavingsProductType::DailySusu, SavingsProductType::Target], true);
+    }
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
