@@ -180,6 +180,22 @@ class FixedDepositServiceTest {
     }
 
     @Test
+    void earnsInterestOnlyFromTheFundingDateNotFromOpening() throws Exception {
+        Customer customer = newCustomer("Akua", "Boateng");
+        SavingsProduct product = newFixedDepositProduct(1200);
+
+        SavingsAccount account = accounts.open(customer.getId(), product.getId(), AGENT_ID, 5_000_00L,
+                null, LocalDate.now().minusDays(1).toString());
+        collections.record(AGENT_ID, "Agent One", account.getId(), 500_000L, null, null);
+        backdateTerm(account.getId(), "2026-01-01T12:00:00Z", "2026-03-01", "2026-07-01");
+
+        fixedDeposits.matureFixedDeposits();
+
+        // 122 days funded: intdiv(500000 * 1200 * 122, 10000 * 365) = 20054 pesewas.
+        assertEquals(500_000L + 20_054L, accounts.findById(account.getId()).getBalance());
+    }
+
+    @Test
     void leavesNonFixedDepositAccountsAlone() throws Exception {
         Customer customer = newCustomer("Adjoa", "Nyarko");
         SavingsProduct dailyProduct = products.getOrCreateDefault();
@@ -201,13 +217,19 @@ class FixedDepositServiceTest {
         }
     }
 
+    /** Backdates opening and funding to the same day. */
     private void backdateTerm(String accountId, String openedAt, String maturesAt) throws Exception {
+        backdateTerm(accountId, openedAt, openedAt.substring(0, 10), maturesAt);
+    }
+
+    private void backdateTerm(String accountId, String openedAt, String fundedOn, String maturesAt) throws Exception {
         try (var conn = DatabaseConnection.getConnection();
              var ps = conn.prepareStatement(
-                     "UPDATE savings_accounts SET opened_at = ?, matures_at = ? WHERE id = ?")) {
+                     "UPDATE savings_accounts SET opened_at = ?, cycle_started_at = ?, matures_at = ? WHERE id = ?")) {
             ps.setString(1, openedAt);
-            ps.setString(2, maturesAt);
-            ps.setString(3, accountId);
+            ps.setString(2, fundedOn);
+            ps.setString(3, maturesAt);
+            ps.setString(4, accountId);
             ps.executeUpdate();
         }
     }

@@ -37,27 +37,32 @@ public class FixedDepositService {
 
     public int matureFixedDeposits() throws SQLException {
         record Candidate(String accountId, String accountNumber, String ledgerAccountId, long balance, int rateBps,
-                          LocalDate openedAt, LocalDate maturesAt) {}
+                          LocalDate accruesFrom, LocalDate maturesAt) {}
 
         List<Candidate> candidates = new ArrayList<>();
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT sa.id, sa.account_number, sa.ledger_account_id, sa.balance, sa.interest_rate_bps,"
-                     + " sa.opened_at, sa.matures_at FROM savings_accounts sa"
+                     + " sa.opened_at, sa.cycle_started_at, sa.matures_at FROM savings_accounts sa"
                      + " JOIN savings_products sp ON sp.id = sa.savings_product_id"
                      + " WHERE sp.type = 'fixed_deposit' AND sa.matures_at IS NOT NULL"
                      + " AND sa.matured_at IS NULL AND sa.matures_at <= ?")) {
             ps.setString(1, LocalDate.now().toString());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    // Interest runs from the funding deposit (which stamps
+                    // cycle_started_at), falling back to opening for older accounts.
+                    String fundedOn = rs.getString("cycle_started_at");
                     candidates.add(new Candidate(
                             rs.getString("id"),
                             rs.getString("account_number"),
                             rs.getString("ledger_account_id"),
                             rs.getLong("balance"),
                             rs.getInt("interest_rate_bps"),
-                            LocalDate.ofInstant(Instant.parse(rs.getString("opened_at")),
-                                    java.time.ZoneId.systemDefault()),
+                            fundedOn != null
+                                    ? LocalDate.parse(fundedOn.substring(0, 10))
+                                    : LocalDate.ofInstant(Instant.parse(rs.getString("opened_at")),
+                                            java.time.ZoneId.systemDefault()),
                             LocalDate.parse(rs.getString("matures_at"))));
                 }
             }
@@ -65,7 +70,7 @@ public class FixedDepositService {
 
         int matured = 0;
         for (Candidate c : candidates) {
-            long termDays = ChronoUnit.DAYS.between(c.openedAt(), c.maturesAt());
+            long termDays = Math.max(0, ChronoUnit.DAYS.between(c.accruesFrom(), c.maturesAt()));
             long interest = (c.balance() * c.rateBps() * termDays) / (10_000L * 365);
 
             if (interest > 0) {
