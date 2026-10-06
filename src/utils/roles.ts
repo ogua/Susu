@@ -13,3 +13,8 @@ export function isManagerRole(role: Role | null | undefined): boolean {
 export function canCloseDay(role: Role | null | undefined): boolean {
   return role === 'field_agent';
 }
+
+/** Only field agents are tracked on the duty map; managers and admins are not. */
+export function isTrackedRole(role: Role | null | undefined): boolean {
+  return role === 'field_agent';
+}

@@ -35,7 +35,7 @@ import { useDutyStore } from '@/stores/dutyStore';
 import { useOutboxStatus } from '@/stores/outboxStatusStore';
 import { drainOutbox } from '@/sync/engine';
 import { firstName, formatRelative, greeting, roleLabel } from '@/utils/format';
-import { canCloseDay, isManagerRole } from '@/utils/roles';
+import { canCloseDay, isManagerRole, isTrackedRole } from '@/utils/roles';
 import { formatMoney } from '@/utils/money';
 
 const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; managersOnly?: boolean; agentsOnly?: boolean }[] = [
@@ -96,8 +96,11 @@ export default function AgentDashboard() {
     // duty" default after a fresh app launch, where this JS state resets but
     // the OS-level task may not be running and the server may still have the
     // agent off duty (which greys them out on the managers' map). Best-effort
-    // — never blocks the dashboard on this.
-    if (onDuty) {
+    // — never blocks the dashboard on this. Only field agents are tracked, so
+    // anyone else has any tracking left from an earlier session stopped.
+    if (!isTrackedRole(user?.role)) {
+      void stopBackgroundLocationTracking();
+    } else if (onDuty) {
       void startBackgroundLocationTracking().then(reportTrackingResult);
       void setDuty(true).catch(() => undefined);
     }
@@ -252,31 +255,35 @@ export default function AgentDashboard() {
           accessibilityHint="Find a customer account to collect from"
         />
 
-        <Card style={styles.dutyCard}>
-          <View style={[styles.dutyIcon, { backgroundColor: onDuty ? theme.successSoft : theme.surfaceMuted }]}>
-            <Icon name="location" size={18} color={onDuty ? theme.success : theme.textMuted} />
-          </View>
-          <View style={styles.flex}>
-            <ThemedText type="label">{onDuty ? 'On duty' : 'Off duty'}</ThemedText>
-            <ThemedText type="caption" themeColor="textMuted">
-              {onDuty ? 'Your route is shared with your branch.' : 'Location sharing is paused.'}
-            </ThemedText>
-          </View>
-          {togglingDuty ? (
-            <ActivityIndicator color={theme.primary} />
-          ) : (
-            <Switch
-              value={onDuty}
-              onValueChange={handleToggleDuty}
-              accessibilityLabel="On duty"
-              trackColor={{ true: theme.primary, false: theme.borderStrong }}
-            />
-          )}
-        </Card>
-        {dutyError ? (
-          <ThemedText type="small" style={{ color: theme.danger }}>
-            {dutyError}
-          </ThemedText>
+        {isTrackedRole(user?.role) ? (
+          <>
+            <Card style={styles.dutyCard}>
+              <View style={[styles.dutyIcon, { backgroundColor: onDuty ? theme.successSoft : theme.surfaceMuted }]}>
+                <Icon name="location" size={18} color={onDuty ? theme.success : theme.textMuted} />
+              </View>
+              <View style={styles.flex}>
+                <ThemedText type="label">{onDuty ? 'On duty' : 'Off duty'}</ThemedText>
+                <ThemedText type="caption" themeColor="textMuted">
+                  {onDuty ? 'Your route is shared with your branch.' : 'Location sharing is paused.'}
+                </ThemedText>
+              </View>
+              {togglingDuty ? (
+                <ActivityIndicator color={theme.primary} />
+              ) : (
+                <Switch
+                  value={onDuty}
+                  onValueChange={handleToggleDuty}
+                  accessibilityLabel="On duty"
+                  trackColor={{ true: theme.primary, false: theme.borderStrong }}
+                />
+              )}
+            </Card>
+            {dutyError ? (
+              <ThemedText type="small" style={{ color: theme.danger }}>
+                {dutyError}
+              </ThemedText>
+            ) : null}
+          </>
         ) : null}
 
         <SectionHeader title="Quick actions" />
