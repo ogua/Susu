@@ -9,6 +9,7 @@ import {
 } from '@/sync/outbox';
 import { useOutboxStatus } from '@/stores/outboxStatusStore';
 import { useSyncToastStore } from '@/stores/syncToastStore';
+import { errorLog } from '@/utils/debugLog';
 
 /**
  * Outbox drain engine. Pushes queued ops to POST /api/v1/sync/batch and maps
@@ -92,6 +93,7 @@ export async function drainOutbox(): Promise<SyncSummary> {
         await markSynced(result.op_id, result.result);
       } else {
         summary.rejected += 1;
+        errorLog('Sync', `Op ${result.op_id} rejected`, result);
         await markRejected(result.op_id, result.result?.errors?.join(' ') ?? 'Rejected by server.');
       }
     }
@@ -110,7 +112,11 @@ export async function drainOutbox(): Promise<SyncSummary> {
     await status.refresh();
   }
 
-  notify(summary);
+  // Location pings drain every minute while on duty; a toast each time would
+  // bury the ones agents need to see about their collections.
+  if (!items.every((item) => item.op_type === 'locations.record')) {
+    notify(summary);
+  }
 
   return summary;
 }
