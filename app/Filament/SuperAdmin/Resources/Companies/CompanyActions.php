@@ -4,6 +4,7 @@ namespace App\Filament\SuperAdmin\Resources\Companies;
 
 use App\Actions\Company\CreateBranchAction;
 use App\Actions\Company\CreateCompanyAdminAction;
+use App\Actions\Company\ProvisionStarterProductsAction;
 use App\Actions\Company\SetCompanyActiveStatusAction;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\BranchForm;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyAdminForm;
@@ -46,6 +47,23 @@ class CompanyActions
                 $branch = app(CreateBranchAction::class)->execute($record, $data);
 
                 Notification::make()->title("{$branch->name} added")->success()->send();
+            });
+    }
+
+    public static function addStarterProducts(): Action
+    {
+        return Action::make('addStarterProducts')
+            ->label('Add starter products')
+            ->icon(Heroicon::OutlinedSquaresPlus)
+            ->requiresConfirmation()
+            ->modalDescription('Adds the standard savings and loan products this company does not already have. Existing products are left untouched.')
+            ->action(function (Company $record): void {
+                $added = app(ProvisionStarterProductsAction::class)->execute($record);
+
+                Notification::make()
+                    ->title("Added {$added['savings']} savings and {$added['loans']} loan product(s)")
+                    ->success()
+                    ->send();
             });
     }
 

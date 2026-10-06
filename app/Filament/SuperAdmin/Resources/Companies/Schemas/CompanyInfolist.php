@@ -20,8 +20,8 @@ class CompanyInfolist
         return $schema
             ->components([
                 Section::make('Onboarding')
-                    ->description('A company can only be used once it has a branch and an active company admin.')
-                    ->columns(3)
+                    ->description('A company can only be used once it has a branch and an active company admin; its staff need products to open accounts and issue loans.')
+                    ->columns(4)
                     ->schema([
                         TextEntry::make('is_active')
                             ->label('Status')
@@ -38,6 +38,13 @@ class CompanyInfolist
                             ->badge()
                             ->color(fn (int $state): string => $state > 0 ? 'success' : 'danger')
                             ->formatStateUsing(fn (int $state): string => $state > 0 ? (string) $state : 'None — add a company admin'),
+                        TextEntry::make('products')
+                            ->label('Active products')
+                            ->badge()
+                            ->state(fn (Company $record): string => $record->savings_products_count + $record->loan_products_count > 0
+                                ? "{$record->savings_products_count} savings · {$record->loan_products_count} loan"
+                                : 'None — add starter products')
+                            ->color(fn (Company $record): string => $record->savings_products_count > 0 && $record->loan_products_count > 0 ? 'success' : 'warning'),
                     ]),
 
                 Section::make('Portfolio')

@@ -7,6 +7,7 @@ use App\Filament\SuperAdmin\Resources\Companies\CompanyResource;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\BranchForm;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyAdminForm;
 use App\Filament\SuperAdmin\Resources\Companies\Schemas\CompanyForm;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Support\Icons\Heroicon;
@@ -56,7 +57,14 @@ class CreateCompany extends CreateRecord
                 ->description('The company super admin who signs in and adds the rest of the staff.')
                 ->statePath('admin')
                 ->columns(2)
-                ->schema(CompanyAdminForm::fields()),
+                ->schema([
+                    ...CompanyAdminForm::fields(),
+                    Toggle::make('with_starter_products')
+                        ->label('Add starter savings and loan products')
+                        ->helperText('Five savings and five loan products the company can edit or switch off later.')
+                        ->default(true)
+                        ->columnSpanFull(),
+                ]),
         ];
     }
 
@@ -68,7 +76,8 @@ class CreateCompany extends CreateRecord
         return app(OnboardCompanyAction::class)->execute(
             Arr::except($data, ['branch', 'admin']),
             $data['branch'],
-            $data['admin'],
+            Arr::except($data['admin'], ['with_starter_products']),
+            (bool) ($data['admin']['with_starter_products'] ?? true),
         );
     }
 

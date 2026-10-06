@@ -61,6 +61,16 @@ class Company extends Model
             ->whereHas('roles', fn (Builder $roles) => $roles->where('name', 'company_admin'));
     }
 
+    public function savingsProducts(): HasMany
+    {
+        return $this->hasMany(SavingsProduct::class);
+    }
+
+    public function loanProducts(): HasMany
+    {
+        return $this->hasMany(LoanProduct::class);
+    }
+
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);

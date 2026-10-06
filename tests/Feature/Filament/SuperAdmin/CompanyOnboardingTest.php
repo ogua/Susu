@@ -2,6 +2,7 @@
 
 use App\Actions\Company\CreateBranchAction;
 use App\Actions\Company\CreateCompanyAdminAction;
+use App\Actions\Company\ProvisionStarterProductsAction;
 use App\Filament\SuperAdmin\Resources\Companies\Pages\CreateCompany;
 use App\Filament\SuperAdmin\Resources\Companies\Pages\EditCompany;
 use App\Filament\SuperAdmin\Resources\Companies\Pages\ListCompanies;
@@ -11,6 +12,7 @@ use App\Filament\SuperAdmin\Resources\Companies\RelationManagers\StaffRelationMa
 use App\Filament\SuperAdmin\Resources\Users\Pages\CreateUser;
 use App\Models\Branch;
 use App\Models\Company;
+use App\Models\SavingsProduct;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -237,4 +239,50 @@ it('creates a branch through the action without an existing admin', function ():
 
     expect($branch->company_id)->toBe($company->id)
         ->and($branch->users()->count())->toBe(0);
+});
+
+it('gives an onboarded company the starter product catalogue by default', function (): void {
+    livewire(CreateCompany::class)
+        ->fillForm(onboardingFormData())
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $company = Company::where('slug', 'tamale-savings')->firstOrFail();
+
+    expect($company->savingsProducts()->count())->toBe(count(ProvisionStarterProductsAction::SAVINGS_PRODUCTS))
+        ->and($company->loanProducts()->count())->toBe(count(ProvisionStarterProductsAction::LOAN_PRODUCTS))
+        ->and($company->savingsProducts()->where('code', 'FD-091')->value('term_days'))->toBe(91);
+});
+
+it('skips the starter products when the operator opts out', function (): void {
+    livewire(CreateCompany::class)
+        ->fillForm(onboardingFormData(['admin' => ['with_starter_products' => false]]))
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $company = Company::where('slug', 'tamale-savings')->firstOrFail();
+
+    expect($company->savingsProducts()->count())->toBe(0)
+        ->and($company->loanProducts()->count())->toBe(0);
+});
+
+it('only adds missing starter products and never overwrites the company\'s edits', function (): void {
+    $company = Company::factory()->create();
+    SavingsProduct::factory()->create(['company_id' => $company->id, 'code' => 'DS-005', 'name' => 'Our own daily susu']);
+
+    $added = app(ProvisionStarterProductsAction::class)->execute($company);
+
+    expect($added['savings'])->toBe(count(ProvisionStarterProductsAction::SAVINGS_PRODUCTS) - 1)
+        ->and($company->savingsProducts()->where('code', 'DS-005')->value('name'))->toBe('Our own daily susu')
+        ->and(app(ProvisionStarterProductsAction::class)->execute($company))->toBe(['savings' => 0, 'loans' => 0]);
+});
+
+it('adds starter products from the company page', function (): void {
+    $company = Company::factory()->create();
+
+    livewire(ViewCompany::class, ['record' => $company->getKey()])
+        ->callAction('addStarterProducts')
+        ->assertNotified();
+
+    expect($company->loanProducts()->count())->toBe(count(ProvisionStarterProductsAction::LOAN_PRODUCTS));
 });

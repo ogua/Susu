@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Collection;
  * The period defaults to month-to-date.
  *
  * Each Company comes back with: branches_count, staff_count,
- * company_admins_count, customers_count, new_customers_count,
+ * company_admins_count, savings_products_count, loan_products_count, customers_count, new_customers_count,
  * active_savings_accounts_count, savings_balance, loans_outstanding,
  * collections_count, collections_amount, last_activity_at.
  */
@@ -52,6 +52,8 @@ class BuildCompanyUsageReportAction
                     ->whereDoesntHave('roles', fn (Builder $roles) => $roles->where('name', 'customer')),
                 'activeCompanyAdmins as company_admins_count',
                 'customers',
+                'savingsProducts as savings_products_count' => fn (Builder $query) => $query->where('is_active', true),
+                'loanProducts as loan_products_count' => fn (Builder $query) => $query->where('is_active', true),
                 'customers as new_customers_count' => fn (Builder $query) => $query
                     ->whereBetween('created_at', [$from, $to]),
                 'savingsAccounts as active_savings_accounts_count' => fn (Builder $query) => $query
