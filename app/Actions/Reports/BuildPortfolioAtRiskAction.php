@@ -6,6 +6,7 @@ use App\Enums\GroupLoanStatus;
 use App\Enums\InstallmentStatus;
 use App\Enums\LoanStatus;
 use App\Models\Branch;
+use App\Models\Company;
 use App\Models\GroupLoan;
 use App\Models\Loan;
 
@@ -22,12 +23,30 @@ class BuildPortfolioAtRiskAction
      */
     public function execute(Branch $branch): array
     {
+        return $this->compute('branch_id', $branch->id);
+    }
+
+    /**
+     * The same figure across every branch of a company (platform reports).
+     *
+     * @return array{outstanding: int, at_risk: int, par_percent: float}
+     */
+    public function forCompany(Company $company): array
+    {
+        return $this->compute('company_id', $company->id);
+    }
+
+    /**
+     * @return array{outstanding: int, at_risk: int, par_percent: float}
+     */
+    private function compute(string $scopeColumn, string $scopeId): array
+    {
         $loans = Loan::query()
-            ->where('branch_id', $branch->id)
+            ->where($scopeColumn, $scopeId)
             ->where('status', LoanStatus::Disbursed);
 
         $groupLoans = GroupLoan::query()
-            ->where('branch_id', $branch->id)
+            ->where($scopeColumn, $scopeId)
             ->where('status', GroupLoanStatus::Active);
 
         $overdue = fn ($query) => $query->where('status', InstallmentStatus::Overdue);
