@@ -29,6 +29,12 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:10,1')
     ->name('auth.login');
+Route::post('/auth/login/two-factor', [AuthController::class, 'twoFactor'])
+    ->middleware('throttle:10,1')
+    ->name('auth.login.two-factor');
+Route::post('/auth/login/two-factor/resend', [AuthController::class, 'resendTwoFactor'])
+    ->middleware('throttle:5,1')
+    ->name('auth.login.two-factor.resend');
 
 Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RecordClientDevice::class, RequireApiPasswordChange::class])->group(function (): void {
     Route::put('/auth/password', [PasswordController::class, 'update'])
