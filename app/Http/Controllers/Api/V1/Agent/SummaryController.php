@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\SubmitDailySummaryRequest;
 use App\Http\Resources\V1\AgentDailySummaryResource;
 use App\Models\AgentDailySummary;
 use App\Services\Ledger\ChartOfAccounts;
+use App\Support\StaffBranch;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,9 +21,14 @@ class SummaryController extends Controller
             ['agent_id' => $request->user()->id, 'summary_date' => now()->toDateString()],
             [
                 'company_id' => $request->user()->company_id,
-                'branch_id' => $request->user()->branch_id,
+                'branch_id' => StaffBranch::resolve($request->user())->id,
             ],
         );
+
+        // A freshly inserted row lacks the table's column defaults (zero totals).
+        if ($summary->wasRecentlyCreated) {
+            $summary->refresh();
+        }
 
         return response()->json([
             'summary' => AgentDailySummaryResource::make($summary),

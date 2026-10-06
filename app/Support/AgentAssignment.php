@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\GroupLoan;
 use App\Models\Loan;
 use App\Models\LoanGroup;
+use App\Models\SavingsAccount;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
@@ -52,6 +53,22 @@ final class AgentAssignment
             ->orWhereHas('loans', fn (Builder $loans) => $loans->where('agent_id', $agent->id))
             ->orWhereHas('groupLoans', fn (Builder $loans) => $loans->where('agent_id', $agent->id))
             ->orWhereHas('savingsAccounts', fn (Builder $accounts) => $accounts->where('agent_id', $agent->id)));
+    }
+
+    /**
+     * Narrow a SavingsAccount query to the accounts $user works with: a field
+     * agent's own accounts, or every account in $branchIds for managers and
+     * admins (all their accessible branches when null).
+     *
+     * @param  Builder<SavingsAccount>  $accounts
+     * @param  array<int, string>|null  $branchIds
+     * @return Builder<SavingsAccount>
+     */
+    public static function scopeAccounts(Builder $accounts, User $user, ?array $branchIds = null): Builder
+    {
+        return self::restricts($user)
+            ? $accounts->where($accounts->qualifyColumn('agent_id'), $user->id)
+            : $accounts->whereIn($accounts->qualifyColumn('branch_id'), $branchIds ?? $user->accessibleBranchIds());
     }
 
     /**

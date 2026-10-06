@@ -48,6 +48,8 @@ class StoreCustomerRequest extends FormRequest
             'next_of_kin_relationship' => ['nullable', 'string', 'max:40'],
             'address' => ['nullable', 'string', 'max:500'],
             'client_reference' => ['nullable', 'uuid'],
+            // Branch to register into; defaults to the caller's working branch (StaffBranch).
+            'branch_id' => ['nullable', 'uuid'],
 
             // eBanQR-parity KYC fields — all additive/nullable so existing
             // mobile/desktop clients that don't send them are unaffected.

@@ -35,7 +35,7 @@ class GroupController extends Controller
         $query = Group::with('members.customer')->where('company_id', $user->company_id);
         $query = $user->hasRole('customer')
             ? $query->whereHas('members', fn ($q) => $q->where('customer_id', $this->customerFor($user)->id))
-            : $query->where('branch_id', $user->branch_id);
+            : $this->scopeToBranches($query, $user);
 
         return GroupResource::collection($query->latest()->paginate($request->integer('per_page', 30)));
     }

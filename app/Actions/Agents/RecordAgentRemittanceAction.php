@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Ledger\ChartOfAccounts;
 use App\Services\Ledger\EntryData;
 use App\Services\Ledger\LedgerService;
+use App\Support\StaffBranch;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -37,10 +38,11 @@ class RecordAgentRemittanceAction
             }
         }
 
-        $branchCash = $this->chart->branchCash($agent->branch);
+        $branch = $agent->branch ?? StaffBranch::resolve($agent);
+        $branchCash = $this->chart->branchCash($branch);
         $agentCashId = $this->chart->agentCash($agent)->id;
 
-        return DB::transaction(function () use ($agent, $amount, $receivedBy, $clientReference, $origin, $branchCash, $agentCashId): JournalEntry {
+        return DB::transaction(function () use ($agent, $amount, $receivedBy, $clientReference, $origin, $branch, $branchCash, $agentCashId): JournalEntry {
             // Lock the agent's cash account so concurrent remittances can't
             // both pass the balance check and drive it negative.
             $agentCash = LedgerAccount::whereKey($agentCashId)->lockForUpdate()->firstOrFail();
@@ -58,7 +60,7 @@ class RecordAgentRemittanceAction
                     ['account' => $branchCash, 'debit' => $amount],
                     ['account' => $agentCash, 'credit' => $amount],
                 ],
-                branch: $agent->branch,
+                branch: $branch,
                 origin: $origin,
                 recordedBy: $receivedBy ?? $agent,
                 clientReference: $clientReference,

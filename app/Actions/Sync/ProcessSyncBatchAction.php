@@ -58,6 +58,7 @@ use App\Models\SavingsAccount;
 use App\Models\SavingsProduct;
 use App\Models\SyncOp;
 use App\Models\User;
+use App\Support\StaffBranch;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -297,8 +298,8 @@ class ProcessSyncBatchAction
     {
         $customer = $this->createCustomer->execute(
             $actor,
-            $actor->branch,
-            collect($payload)->except('client_reference')->all(),
+            StaffBranch::resolve($actor, $payload['branch_id'] ?? null),
+            collect($payload)->except(['client_reference', 'branch_id'])->all(),
             $payload['client_reference'] ?? $opId,
         );
 

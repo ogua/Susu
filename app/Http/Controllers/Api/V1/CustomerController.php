@@ -9,6 +9,7 @@ use App\Enums\AccountStatus;
 use App\Enums\CustomerSegment;
 use App\Enums\GroupLoanStatus;
 use App\Enums\LoanStatus;
+use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AssignCustomerAgentRequest;
 use App\Http\Requests\Api\V1\TransferCustomersRequest;
@@ -26,16 +27,19 @@ use Illuminate\Validation\Rule;
 /**
  * Back-office customer list + branch transfer / agent assignment
  * (branch_manager, company_admin). Company admins see every branch; managers
- * their own. Field-agent customer endpoints live under /agent.
+ * the branches they belong to (?branch_id narrows to one). Field-agent customer endpoints live under /agent.
  */
 class CustomerController extends Controller
 {
+    use ScopesToAccessibleBranches;
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $request->validate([
             'segment' => ['nullable', Rule::enum(CustomerSegment::class)],
             'search' => ['nullable', 'string', 'max:100'],
             'agent_id' => ['nullable', 'uuid'],
+            'branch_id' => ['nullable', 'uuid'],
         ]);
 
         $segment = CustomerSegment::tryFrom((string) $request->query('segment')) ?? CustomerSegment::All;
@@ -46,6 +50,7 @@ class CustomerController extends Controller
             ->withSum(['loans as loan_outstanding' => fn (Builder $loans) => $loans->where('status', LoanStatus::Disbursed)], 'outstanding_balance')
             ->withSum(['groupLoans as group_loan_outstanding' => fn (Builder $loans) => $loans->where('status', GroupLoanStatus::Active)], 'outstanding_balance')
             ->when($request->query('agent_id'), fn (Builder $query, string $agentId) => $query->where('assigned_agent_id', $agentId))
+            ->when($request->query('branch_id'), fn (Builder $query, string $branchId) => $query->where('branch_id', $branchId))
             ->when($request->query('search'), fn (Builder $query, string $term) => $query->where(fn (Builder $match) => $match
                 ->where('first_name', 'like', "%{$term}%")
                 ->orWhere('last_name', 'like', "%{$term}%")
@@ -103,9 +108,7 @@ class CustomerController extends Controller
     {
         $user = $request->user();
 
-        return Customer::query()
-            ->where('company_id', $user->company_id)
-            ->when(! $user->hasRole('company_admin'), fn (Builder $query) => $query->where('branch_id', $user->branch_id));
+        return $this->scopeToBranches(Customer::query()->where('company_id', $user->company_id), $user);
     }
 
     private function branch(Request $request): Branch

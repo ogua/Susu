@@ -31,8 +31,7 @@ class PaymentController extends Controller
         InitiateMobileMoneyChargeRequest $request,
         InitiateMobileMoneyChargeAction $action,
     ): JsonResponse {
-        $account = SavingsAccount::where('company_id', $request->user()->company_id)
-            ->findOrFail($request->validated('savings_account_id'));
+        $account = $this->findAccount($request);
 
         $intent = $action->execute(
             initiatedBy: $request->user(),
@@ -48,8 +47,7 @@ class PaymentController extends Controller
 
     public function initializeCheckout(InitializeCheckoutRequest $request, InitializeCheckoutAction $action): JsonResponse
     {
-        $account = SavingsAccount::where('company_id', $request->user()->company_id)
-            ->findOrFail($request->validated('savings_account_id'));
+        $account = $this->findAccount($request);
 
         $result = $action->execute(
             initiatedBy: $request->user(),
@@ -105,6 +103,13 @@ class PaymentController extends Controller
                 'total' => $intents->total(),
             ],
         ]);
+    }
+
+    /** Staff stay within their branches; customers reach their own accounts (enforced again in the action). */
+    private function findAccount(Request $request): SavingsAccount
+    {
+        return $this->scopeToBranches(SavingsAccount::where('company_id', $request->user()->company_id), $request->user())
+            ->findOrFail($request->validated('savings_account_id'));
     }
 
     private function findScoped(Request $request, string $id): PaymentIntent

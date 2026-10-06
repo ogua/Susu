@@ -6,6 +6,7 @@ use App\Enums\AgentSummaryStatus;
 use App\Models\AgentDailySummary;
 use App\Models\User;
 use App\Services\Ledger\ChartOfAccounts;
+use App\Support\StaffBranch;
 use Carbon\CarbonInterface;
 use Illuminate\Validation\ValidationException;
 
@@ -36,7 +37,7 @@ class SubmitAgentDailySummaryAction
 
         $summary = AgentDailySummary::firstOrCreate(
             ['agent_id' => $agent->id, 'summary_date' => $date->toDateString()],
-            ['company_id' => $agent->company_id, 'branch_id' => $agent->branch_id],
+            ['company_id' => $agent->company_id, 'branch_id' => StaffBranch::resolve($agent)->id],
         );
 
         if (in_array($summary->status, [AgentSummaryStatus::Reconciled], true)) {

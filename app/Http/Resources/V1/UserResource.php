@@ -25,6 +25,8 @@ class UserResource extends JsonResource
             'photo_url' => $this->photo_url,
             'is_active' => $this->is_active,
             'role' => $this->getRoleNames()->first(),
+            'roles' => $this->getRoleNames()->values()->all(),
+            'branch_id' => $this->branch_id,
             'company' => $this->whenLoaded('company', fn (): array => [
                 'id' => $this->company->id,
                 'name' => $this->company->name,

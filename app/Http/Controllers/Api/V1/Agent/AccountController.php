@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\V1\Concerns\ScopesToAccessibleBranches;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\SavingsAccountResource;
 use App\Models\SavingsAccount;
+use App\Support\AgentAssignment;
+use App\Support\StaffBranch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -17,11 +19,18 @@ class AccountController extends Controller
 {
     use ScopesToAccessibleBranches;
 
-    /** Accounts assigned to the authenticated agent, searchable by name/number/phone. */
+    /**
+     * Accounts the caller collects on, searchable by name/number/phone: a
+     * field agent's own accounts, or every account in a manager's/admin's
+     * branches (one branch with ?branch_id).
+     */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $accounts = SavingsAccount::query()
-            ->where('agent_id', $request->user()->id)
+        $request->validate(['branch_id' => ['nullable', 'uuid']]);
+        $user = $request->user();
+        $branchIds = $request->filled('branch_id') ? [StaffBranch::resolve($user, $request->query('branch_id'))->id] : null;
+
+        $accounts = AgentAssignment::scopeAccounts(SavingsAccount::where('company_id', $user->company_id), $user, $branchIds)
             ->with(['customer', 'product'])
             ->when($request->filled('search'), function ($query) use ($request): void {
                 $term = '%'.$request->string('search')->value().'%';

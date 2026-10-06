@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreCustomerRequest;
 use App\Http\Resources\V1\CustomerResource;
 use App\Models\Customer;
+use App\Support\StaffBranch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -19,8 +20,8 @@ class CustomerController extends Controller
     {
         $customer = $action->execute(
             $request->user(),
-            $request->user()->branch,
-            $request->safe()->except('client_reference'),
+            StaffBranch::resolve($request->user(), $request->validated('branch_id')),
+            $request->safe()->except(['client_reference', 'branch_id']),
             $request->validated('client_reference'),
         );
 
