@@ -36,6 +36,10 @@ export interface User {
   photo_url?: string | null;
   is_active: boolean;
   role: Role | null;
+  /** Every role the user holds; absent on users cached before the API added it. */
+  roles?: Role[];
+  /** Home branch; null for company admins, who work across the company. */
+  branch_id?: string | null;
   company?: CompanySummary;
   branches?: BranchSummary[];
 }

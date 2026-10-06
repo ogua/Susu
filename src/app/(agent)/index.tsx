@@ -35,13 +35,14 @@ import { useDutyStore } from '@/stores/dutyStore';
 import { useOutboxStatus } from '@/stores/outboxStatusStore';
 import { drainOutbox } from '@/sync/engine';
 import { firstName, formatRelative, greeting, roleLabel } from '@/utils/format';
+import { canCloseDay, isManagerRole } from '@/utils/roles';
 import { formatMoney } from '@/utils/money';
 
-const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; managersOnly?: boolean }[] = [
+const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; managersOnly?: boolean; agentsOnly?: boolean }[] = [
   { label: 'Track agents', hint: 'Live map & routes', icon: 'map', href: '/(agent)/tracking' as Href, managersOnly: true },
   { label: 'Enter transaction', hint: 'Collection sheet', icon: 'receipt', href: '/(agent)/collection-sheet' as Href },
   { label: 'Register customer', hint: 'Works offline', icon: 'personAdd', href: '/(agent)/register-customer' },
-  { label: 'Close my day', hint: 'Declare cash', icon: 'dayClose', href: '/(agent)/day-close' },
+  { label: 'Close my day', hint: 'Declare cash', icon: 'dayClose', href: '/(agent)/day-close', agentsOnly: true },
   { label: 'Loans', hint: 'Repayments', icon: 'loan', href: '/(agent)/loans' },
   { label: 'Susu groups', hint: 'Contributions', icon: 'group', href: '/(agent)/groups' },
   { label: 'Customer groups', hint: 'Totals & history', icon: 'group', href: '/(agent)/loan-groups' as Href },
@@ -174,7 +175,7 @@ export default function AgentDashboard() {
   const trendTotal = trend.reduce((sum, point) => sum + point.total, 0);
   const hasTrend = trend.some((point) => point.total > 0);
   const branch = user?.branches?.[0]?.name;
-  const isManager = user?.role === 'branch_manager' || user?.role === 'company_admin';
+  const isManager = isManagerRole(user?.role);
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.background }]}>
@@ -280,7 +281,9 @@ export default function AgentDashboard() {
 
         <SectionHeader title="Quick actions" />
         <View style={styles.grid}>
-          {ACTIONS.filter((action) => !action.managersOnly || isManager).map((action, index) => (
+          {ACTIONS.filter(
+            (action) => (!action.managersOnly || isManager) && (!action.agentsOnly || canCloseDay(user?.role)),
+          ).map((action, index) => (
             <Animated.View
               key={action.label}
               entering={FadeInDown.duration(220).delay(40 * index)}

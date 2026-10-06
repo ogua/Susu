@@ -8,15 +8,22 @@ import { ThemedText } from '@/components/themed-text';
 import { Avatar, Badge, EmptyState, ErrorState, Input, ListRow, OfflineBanner, SkeletonList } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuthStore } from '@/stores/authStore';
 import type { SavingsAccount } from '@/types/api';
 import { customerDisplayName } from '@/utils/customer';
 import { displayFormatted } from '@/utils/money';
+import { isManagerRole } from '@/utils/roles';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Collector's customer finder: search by name, account number or phone, tap to collect. */
+/**
+ * Collector's customer finder: search by name, account number or phone, tap
+ * to collect. Field agents get their own accounts; managers and admins every
+ * account in their branch (the API decides by role).
+ */
 export default function AgentAccountsScreen() {
   const theme = useTheme();
+  const seesWholeBranch = isManagerRole(useAuthStore((state) => state.user?.role));
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
 
@@ -100,7 +107,7 @@ export default function AgentAccountsScreen() {
         <View style={styles.metaRow}>
           <ThemedText type="caption" themeColor="textMuted">
             {accounts.data
-              ? `${accounts.data.meta.total} account${accounts.data.meta.total === 1 ? '' : 's'}${debounced ? ` matching “${debounced}”` : ' assigned to you'}`
+              ? `${accounts.data.meta.total} account${accounts.data.meta.total === 1 ? '' : 's'}${debounced ? ` matching “${debounced}”` : seesWholeBranch ? ' in your branch' : ' assigned to you'}`
               : ' '}
           </ThemedText>
           {searching ? <ActivityIndicator size="small" color={theme.primary} /> : null}
@@ -140,7 +147,7 @@ export default function AgentAccountsScreen() {
             ) : (
               <EmptyState
                 icon="wallet"
-                title="No accounts assigned yet"
+                title={seesWholeBranch ? 'No accounts in this branch yet' : 'No accounts assigned yet'}
                 hint="Register a customer and open a savings account to start collecting."
                 actionLabel="Register a customer"
                 onAction={() => router.push('/(agent)/register-customer')}
