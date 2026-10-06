@@ -17,4 +17,10 @@ return [
     */
     'data_retention_days' => (int) env('PLATFORM_DATA_RETENTION_DAYS', 2190),
 
+    /*
+    | Days a company data export (zip of every record) is kept before
+    | exports:prune deletes it.
+    */
+    'export_retention_days' => (int) env('PLATFORM_EXPORT_RETENTION_DAYS', 30),
+
 ];

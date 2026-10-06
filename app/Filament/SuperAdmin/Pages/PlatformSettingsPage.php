@@ -74,7 +74,11 @@ class PlatformSettingsPage extends Page
                     Section::make('Data retention')
                         ->description('After a company is archived, its records are kept this long before personal data may be erased. Financial records are never erased.')
                         ->schema([
-                            TextInput::make('data_retention_days')->label('Retention (days)')->integer()->minValue(0)->required(),
+                            TextInput::make('data_retention_days')->label('Records kept after archiving (days)')->integer()->minValue(0)->required(),
+                            TextInput::make('export_retention_days')
+                                ->label('Data exports kept (days)')
+                                ->helperText('Exports hold every customer\'s data and are deleted after this many days.')
+                                ->integer()->minValue(1)->required(),
                         ]),
                     Section::make('Support contact')
                         ->description('Shown to company admins on their Subscription page.')

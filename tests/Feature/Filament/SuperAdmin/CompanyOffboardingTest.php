@@ -138,3 +138,19 @@ it('only erases personal data after the retention period', function (): void {
 
     expect(fn () => app(ArchiveCompanyAction::class)->restore($this->company))->toThrow(ValidationException::class);
 });
+
+it('deletes data exports after the export retention period', function (): void {
+    config(['platform.export_retention_days' => 30]);
+    Storage::disk('local')->put('exports/old.zip', 'zip');
+    Storage::disk('local')->put('exports/new.zip', 'zip');
+    $old = CompanyExport::create(['company_id' => $this->company->id, 'status' => CompanyExport::STATUS_READY, 'path' => 'exports/old.zip']);
+    $old->forceFill(['created_at' => now()->subDays(31)])->save();
+    $new = CompanyExport::create(['company_id' => $this->company->id, 'status' => CompanyExport::STATUS_READY, 'path' => 'exports/new.zip']);
+
+    $this->artisan('exports:prune')->assertSuccessful();
+
+    expect(CompanyExport::find($old->id))->toBeNull()
+        ->and(CompanyExport::find($new->id))->not->toBeNull();
+    Storage::disk('local')->assertMissing('exports/old.zip');
+    Storage::disk('local')->assertExists('exports/new.zip');
+});

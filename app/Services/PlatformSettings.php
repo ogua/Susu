@@ -26,6 +26,7 @@ class PlatformSettings
         'support_email' => ['config' => 'platform.support_email', 'type' => 'string'],
         'support_phone' => ['config' => 'platform.support_phone', 'type' => 'string'],
         'data_retention_days' => ['config' => 'platform.data_retention_days', 'type' => 'int'],
+        'export_retention_days' => ['config' => 'platform.export_retention_days', 'type' => 'int'],
     ];
 
     /**

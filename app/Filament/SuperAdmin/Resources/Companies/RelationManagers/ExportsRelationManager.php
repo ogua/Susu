@@ -10,7 +10,10 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Number;
 
-/** The company's data exports; started from the page's "Export all data" action. */
+/**
+ * The company's data exports; started from the page's "Export all data"
+ * action and deleted by exports:prune after platform.export_retention_days.
+ */
 class ExportsRelationManager extends RelationManager
 {
     protected static string $relationship = 'exports';
@@ -47,6 +50,7 @@ class ExportsRelationManager extends RelationManager
                     ->openUrlInNewTab(),
             ])
             ->defaultSort('created_at', 'desc')
+            ->description(fn (): string => 'Exports are deleted automatically after '.config('platform.export_retention_days').' days.')
             ->poll('10s');
     }
 }
