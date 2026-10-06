@@ -30,6 +30,7 @@ export default function AgentLayout() {
     >
       <Stack.Screen name="index" options={{ title: 'Home', headerShown: false }} />
       <Stack.Screen name="accounts" options={{ title: 'Collect' }} />
+      <Stack.Screen name="subscription" options={{ title: 'Subscription' }} />
       <Stack.Screen name="collect/[accountId]" options={{ title: 'Record Collection', gestureEnabled: true }} />
       <Stack.Screen name="register-customer" options={{ title: 'Register Customer' }} />
       <Stack.Screen name="open-account" options={{ title: 'Open Savings Account' }} />

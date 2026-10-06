@@ -39,7 +39,7 @@ import { firstName, formatRelative, greeting, roleLabel } from '@/utils/format';
 import { canCloseDay, isManagerRole, isTrackedRole } from '@/utils/roles';
 import { formatMoney } from '@/utils/money';
 
-const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; managersOnly?: boolean; agentsOnly?: boolean }[] = [
+const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; managersOnly?: boolean; agentsOnly?: boolean; adminsOnly?: boolean }[] = [
   { label: 'Track agents', hint: 'Live map & routes', icon: 'map', href: '/(agent)/tracking' as Href, managersOnly: true },
   { label: 'Enter transaction', hint: 'Collection sheet', icon: 'receipt', href: '/(agent)/collection-sheet' as Href },
   { label: 'Register customer', hint: 'Works offline', icon: 'personAdd', href: '/(agent)/register-customer' },
@@ -49,6 +49,7 @@ const ACTIONS: { label: string; hint: string; icon: IconName; href: Href; manage
   { label: 'Customer groups', hint: 'Totals & history', icon: 'group', href: '/(agent)/loan-groups' as Href },
   { label: 'Group loans', hint: 'Deposits & repay', icon: 'savings', href: '/(agent)/group-loans' },
   { label: 'Sync status', hint: 'Saved records', icon: 'sync', href: '/(agent)/sync' },
+  { label: 'Subscription', hint: 'Plan & invoices', icon: 'wallet', href: '/(agent)/subscription' as Href, adminsOnly: true },
 ];
 
 export default function AgentDashboard() {
@@ -291,7 +292,10 @@ export default function AgentDashboard() {
         <SectionHeader title="Quick actions" />
         <View style={styles.grid}>
           {ACTIONS.filter(
-            (action) => (!action.managersOnly || isManager) && (!action.agentsOnly || canCloseDay(user?.role)),
+            (action) =>
+              (!action.managersOnly || isManager) &&
+              (!action.agentsOnly || canCloseDay(user?.role)) &&
+              (!action.adminsOnly || user?.role === 'company_admin'),
           ).map((action, index) => (
             <Animated.View
               key={action.label}
