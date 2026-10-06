@@ -36,6 +36,11 @@ class SyncOp extends Model
         ];
     }
 
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
     public function actor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'actor_id');
