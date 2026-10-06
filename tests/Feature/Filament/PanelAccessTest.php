@@ -33,3 +33,26 @@ it('denies deactivated staff access to the admin panel', function (): void {
 
     expect($agent->canAccessPanel(Filament::getPanel('admin')))->toBeFalse();
 });
+
+it('refuses panel requests from users the panel does not allow (enforced over HTTP, not just canAccessPanel)', function (): void {
+    $branch = Branch::factory()->create();
+    $manager = User::factory()->branchManager($branch)->create();
+    $customer = User::factory()->customerUser($branch->company)->create();
+
+    $this->actingAs($manager)->get('/super-admin')->assertForbidden();
+    $this->actingAs($customer)->get('/admin')->assertForbidden();
+});
+
+it('refuses the admin panel to staff of a suspended company', function (): void {
+    $branch = Branch::factory()->create();
+    $manager = User::factory()->branchManager($branch)->create();
+    $branch->company->update(['is_active' => false]);
+
+    $this->actingAs($manager)->get('/admin/'.$branch->slug)->assertForbidden();
+});
+
+it('lets a super admin into the super-admin panel over HTTP', function (): void {
+    $superAdmin = User::factory()->superAdmin()->create();
+
+    $this->actingAs($superAdmin)->get('/super-admin')->assertOk();
+});

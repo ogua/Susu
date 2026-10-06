@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
@@ -22,7 +23,7 @@ use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements HasAvatar, HasTenants
+class User extends Authenticatable implements FilamentUser, HasAvatar, HasTenants
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasRoles, HasUuids, LogsActivity, Notifiable;
@@ -41,6 +42,7 @@ class User extends Authenticatable implements HasAvatar, HasTenants
         'photo_path',
         'password',
         'is_active',
+        'must_change_password',
     ];
 
     /**
@@ -67,6 +69,7 @@ class User extends Authenticatable implements HasAvatar, HasTenants
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'must_change_password' => 'boolean',
         ];
     }
 

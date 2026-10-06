@@ -24,6 +24,7 @@ class UserResource extends JsonResource
             'photo_path' => $this->photo_path,
             'photo_url' => $this->photo_url,
             'is_active' => $this->is_active,
+            'must_change_password' => (bool) $this->must_change_password,
             'role' => $this->getRoleNames()->first(),
             'roles' => $this->getRoleNames()->values()->all(),
             'branch_id' => $this->branch_id,

@@ -22,18 +22,22 @@ class CompanyAdminForm
                 ->email()
                 ->required()
                 ->unique(table: User::class, column: 'email', ignoreRecord: false)
-                ->helperText('They sign in to the admin panel with this email.'),
-            TextInput::make('phone')->tel()->maxLength(32),
+                ->helperText('They sign in to the admin panel with this email; their sign-in details are sent here.'),
+            TextInput::make('phone')
+                ->tel()
+                ->maxLength(32)
+                ->helperText('Sign-in details are also sent by SMS when a phone is given.'),
             TextInput::make('password')
+                ->label('Temporary password')
                 ->password()
                 ->revealable()
-                ->required()
                 ->minLength(8)
-                ->confirmed(),
+                ->confirmed()
+                ->helperText('Leave blank to generate one. It is emailed/texted to them and must be changed at first sign-in.'),
             TextInput::make('password_confirmation')
                 ->password()
                 ->revealable()
-                ->required()
+                ->requiredWith('password')
                 ->dehydrated(false),
         ];
     }

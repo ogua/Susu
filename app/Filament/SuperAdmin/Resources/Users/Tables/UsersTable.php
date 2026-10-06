@@ -2,6 +2,7 @@
 
 namespace App\Filament\SuperAdmin\Resources\Users\Tables;
 
+use App\Filament\Resources\Staff\StaffActions;
 use App\Models\User;
 use Filament\Actions\EditAction;
 use Filament\Facades\Filament;
@@ -39,6 +40,7 @@ class UsersTable
                         return $branch ? (Filament::getPanel('admin')->getUrl($branch) ?? '/') : '/';
                     }),
                 EditAction::make(),
+                StaffActions::resetPassword(),
             ])
             ->defaultSort('name');
     }

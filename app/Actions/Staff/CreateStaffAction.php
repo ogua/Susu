@@ -8,11 +8,18 @@ use App\Models\User;
 use App\Policies\UserPolicy;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * The password the admin sets is temporary: it is sent to the new staff
+ * member by email/SMS and must be replaced at their first sign-in.
+ */
 class CreateStaffAction
 {
     use ValidatesStaffAssignment;
 
-    public function __construct(private readonly UserPolicy $policy) {}
+    public function __construct(
+        private readonly UserPolicy $policy,
+        private readonly SendStaffCredentialsAction $sendCredentials,
+    ) {}
 
     /**
      * @param  array{name: string, email: string, phone: ?string, password: string, role: string, branch_ids: array<int, string>, is_active?: bool, photo_path?: ?string}  $data
@@ -34,11 +41,14 @@ class CreateStaffAction
             'phone' => $data['phone'] ?? null,
             'password' => $data['password'],
             'is_active' => $data['is_active'] ?? true,
+            'must_change_password' => true,
             'photo_path' => $data['photo_path'] ?? null,
         ]);
 
         $user->assignRole($data['role']);
         $user->branches()->sync($branchIds);
+
+        $this->sendCredentials->execute($user, $data['password']);
 
         return $user;
     }

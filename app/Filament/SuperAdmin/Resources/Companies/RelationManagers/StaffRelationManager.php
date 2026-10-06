@@ -2,6 +2,7 @@
 
 namespace App\Filament\SuperAdmin\Resources\Companies\RelationManagers;
 
+use App\Filament\Resources\Staff\StaffActions;
 use App\Filament\SuperAdmin\Resources\Users\UserResource;
 use App\Models\User;
 use Filament\Actions\Action;
@@ -58,6 +59,7 @@ class StaffRelationManager extends RelationManager
                 Action::make('edit')
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->url(fn (User $record): string => UserResource::getUrl('edit', ['record' => $record])),
+                StaffActions::resetPassword(),
             ])
             ->defaultSort('name');
     }

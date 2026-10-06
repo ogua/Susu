@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\Auth\EditProfile;
+use App\Http\Middleware\RequirePasswordChange;
 use App\Models\Branch;
 use App\Models\User;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -38,6 +39,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
+            ->passwordReset()
             ->profile(EditProfile::class)
             ->globalSearch()
             ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
@@ -81,6 +83,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                RequirePasswordChange::class,
             ])->plugins([
                 FilamentShieldPlugin::make(),                // string|Closure|null
                 FilamentBackgroundsPlugin::make()

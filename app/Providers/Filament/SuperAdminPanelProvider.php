@@ -2,25 +2,27 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\EditProfile;
+use App\Http\Middleware\RequirePasswordChange;
+use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Filament\Http\Middleware\Authenticate;
+use Filament\Http\Middleware\AuthenticateSession;
+use Filament\Http\Middleware\DisableBladeIconComponents;
+use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Pages\Dashboard;
 use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
-use Filament\Http\Middleware\Authenticate;
-use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Cookie\Middleware\EncryptCookies;
-use Filament\Http\Middleware\AuthenticateSession;
-use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
-use Illuminate\Routing\Middleware\SubstituteBindings;
-use Illuminate\View\Middleware\ShareErrorsFromSession;
-use Swis\Filament\Backgrounds\ImageProviders\MyImages;
-use Filament\Http\Middleware\DisableBladeIconComponents;
-use Swis\Filament\Backgrounds\FilamentBackgroundsPlugin;
-use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Swis\Filament\Backgrounds\FilamentBackgroundsPlugin;
+use Swis\Filament\Backgrounds\ImageProviders\MyImages;
 
 class SuperAdminPanelProvider extends PanelProvider
 {
@@ -31,7 +33,8 @@ class SuperAdminPanelProvider extends PanelProvider
             ->path('super-admin')
             ->viteTheme('resources/css/filament/superAdmin/theme.css')
             ->login()
-            ->profile()
+            ->passwordReset()
+            ->profile(EditProfile::class)
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -43,7 +46,7 @@ class SuperAdminPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/SuperAdmin/Widgets'), for: 'App\Filament\SuperAdmin\Widgets')
             ->widgets([
                 AccountWidget::class,
-                //FilamentInfoWidget::class,
+                // FilamentInfoWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -58,6 +61,7 @@ class SuperAdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                RequirePasswordChange::class,
             ])
             ->plugins([
                 FilamentShieldPlugin::make(),

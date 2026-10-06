@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\AgentPositionController;
 use App\Http\Controllers\Api\V1\AgentRouteController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\Auth\ProfilePhotoController;
 use App\Http\Controllers\Api\V1\CollectionSheetController;
 use App\Http\Controllers\Api\V1\CompanyIntegrationController;
@@ -19,13 +20,16 @@ use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SyncController;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\RequireApiPasswordChange;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:10,1')
     ->name('auth.login');
 
-Route::middleware(['auth:sanctum', EnsureAccountIsActive::class])->group(function (): void {
+Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, RequireApiPasswordChange::class])->group(function (): void {
+    Route::put('/auth/password', [PasswordController::class, 'update'])
+        ->middleware('throttle:10,1')->name('auth.password.update');
     Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
     Route::post('/auth/me/photo', [ProfilePhotoController::class, 'update'])

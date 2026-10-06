@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Staff\Tables;
 
+use App\Filament\Resources\Staff\StaffActions;
 use App\Models\User;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
@@ -36,6 +37,7 @@ class StaffTable
             ])
             ->recordActions([
                 EditAction::make(),
+                StaffActions::resetPassword(),
             ])
             ->defaultSort('name');
     }
