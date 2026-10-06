@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Optional;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -28,6 +29,13 @@ public class ApiClient {
         }
     }
 
+    /**
+     * Sent on every request so the server can show which desktop build each
+     * signed-in computer runs (super admin Devices page). The jar manifest
+     * carries the version in packaged builds; a dev run reports "dev".
+     */
+    private static final String APP_VERSION = Optional.ofNullable(ApiClient.class.getPackage().getImplementationVersion()).orElse("dev");
+
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -44,6 +52,8 @@ public class ApiClient {
                 .timeout(Duration.ofSeconds(20))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
 
@@ -70,6 +80,8 @@ public class ApiClient {
                 .timeout(Duration.ofSeconds(20))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
                 .header("Authorization", "Bearer " + token)
                 .PUT(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
@@ -85,6 +97,8 @@ public class ApiClient {
                 .uri(URI.create(baseUrl() + "/api/v1/sync/bootstrap"))
                 .timeout(Duration.ofSeconds(20))
                 .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
                 .header("Authorization", "Bearer " + token)
                 .GET()
                 .build();
@@ -103,6 +117,8 @@ public class ApiClient {
                 .timeout(Duration.ofSeconds(30))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
                 .header("Authorization", "Bearer " + token)
                 .header("X-Client-Origin", "desktop")
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
@@ -119,6 +135,8 @@ public class ApiClient {
                 .uri(URI.create(baseUrl() + "/api/v1/payments"))
                 .timeout(Duration.ofSeconds(20))
                 .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
                 .header("Authorization", "Bearer " + token)
                 .GET()
                 .build();
