@@ -43,4 +43,5 @@
 .text-muted    { -fx-font-size: 12px; -fx-text-fill: -ogua-text-secondary; }
 .caption       { -fx-font-size: 11px; -fx-text-fill: -ogua-text-secondary; }
 .text-danger   { -fx-text-fill: -ogua-danger; }
+.text-warning  { -fx-text-fill: -ogua-warning; }
 .text-success  { -fx-text-fill: -ogua-success; }

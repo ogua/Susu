@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.List;
 import javafx.animation.Timeline;
 import javafx.animation.KeyFrame;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -17,6 +18,9 @@ import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import models.LocalUser;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import service.ApiClient;
 import service.FixedDepositService;
 import service.LicenseManager;
 import service.LoanService;
@@ -36,6 +40,7 @@ public class MainController {
     @FXML private Label syncStatusLabel;
     @FXML private Button syncNowButton;
     @FXML private Label licenseWarningLabel;
+    @FXML private Label announcementBanner;
     @FXML private StackPane contentArea;
 
     @FXML private Button navDashboard;
@@ -106,6 +111,7 @@ public class MainController {
 
         refreshSyncStatus();
         pullProductsInBackground();
+        loadAnnouncementsInBackground();
         flagArrearsInBackground();
         matureFixedDepositsInBackground();
         startLicenseWatch();
@@ -164,6 +170,43 @@ public class MainController {
             licenseWarningLabel.setVisible(false);
             licenseWarningLabel.setManaged(false);
         }
+    }
+
+    /**
+     * Shows the most important running platform announcement (maintenance,
+     * new features) under the top bar. Hybrid mode only; silent when the
+     * server can't be reached.
+     */
+    private void loadAnnouncementsInBackground() {
+        if (!AppConfig.isSyncEnabled()) {
+            return;
+        }
+        Thread thread = new Thread(() -> {
+            try {
+                JSONArray announcements = new ApiClient().listAnnouncements().optJSONArray("data");
+                if (announcements == null || announcements.isEmpty()) {
+                    return;
+                }
+                JSONObject first = announcements.getJSONObject(0);
+                String text = first.optString("title") + " — " + first.optString("body")
+                        + (announcements.length() > 1 ? "  (+" + (announcements.length() - 1) + " more)" : "");
+                String styleClass = switch (first.optString("level")) {
+                    case "critical" -> "text-danger";
+                    case "warning" -> "text-warning";
+                    default -> "body-text";
+                };
+                Platform.runLater(() -> {
+                    announcementBanner.setText(text);
+                    announcementBanner.getStyleClass().add(styleClass);
+                    announcementBanner.setVisible(true);
+                    announcementBanner.setManaged(true);
+                });
+            } catch (Exception ignored) {
+                // Best-effort: offline or signed out of the server — show nothing.
+            }
+        }, "announcements-startup");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /** Best-effort catalogue refresh on startup, so a freshly opened session has

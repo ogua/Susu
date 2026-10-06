@@ -15,6 +15,7 @@
 <BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="com.ogua.susudesktop.MainController">
     <top>
+        <VBox>
         <HBox alignment="CENTER_LEFT" spacing="10" styleClass="topbar">
             <ImageView fitHeight="28" fitWidth="28" preserveRatio="true" smooth="true">
                 <Image url="@images/susu-logo.png"/>
@@ -28,6 +29,9 @@
             <Label fx:id="userLabel" styleClass="body-text"/>
             <Button onAction="#onLogout" styleClass="button-secondary" text="Sign out"/>
         </HBox>
+        <Label fx:id="announcementBanner" maxWidth="Infinity" wrapText="true" visible="false" managed="false"
+               style="-fx-padding: 8 16; -fx-background-color: -ogua-surface; -fx-border-color: transparent transparent -ogua-border transparent;"/>
+        </VBox>
     </top>
     <left>
         <ScrollPane fitToWidth="true" hbarPolicy="NEVER" style="-fx-background-color: -ogua-surface; -fx-background: -ogua-surface; -fx-min-width: 200; -fx-border-color: transparent -ogua-border transparent transparent; -fx-border-width: 0 1 0 0;">

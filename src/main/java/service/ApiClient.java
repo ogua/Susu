@@ -89,6 +89,23 @@ public class ApiClient {
         return send(request);
     }
 
+    /** Platform announcements from the SusuApp team running now for the signed-in user. Requires a cached token. */
+    public JSONObject listAnnouncements() throws ApiException {
+        String token = requireToken();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/v1/announcements"))
+                .timeout(Duration.ofSeconds(20))
+                .header("Accept", "application/json")
+                .header("X-Client-Platform", "desktop")
+                .header("X-App-Version", APP_VERSION)
+                .header("Authorization", "Bearer " + token)
+                .GET()
+                .build();
+
+        return send(request);
+    }
+
     /** Full snapshot of the caller's working set (accounts/customers/products). Requires a cached token. */
     public JSONObject bootstrap() throws ApiException {
         String token = requireToken();
