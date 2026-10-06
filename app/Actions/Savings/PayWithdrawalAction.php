@@ -2,6 +2,7 @@
 
 namespace App\Actions\Savings;
 
+use App\Enums\SavingsProductType;
 use App\Enums\TransactionType;
 use App\Enums\WithdrawalStatus;
 use App\Models\SavingsAccount;
@@ -42,6 +43,9 @@ class PayWithdrawalAction
             }
 
             $balanceAfter = $account->balance - $request->amount;
+            $sharesRedeemed = $account->product->type === SavingsProductType::Shares
+                ? intdiv($request->amount, max(1, (int) $account->product->par_value))
+                : 0;
             $netCash = $request->amount - $request->penalty_amount;
 
             $lines = [
@@ -65,10 +69,14 @@ class PayWithdrawalAction
                     'withdrawal_request_id' => $request->id,
                     'amount' => $netCash,
                     'balance_after' => $balanceAfter,
+                    'shares' => $sharesRedeemed,
                 ],
             ));
 
-            $account->forceFill(['balance' => $balanceAfter])->save();
+            $account->forceFill([
+                'balance' => $balanceAfter,
+                'share_count' => max(0, $account->share_count - $sharesRedeemed),
+            ])->save();
 
             $request->update([
                 'status' => WithdrawalStatus::Paid,

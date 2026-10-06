@@ -42,7 +42,9 @@ class CommissionCalculator
             $cycleNumber++;
         }
 
-        $commission = match ($product->commission_type) {
+        // Fixed deposits and shares are not susu cycles: whatever an old
+        // product row still says, they never carry commission.
+        $commission = ! $product->isCycleBased() ? 0 : match ($product->commission_type) {
             CommissionType::None => 0,
             CommissionType::FirstContributionPerCycle => $cyclesStarted * $account->contribution_amount,
             CommissionType::Percentage => intdiv($amount * $product->commission_value, 10_000),

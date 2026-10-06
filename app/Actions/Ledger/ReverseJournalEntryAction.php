@@ -159,7 +159,10 @@ class ReverseJournalEntryAction
         $account = $this->lockSavingsAccount($entry);
         $reversal = $this->reverseLedgerOnly($entry, $reversedBy, $reason);
 
-        $account->forceFill(['balance' => $account->balance + $request->amount])->save();
+        $account->forceFill([
+            'balance' => $account->balance + $request->amount,
+            'share_count' => $account->share_count + (int) ($entry->meta['shares'] ?? 0),
+        ])->save();
         $request->update(['status' => WithdrawalStatus::Reversed]);
 
         return $reversal;

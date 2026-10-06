@@ -12,6 +12,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class SavingsAccountForm
@@ -32,6 +33,12 @@ class SavingsAccountForm
                         ->where('is_active', true)
                         ->pluck('name', 'id'))
                     ->live()
+                    ->afterStateUpdated(function (?string $state, Set $set): void {
+                        $product = $state !== null ? SavingsProduct::find($state) : null;
+                        if ($product?->hasMaturity() && $product->term_days !== null) {
+                            $set('matures_at', now()->addDays($product->term_days)->toDateString());
+                        }
+                    })
                     ->required()
                     ->disabledOn('edit'),
                 Select::make('agent_id')
@@ -43,9 +50,13 @@ class SavingsAccountForm
                     // action so every active account moves together.
                     ->disabledOn('edit'),
                 TextInput::make('contribution_amount')
-                    ->label('Daily contribution (GHS)')
+                    ->label(fn (Get $get): string => self::productType($get) === SavingsProductType::FixedDeposit
+                        ? 'Principal amount (GHS)'
+                        : 'Daily contribution (GHS)')
                     ->numeric()
-                    ->required()
+                    ->minValue(0.01)
+                    ->required(fn (Get $get): bool => self::productType($get) !== SavingsProductType::Shares)
+                    ->visible(fn (Get $get): bool => self::productType($get) !== SavingsProductType::Shares)
                     ->formatStateUsing(fn (?int $state): ?float => $state === null ? null : $state / 100)
                     ->dehydrateStateUsing(fn (?float $state): int => (int) round(($state ?? 0) * 100))
                     ->disabledOn('edit'),
@@ -75,19 +86,20 @@ class SavingsAccountForm
             ]);
     }
 
-    private static function isTargetProduct(Get $get): bool
+    private static function productType(Get $get): ?SavingsProductType
     {
         $productId = $get('savings_product_id');
 
-        return $productId !== null
-            && SavingsProduct::find($productId)?->type === SavingsProductType::Target;
+        return $productId !== null ? SavingsProduct::find($productId)?->type : null;
+    }
+
+    private static function isTargetProduct(Get $get): bool
+    {
+        return self::productType($get) === SavingsProductType::Target;
     }
 
     private static function isTargetOrFixedDepositProduct(Get $get): bool
     {
-        $productId = $get('savings_product_id');
-        $type = $productId !== null ? SavingsProduct::find($productId)?->type : null;
-
-        return in_array($type, [SavingsProductType::Target, SavingsProductType::FixedDeposit], true);
+        return in_array(self::productType($get), [SavingsProductType::Target, SavingsProductType::FixedDeposit], true);
     }
 }

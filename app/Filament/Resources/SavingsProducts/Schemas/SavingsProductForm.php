@@ -76,14 +76,22 @@ class SavingsProductForm
                     ->maxValue(10_000)
                     ->default(0)
                     ->visible(fn (Get $get): bool => self::type($get) === SavingsProductType::Target)
-                    ->helperText('Basis points of the withdrawn amount (100 = 1%), charged before the target matures. The target amount and maturity date are set per account when it is opened.'),
+                    ->helperText('Basis points of the withdrawn amount (100 = 1%), charged before the target matures. The target amount is set per account when it is opened.'),
                 TextInput::make('interest_rate_bps')
                     ->label('Annual interest rate (basis points)')
                     ->numeric()
                     ->minValue(0)
                     ->default(0)
                     ->visible(fn (Get $get): bool => self::type($get) === SavingsProductType::FixedDeposit)
-                    ->helperText('Basis points per annum (100 = 1%), prorated by term and paid into the balance at maturity. The maturity date is set per account when it is opened.'),
+                    ->helperText('Basis points per annum (100 = 1%), prorated by term and paid into the balance at maturity. The account is funded once with its principal.'),
+                TextInput::make('term_days')
+                    ->label('Default term (days)')
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->maxValue(3650)
+                    ->visible(fn (Get $get): bool => in_array(self::type($get), [SavingsProductType::Target, SavingsProductType::FixedDeposit], true))
+                    ->helperText("Optional. Pre-fills each new account's maturity date this many days after opening; it can still be changed per account."),
                 TextInput::make('par_value')
                     ->label('Par value per share (GHS)')
                     ->numeric()

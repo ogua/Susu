@@ -41,6 +41,12 @@ class OpenSavingsAccountAction
         if ($agent !== null && $agent->company_id !== $customer->company_id) {
             throw ValidationException::withMessages(['agent' => 'Agent not found in this company.']);
         }
+        // A product with a default term fills in the maturity date the
+        // opener left blank, counted from today.
+        if ($maturesAt === null && $product->hasMaturity() && $product->term_days !== null) {
+            $maturesAt = now()->startOfDay()->addDays($product->term_days);
+        }
+
         if ($product->type === SavingsProductType::Target && ($targetAmount === null || $maturesAt === null)) {
             throw ValidationException::withMessages([
                 'target_amount' => 'Target savings accounts require a target amount and maturity date.',

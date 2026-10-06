@@ -34,10 +34,10 @@ it('shows only the fields that apply to each product type', function (string $ty
         $page->assertFormFieldHidden($field);
     }
 })->with([
-    'daily susu' => ['daily_susu', ['contribution_amount', 'cycle_length_days', 'commission_type'], ['early_withdrawal_penalty_bps', 'interest_rate_bps', 'par_value']],
-    'target' => ['target', ['contribution_amount', 'cycle_length_days', 'commission_type', 'early_withdrawal_penalty_bps'], ['interest_rate_bps', 'par_value']],
-    'fixed deposit' => ['fixed_deposit', ['contribution_amount', 'interest_rate_bps'], ['cycle_length_days', 'commission_type', 'commission_value', 'early_withdrawal_penalty_bps', 'par_value']],
-    'shares' => ['shares', ['par_value'], ['contribution_amount', 'cycle_length_days', 'commission_type', 'commission_value', 'early_withdrawal_penalty_bps', 'interest_rate_bps']],
+    'daily susu' => ['daily_susu', ['contribution_amount', 'cycle_length_days', 'commission_type'], ['early_withdrawal_penalty_bps', 'interest_rate_bps', 'term_days', 'par_value']],
+    'target' => ['target', ['contribution_amount', 'cycle_length_days', 'commission_type', 'early_withdrawal_penalty_bps', 'term_days'], ['interest_rate_bps', 'par_value']],
+    'fixed deposit' => ['fixed_deposit', ['contribution_amount', 'interest_rate_bps', 'term_days'], ['cycle_length_days', 'commission_type', 'commission_value', 'early_withdrawal_penalty_bps', 'par_value']],
+    'shares' => ['shares', ['par_value'], ['contribution_amount', 'cycle_length_days', 'commission_type', 'commission_value', 'early_withdrawal_penalty_bps', 'interest_rate_bps', 'term_days']],
 ]);
 
 it('only asks for a commission value when the commission type uses one', function (): void {

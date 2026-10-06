@@ -24,7 +24,7 @@ class CreateSavingsAccount extends CreateRecord
             customer: Customer::findOrFail($data['customer_id']),
             product: SavingsProduct::findOrFail($data['savings_product_id']),
             agent: isset($data['agent_id']) ? User::find($data['agent_id']) : null,
-            contributionAmount: $data['contribution_amount'],
+            contributionAmount: $data['contribution_amount'] ?? null,
             targetAmount: $data['target_amount'] ?? null,
             maturesAt: isset($data['matures_at']) ? Carbon::parse($data['matures_at']) : null,
         );

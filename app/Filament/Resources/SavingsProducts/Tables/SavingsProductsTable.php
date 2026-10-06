@@ -29,6 +29,9 @@ class SavingsProductsTable
                     ->label('Interest rate (bps)')
                     ->state(fn (SavingsProduct $record): ?int => $record->type === SavingsProductType::FixedDeposit ? $record->interest_rate_bps : null)
                     ->placeholder('—'),
+                TextColumn::make('term_days')
+                    ->label('Term (days)')
+                    ->placeholder('—'),
                 TextColumn::make('par_value')
                     ->label('Par value')
                     ->formatStateUsing(fn (?int $state): ?string => $state === null ? null : Money::format($state))

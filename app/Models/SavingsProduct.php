@@ -30,6 +30,7 @@ class SavingsProduct extends Model
         'commission_value',
         'early_withdrawal_penalty_bps',
         'interest_rate_bps',
+        'term_days',
         'par_value',
         'is_active',
     ];
@@ -47,6 +48,7 @@ class SavingsProduct extends Model
             'commission_value' => 'integer',
             'early_withdrawal_penalty_bps' => 'integer',
             'interest_rate_bps' => 'integer',
+            'term_days' => 'integer',
             'par_value' => 'integer',
             'is_active' => 'boolean',
         ];
@@ -69,12 +71,22 @@ class SavingsProduct extends Model
             if ($product->type === SavingsProductType::Shares) {
                 $product->contribution_amount ??= 0;
             }
+
+            if (! $product->hasMaturity()) {
+                $product->term_days = null;
+            }
         });
     }
 
+    /** An unset type is treated as the column default, daily susu. */
     public function isCycleBased(): bool
     {
-        return in_array($this->type, [SavingsProductType::DailySusu, SavingsProductType::Target], true);
+        return in_array($this->type ?? SavingsProductType::DailySusu, [SavingsProductType::DailySusu, SavingsProductType::Target], true);
+    }
+
+    public function hasMaturity(): bool
+    {
+        return in_array($this->type, [SavingsProductType::Target, SavingsProductType::FixedDeposit], true);
     }
 
     public function company(): BelongsTo

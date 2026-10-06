@@ -65,6 +65,9 @@ class RecordCollectionAction
             /** @var SavingsAccount $account */
             $account = SavingsAccount::whereKey($account->id)->lockForUpdate()->firstOrFail();
 
+            // Re-checked under the lock so two concurrent deposits can't both fund it.
+            $this->assertFixedDepositFundable($account, $amount);
+
             $cycle = $this->commission->simulate($account, $units, $amount);
             $balanceAfter = $account->balance + $amount - $cycle->commissionAmount;
 
@@ -176,6 +179,29 @@ class RecordCollectionAction
         if ($amount <= 0 || $amount % $account->contribution_amount !== 0) {
             throw ValidationException::withMessages([
                 'amount' => 'Amount must be a positive multiple of the daily contribution ('.$account->contribution_amount.').',
+            ]);
+        }
+
+        $this->assertFixedDepositFundable($account, $amount);
+    }
+
+    /**
+     * A fixed deposit is funded once, with exactly its principal, before it
+     * matures. Top-ups would earn interest for days they were never held.
+     */
+    private function assertFixedDepositFundable(SavingsAccount $account, int $amount): void
+    {
+        if ($account->product->type !== SavingsProductType::FixedDeposit) {
+            return;
+        }
+
+        if ($account->matured_at !== null || $account->balance > 0) {
+            throw ValidationException::withMessages(['account' => 'This fixed deposit is already funded and cannot take further deposits.']);
+        }
+
+        if ($amount !== $account->contribution_amount) {
+            throw ValidationException::withMessages([
+                'amount' => 'A fixed deposit must be funded with exactly its principal ('.$account->contribution_amount.').',
             ]);
         }
     }

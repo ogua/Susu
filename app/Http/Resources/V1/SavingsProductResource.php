@@ -30,7 +30,9 @@ class SavingsProductResource extends JsonResource
             'cycle_length_days' => $this->cycle_length_days,
             'commission_type' => $this->commission_type,
             'commission_value' => $this->commission_value,
+            'early_withdrawal_penalty_bps' => $this->early_withdrawal_penalty_bps,
             'interest_rate_bps' => $this->interest_rate_bps,
+            'term_days' => $this->term_days,
             'par_value' => $this->par_value,
             'is_active' => $this->is_active,
         ];

@@ -47,6 +47,15 @@ class RequestWithdrawalAction
                     throw ValidationException::withMessages(['account' => 'Fixed deposits cannot be withdrawn before their maturity date.']);
                 }
 
+                // Share capital is redeemed in whole shares so the balance
+                // always stays share_count * par_value.
+                $parValue = (int) $account->product->par_value;
+                if ($account->product->type === SavingsProductType::Shares && ($parValue <= 0 || $amount % $parValue !== 0)) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Share withdrawals must be a whole number of shares ('.$parValue.' per share).',
+                    ]);
+                }
+
                 $held = (int) $account->withdrawalRequests()
                     ->whereIn('status', [WithdrawalStatus::Pending, WithdrawalStatus::Approved])
                     ->sum('amount');
