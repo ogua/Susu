@@ -41,6 +41,10 @@ class SuperAdminPanelProvider extends PanelProvider
                 EmailAndSmsAuthentication::make(),
             ], isRequired: true)
             ->profile(EditProfile::class)
+            ->brandName('OguaFinance')
+            ->brandLogo(asset('images/logo.png'))
+            ->brandLogoHeight('3rem')
+            ->favicon(asset('images/logo.png'))
             ->colors([
                 'primary' => Color::Amber,
             ])
