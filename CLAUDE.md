@@ -426,6 +426,37 @@ SusuApp is a susu (rotating savings / micro-finance collection) application for 
 - **Mobile application** — `D:\Mobile\susu-mobile-app`. Expo / React Native (TypeScript, expo-router). Serves field agents (offline-first: local SQLite via WatermelonDB with an outbox/sync queue, so collections work without connectivity) and customers (online). It consumes this Laravel application's API and holds no business logic of its own; offline records carry client-generated UUIDs and replay idempotently through `/api/v1/sync/batch`.
 - **Desktop application (offline)** — `D:\Desktop App\susuDesktop`. JavaFX (Java 25, Maven; run with `mvn clean javafx:run`). Serves users who need offline capability: it works against local storage while disconnected and syncs with this Laravel application's API when back online. The Laravel backend remains the source of truth its data reconciles against.
 
+<!-- ogua-family:start — identical in every Ogua repo's CLAUDE.md; edit all six together (see checklist below) -->
+## Ogua Product Family
+
+This repo is one of six sites run by **OguSes IT Solutions** (Accra, Ghana). They all link to each other, and this block is the shared reference for every product, where its code lives and what to update when one changes.
+
+| Product | What it is | Web repo (local path · git branch · remote) | Stack | Public site · staff login | Accent colours | Client apps |
+|---|---|---|---|---|---|---|
+| **OguSes IT Solutions** (company) | Company site and the **product registry** | `C:\xampp\htdocs\Projects\website\oguses-IT-Solutions` · `website-redesign` · `github.com/ogua/OguSes-Website` | Plain PHP + Bootstrap 5 + Gulp SCSS | ogusesitsolutions.com | Indigo `#2541B2` / navy `#1B2A4E` | — |
+| **OguaSchoolz** | School management (Basic, Secondary, Tertiary) | `C:\xampp\htdocs\Projects\oguaschoolz` · `main` · `ogua/oguaschoolz` | Laravel 8, Bootstrap 4 (PHP 7.3-compatible) | oguaschoolz.com · `/admin` | Blue `#2E5AAC` | Android `com.ogua.OguaSchoolz`, iOS `id6766593615` |
+| **OguaPOS** | Point of sale & inventory | `C:\xampp\htdocs\Projects\POS` · `main` · `ogua/oguapos_v2` | Laravel 12, Filament 5, Tailwind 4 | pos.oguaschoolz.com · `/admin/login`, `/cashier/login` | Green `#1E9E6B` (text `#147F58`) | Desktop `D:\Desktop App\POS`, mobile `D:\Mobile\ogua-pos` |
+| **OguaFinance** | Susu, savings, loans & microfinance | `C:\xampp\htdocs\Projects\SusuApp` · `main` · `ogua/Susu` | Laravel 12, Filament 5, Tailwind 4 | finance.oguaschoolz.com · `/admin/login` | Amber gold `#D99A1E` (text `#9C5E14`) | Mobile `D:\Mobile\susu-mobile-app` (branch `mobileapp`), desktop `D:\Desktop App\susuDesktop` (branch `desktopapp`), both on `ogua/Susu` |
+| **OguaChurch** | Church management | `C:\xampp\htdocs\Projects\oguachurch` · `main` · `ogua/OguaChurch` | Laravel 12, **Filament 4**, Tailwind 4 | oguachurch.oguaschoolz.com · `/admin/login` | Navy `#0E3C5D` + gold `#BC9842` | Installable PWA; no native app yet |
+| **OguaCare+** | Hospital & clinic management | `C:\xampp\htdocs\Projects\OguaCare+` · `main` · no remote yet | Laravel 12, Filament 5, stancl/tenancy (one database per hospital), Tailwind 4 | oguacareplus.com · hospitals at `{subdomain}.oguacareplus.com/app`, platform at `/platform` | Emerald `#059669` (text `#047857`) | Mobile `D:\Mobile\oguacare-mobile` |
+
+**Shared services:** SMS through Arkesel (`sms.oguaschoolz.com`), and one Paystack webhook URL shared by every product through the `oguapaymentwebhook` gateway.
+
+### How the products link to each other
+
+- **The registry is the company site.** `includes/config.php`'s `$products` array is the single source of truth (name, category, tagline, accents, `website_url`, `login_url`). `products-feed.php` publishes it as **`https://ogusesitsolutions.com/products.json`** (schema v1). The company site's own nav, footer and product pages read `$products` directly.
+- **Every product site reads the feed.** Each Laravel app has `App\Services\OguaFamily` + `config/ogua_family.php` (`feed_url`, this product's `current` slug, and a bundled `fallback` snapshot) + `php artisan ogua-family:refresh` (scheduled daily at 05:00) + the `<x-ogua-family.links>` Blade component. Page requests never call the network: they read the cache, or the fallback. A failed or invalid fetch keeps the old cache, and non-http(s) URLs from the feed are dropped.
+- **Where the links show:** a top "Also from Ogua" bar and an "Ogua family" footer column on OguaFinance, OguaChurch and OguaCare+; an "Ogua family" footer strip on OguaPOS; the footer, `/products` page, home solutions section and demo-form options on OguaSchoolz.
+- **Schema v1 is a public contract.** Adding fields is safe. Renaming or removing a field means bumping `schema` and updating every consumer, because consumers reject a schema they don't know.
+
+### When a product changes (renamed, new URL, new product, retired)
+
+1. Update the company site's `$products` in `includes/config.php`. For a new product, also update the SCSS accent maps, a hero gradient, an icon, a two-line page file, `sitemap.xml`, and the product count in the copy. The company CLAUDE.md has the full list.
+2. Update the `fallback` snapshot in **every** consumer's `config/ogua_family.php`: OguaSchoolz, OguaPOS, OguaFinance, OguaChurch and OguaCare+.
+3. Update this block, between the `ogua-family` markers, in all six CLAUDE.md files.
+4. Commit in each repo. After deploying the company site, run `php artisan ogua-family:refresh` on each product server.
+<!-- ogua-family:end -->
+
 ## Cross-Platform Parity Rules
 
 The Laravel backend is the **single source of truth**. All business logic, validation, and data live here; all frontends (web, mobile, desktop) are thin views over it.
