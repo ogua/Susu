@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\PaymentIntent;
+use App\Observers\UssdPaymentIntentObserver;
 use App\Services\PlatformSettings;
 use Filament\Support\Assets\Css;
 use Filament\Support\Assets\Js;
@@ -31,6 +33,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         app(PlatformSettings::class)->apply();
+
+        PaymentIntent::observe(UssdPaymentIntentObserver::class);
 
         FilamentAsset::register([
             Css::make('leaflet-css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'),

@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\Ussd\UssdConnectorController;
 use App\Http\Controllers\Api\Webhooks\PaystackWebhookController;
 use App\Http\Controllers\License\LicenseWebhookController;
+use App\Http\Middleware\VerifyUssdSignature;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
@@ -36,6 +38,17 @@ Route::post('/webhooks/paystack/companies/{company}', PaystackWebhookController:
     ->middleware('paystack.signature')
     ->whereUuid('company')
     ->name('webhooks.paystack.company');
+
+// Called only by the central Ogua USSD platform, signed with a shared secret
+// (VerifyUssdSignature). Identifies customers by phone and answers USSD menu
+// actions; withdrawals go through RequestWithdrawalAction like the app's.
+Route::prefix('ussd')
+    ->middleware(['throttle:600,1', VerifyUssdSignature::class])
+    ->name('api.ussd.')
+    ->group(function (): void {
+        Route::post('/identify', [UssdConnectorController::class, 'identify'])->name('identify');
+        Route::post('/actions/{key}', [UssdConnectorController::class, 'action'])->name('action');
+    });
 
 Route::post('/webhooks/paystack/license/gateway', LicenseWebhookController::class)
     ->middleware(['verify.gateway.signature', 'paystack.signature'])

@@ -18,6 +18,9 @@ class RoleSeeder extends Seeder
         'branch_manager',
         'field_agent',
         'customer',
+        // Inactive per-company account that initiates USSD MoMo contributions
+        // for customers without an app login. Never signs in.
+        'ussd_service',
     ];
 
     public function run(): void

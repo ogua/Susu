@@ -14,8 +14,11 @@ use Illuminate\Validation\ValidationException;
 
 class RequestWithdrawalAction
 {
+    /**
+     * $requestedBy is null when the customer requests by USSD without an app login.
+     */
     public function execute(
-        User $requestedBy,
+        ?User $requestedBy,
         SavingsAccount $account,
         int $amount,
         ?string $reason = null,
@@ -75,7 +78,7 @@ class RequestWithdrawalAction
                     'penalty_amount' => $this->earlyWithdrawalPenalty($account, $amount),
                     'reason' => $reason,
                     'status' => WithdrawalStatus::Pending,
-                    'requested_by' => $requestedBy->id,
+                    'requested_by' => $requestedBy?->id,
                     'client_reference' => $clientReference,
                 ]);
                 // Offline clients use their reference as the id, so a later

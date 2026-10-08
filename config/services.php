@@ -60,6 +60,22 @@ return [
     ],
 
     /*
+     * The central Ogua USSD platform (oguaussd) calls /api/ussd/* to identify
+     * customers by phone number and run USSD menu actions. Every call is signed
+     * with this shared secret — see VerifyUssdSignature. Must match
+     * USSD_SUSU_CLIENT_ID / USSD_SUSU_SECRET on the platform.
+     */
+    'ussd' => [
+        'client_id' => env('USSD_CLIENT_ID', 'oguaussd'),
+        'secret' => env('USSD_SHARED_SECRET'),
+        // Wait before sending a USSD contribution's MoMo charge: the phone can
+        // only show the approval prompt once its USSD session has closed.
+        'charge_delay_seconds' => (int) env('USSD_CHARGE_DELAY_SECONDS', 5),
+        // Where final MoMo outcomes are reported (POST /api/ussd/products/susu/transactions/{id}).
+        'platform_url' => env('USSD_PLATFORM_URL'),
+    ],
+
+    /*
      * Platform-level SMS (no Company context), used for scenarios like
      * license-key delivery where the recipient isn't a company's customer.
      * Separate from company_sms_settings (App\Services\Sms\SmsService::send()),

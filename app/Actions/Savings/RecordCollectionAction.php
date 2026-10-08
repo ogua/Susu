@@ -167,8 +167,11 @@ class RecordCollectionAction
         $isAssignedAgent = $account->agent_id === $agent->id;
         $isManager = $agent->hasRole(['branch_manager', 'company_admin']);
         $isOwnAccount = $account->customer?->user_id === $agent->id;
+        // The company's USSD service account, initiating a MoMo contribution the
+        // customer approves on their own phone. Still bound by the company check below.
+        $isUssdService = $agent->hasRole('ussd_service');
 
-        if (! $isAssignedAgent && ! $isManager && ! $isOwnAccount) {
+        if (! $isAssignedAgent && ! $isManager && ! $isOwnAccount && ! $isUssdService) {
             throw ValidationException::withMessages(['account' => 'You are not assigned to this account.']);
         }
 
