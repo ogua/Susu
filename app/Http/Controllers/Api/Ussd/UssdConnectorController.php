@@ -35,6 +35,14 @@ class UssdConnectorController extends Controller
     }
 
     /**
+     * POST /api/ussd/tenants — the active Susu companies the platform can onboard.
+     */
+    public function tenants(): JsonResponse
+    {
+        return response()->json(['tenants' => $this->ussd->tenants()]);
+    }
+
+    /**
      * POST /api/ussd/actions/{key}
      */
     public function action(Request $request, string $key): JsonResponse

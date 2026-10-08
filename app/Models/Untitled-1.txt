@@ -1,0 +1,689 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Academicyear;
+use App\Models\Apikeys;
+use App\Models\Guardians;
+use App\Models\Smsdeliveryreport;
+use App\Models\Studentinfo;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class SmsService
+{
+    protected ?string $apiKey = null;
+
+    protected ?string $senderId = null;
+
+    protected ?string $service = null;
+
+    protected ?string $uniqueid = null;
+
+    protected ?int $branchId = null;
+
+    /**
+     * Initialize SMS service with API credentials
+     */
+    public function __construct(?string $uniqueid = null)
+    {
+        $uniqueid = $uniqueid ?? Auth::user()?->uniqueid;
+        $this->uniqueid = $uniqueid;
+
+        if ($uniqueid) {
+            $apiKeys = Apikeys::where('uniqueid', $uniqueid)->first();
+
+            if ($apiKeys) {
+                $this->branchId = $apiKeys->branch_id;
+                $this->service = strtolower($apiKeys->status);
+                $this->senderId = match ($this->service) {
+                    'arkesel' => $apiKeys->msgsenderid,
+                    'mnotify' => $apiKeys->senderid,
+                    default => $apiKeys->msgsenderid,
+                };
+
+                $this->apiKey = match ($this->service) {
+                    'arkesel' => $apiKeys->msgauthkey,
+                    'mnotify' => $apiKeys->apv2,
+                    default => $apiKeys->msgauthkey,
+                };
+            }
+        }
+    }
+
+    /**
+     * Check if SMS service is configured
+     */
+    public function isConfigured(): bool
+    {
+        // logger($this->apiKey);
+        // logger($this->senderId);
+        // logger($this->service);
+
+        return $this->apiKey && $this->senderId && $this->service;
+    }
+
+    /**
+     * Get the configured SMS service name
+     */
+    public function getServiceName(): ?string
+    {
+        return $this->service;
+    }
+
+    /**
+     * Get all phone numbers for a student's guardians from guardian_contacts table
+     */
+    public function getGuardianPhones(Studentinfo $student, string $relation = 'both'): array
+    {
+        $phones = [];
+
+        // Get guardians via pivot relationship (gurdianstudent)
+        $guardians = $student->gurdianstudent()->with(['contacts', 'phones'])->get();
+
+        // If no guardians via pivot, try direct relationship
+        if ($guardians->isEmpty()) {
+            $guardians = $student->gaurdain()->with(['contacts', 'phones'])->get();
+        }
+
+        if ($guardians->isNotEmpty()) {
+            // Filter by relationship if not 'both'
+            if ($relation !== 'both') {
+                $filteredGuardians = $guardians->filter(function ($guardian) use ($relation) {
+                    $guardianRelation = strtolower($guardian->relationship ?? '');
+
+                    return $guardianRelation === $relation;
+                });
+
+                // If no match, use all guardians as fallback
+                if ($filteredGuardians->isEmpty()) {
+                    $filteredGuardians = $guardians;
+                }
+            } else {
+                $filteredGuardians = $guardians;
+            }
+
+            // Loop through all guardians and collect phone numbers (only from guardian_contacts table)
+            foreach ($filteredGuardians as $guardian) {
+                // Get phone numbers from guardian_contacts table only (type = 'phone')
+                if ($guardian->phones && $guardian->phones->isNotEmpty()) {
+                    foreach ($guardian->phones as $contact) {
+                        if ($contact->value) {
+                            $phones[] = $contact->value;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove duplicates and return
+        return array_unique($phones);
+    }
+
+    /**
+     * Get all phone numbers with guardian names for a student
+     */
+    public function getGuardianPhonesWithNames(Studentinfo $student): array
+    {
+        $phones = [];
+
+        // Get guardians via pivot relationship (gurdianstudent)
+        $guardians = $student->gurdianstudent()->with(['contacts', 'phones'])->get();
+
+        // If no guardians via pivot, try direct relationship
+        if ($guardians->isEmpty()) {
+            $guardians = $student->gaurdain()->with(['contacts', 'phones'])->get();
+        }
+
+        foreach ($guardians as $guardian) {
+            $guardianName = trim(($guardian->gurdianname ?? '')) ?: 'Parent/Guardian';
+
+            // Get phone numbers from guardian_contacts table only
+            if ($guardian->phones && $guardian->phones->isNotEmpty()) {
+                foreach ($guardian->phones as $contact) {
+                    if ($contact->value) {
+                        $phones[] = [
+                            'phone' => $contact->value,
+                            'name' => $guardianName,
+                            'guardian' => $guardian,
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Remove duplicates by phone number
+        return collect($phones)->unique('phone')->values()->toArray();
+    }
+
+    /**
+     * Get guardian full name for a student
+     */
+    public function getGuardianFullName(Studentinfo $student): string
+    {
+        // First try the gurdianstudent pivot relationship
+        $guardian = $student->gurdianstudent->first();
+
+        // If no guardian via pivot, try direct relationship
+        if (! $guardian) {
+            $guardian = $student->gaurdain->first();
+        }
+
+        if ($guardian) {
+            $fullName = trim(($guardian->gurdianname ?? ''));
+
+            return $fullName ?: 'Parent';
+        }
+
+        return 'Parent';
+    }
+
+    /**
+     * Normalize phone number to Ghana format (233XXXXXXXXX)
+     */
+    public function normalizePhone(string $phone): ?string
+    {
+        // Remove all non-digit characters
+        $phone = preg_replace('/\D/', '', $phone);
+
+        // Convert 0XXXXXXXXX to 233XXXXXXXXX
+        if (str_starts_with($phone, '0') && strlen($phone) == 10) {
+            $phone = '233'.substr($phone, 1);
+        }
+
+        // Validate: Must be 233XXXXXXXXX (12 digits starting with 233)
+        if (preg_match('/^233\d{9}$/', $phone)) {
+            return $phone;
+        }
+
+        return null;
+    }
+
+    /**
+     * Send SMS to a single recipient
+     */
+    public function send(string $phone, string $message, ?string $scheduleTime = null): array
+    {
+        if (! $this->isConfigured()) {
+            return [
+                'success' => false,
+                'message' => 'SMS service is not configured. Please set up API keys.',
+            ];
+        }
+
+        $normalizedPhone = $this->normalizePhone($phone);
+        if (! $normalizedPhone) {
+            return [
+                'success' => false,
+                'message' => 'Invalid phone number format.',
+            ];
+        }
+
+        $recipients = [
+            [
+                'phone' => $normalizedPhone,
+                'message' => $message,
+            ],
+        ];
+
+        return $this->sendBulk($recipients, $scheduleTime);
+    }
+
+    /**
+     * Send SMS to multiple recipients
+     *
+     * @param  array  $recipients  Array of ['phone' => string, 'message' => string, 'student' => ?Studentinfo]
+     */
+    public function sendBulk(array $recipients, ?string $scheduleTime = null): array
+    {
+        if (! $this->isConfigured()) {
+            return [
+                'success' => false,
+                'message' => 'SMS service is not configured. Please set up API keys.',
+            ];
+        }
+
+        return match (strtolower($this->service)) {
+            'arkesel' => $this->sendViaArkesel($recipients, $scheduleTime),
+            'mnotify' => $this->sendViaMNotify($recipients, $scheduleTime),
+            default => ['success' => false, 'message' => 'Unknown SMS service: '.$this->service],
+        };
+    }
+
+    /**
+     * Send SMS via Arkesel API (Template endpoint)
+     */
+    protected function sendViaArkesel(array $recipients, ?string $scheduleTime = null): array
+    {
+        try {
+            $url = 'https://sms.oguaschoolz.com/api/v2/sms/template/send';
+            $callbackUrl = $this->buildArkeselCallbackUrl();
+
+            // API limit: 100 recipients per request
+            $chunks = array_chunk($recipients, 100);
+
+            $totalSent = 0;
+            $totalFailed = 0;
+            $lastProviderMessage = null;
+            // Per-recipient outcome, keyed by phone — sendBulk()'s aggregate
+            // 'success' flag is true if ANY group in the batch succeeded, so
+            // callers logging a delivery record per recipient (RecordFeePayment,
+            // AdminCommunicationController, etc.) need this to avoid marking a
+            // recipient whose group actually failed as "sent" just because a
+            // different message-group in the same batch went through.
+            $results = [];
+
+            foreach ($chunks as $chunk) {
+                // Each recipient's message is already fully personalized by the
+                // caller (SendSMS, RecordFeePayment, etc.) before sendBulk() is
+                // invoked. Group by the exact message text so every group gets
+                // its own Arkesel call with its own literal `message` — sending
+                // the whole chunk under recipient #0's text would silently give
+                // every other recipient the wrong (first recipient's) message.
+                $groups = collect($chunk)->groupBy(fn (array $recipient) => md5($recipient['message'] ?? ''));
+
+                foreach ($groups as $group) {
+                    $group = $group->values();
+                    $messageTemplate = $group->first()['message'] ?? '';
+
+                    // Convert {key} → <%key%> for Arkesel template format
+                    $convertedMessage = preg_replace_callback(
+                        '/\{(\w+)\}/',
+                        fn ($m) => '<%'.$m[1].'%>',
+                        $messageTemplate
+                    );
+
+                    // Build recipients array keyed by phone number
+                    $recipientsData = [];
+
+                    foreach ($group as $recipient) {
+                        $phone = $recipient['phone'];
+
+                        // Build placeholder data for this recipient
+                        $placeholderData = [
+                            'date' => now()->format('d/m/Y'),
+                        ];
+
+                        // Add student placeholders if available
+                        if (
+                            isset($recipient['student']) &&
+                            $recipient['student'] instanceof Studentinfo
+                        ) {
+                            $student = $recipient['student'];
+
+                            $placeholderData['parentfullname'] = $this->getGuardianFullName($student);
+                            $placeholderData['studentid'] = $student->student_id ?? '';
+                            $placeholderData['studentclass'] = $student->stclass->name ?? '';
+                            $placeholderData['studentFullName'] = trim(
+                                ($student->surname ?? '').' '.($student->firstname ?? '')
+                            );
+                        }
+
+                        // Add any extra data from the recipient array
+                        if (isset($recipient['extra_data']) && is_array($recipient['extra_data'])) {
+                            $placeholderData = array_merge($placeholderData, $recipient['extra_data']);
+                        }
+
+                        $recipientsData[$phone] = $placeholderData;
+                    }
+
+                    $payload = [
+                        'sender' => $this->senderId,
+                        'message' => $convertedMessage,
+                        'recipients' => $recipientsData,
+                        'callback_url' => $callbackUrl,
+                    ];
+
+                    // Optional scheduling
+                    if ($scheduleTime) {
+                        $payload['scheduled_date'] = Carbon::parse($scheduleTime)
+                            ->format('Y-m-d H:i:s');
+                    }
+
+                    $response = Http::withHeaders([
+                        'api-key' => $this->apiKey,
+                    ])->asForm()->retry(3, 200)->post($url, $payload);
+
+                    $responseData = $response->json() ?? [];
+                    $lastProviderMessage = $responseData['message'] ?? null;
+
+                    Log::info('Arkesel SMS Request', [
+                        'payload' => $payload,
+                        'response' => $responseData,
+                    ]);
+
+                    $succeeded = $response->successful() &&
+                        isset($responseData['status']) &&
+                        $responseData['status'] === 'success';
+
+                    if ($succeeded) {
+                        $totalSent += $group->count();
+                    } else {
+                        $totalFailed += $group->count();
+
+                        Log::error('Arkesel SMS Failed', [
+                            'response' => $responseData,
+                            'payload' => $payload,
+                        ]);
+                    }
+
+                    foreach ($group as $recipient) {
+                        $results[$recipient['phone']] = $succeeded;
+                    }
+
+                    $this->persistDeliveryReports($group->all(), $responseData, $succeeded, $callbackUrl);
+                }
+            }
+
+            return [
+                'success' => $totalSent > 0,
+                'message' => $lastProviderMessage
+                    ?? "Successfully queued {$totalSent} SMS message(s).",
+                'sent' => $totalSent,
+                'failed' => $totalFailed,
+                'results' => $results,
+            ];
+        } catch (\Throwable $e) {
+            Log::critical('Arkesel SMS Exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Failed to send SMS: '.$e->getMessage(),
+                'sent' => 0,
+                'failed' => count($recipients),
+            ];
+        }
+    }
+
+    /**
+     * Build the Arkesel DLR callback URL, with the school identifiers appended
+     * as a best-effort fast path. Arkesel appends its own `sms_id`/`status`
+     * query params to this URL when a message's status settles; whether it
+     * preserves these pre-set params too is unconfirmed, so the callback
+     * controller's primary lookup is always by the stored `smscode`, not by
+     * these query params.
+     */
+    protected function buildArkeselCallbackUrl(): string
+    {
+        return route('sms.arkesel.dlr', [
+            'uniqueid' => $this->uniqueid,
+            'branch_id' => $this->branchId,
+        ], absolute: true);
+    }
+
+    /**
+     * Persist one Smsdeliveryreport row per recipient in the given group so
+     * the Arkesel DLR callback has something to update, and schools can see
+     * delivery status without visiting Arkesel's own dashboard.
+     *
+     * NOTE: the exact shape of Arkesel's Template SMS v2 response (whether it
+     * returns a per-recipient message id or a single batch id) is unconfirmed
+     * against public docs. extractArkeselMessageId() defensively tries a few
+     * plausible response shapes; verify this against one real logged response
+     * before treating `smscode` as reliable for DLR correlation.
+     */
+    protected function persistDeliveryReports(array $group, array $responseData, bool $succeeded, string $callbackUrl): void
+    {
+        $activeAcademicYear = $this->uniqueid
+            ? Academicyear::where('uniqueid', $this->uniqueid)->where('status', true)->first()
+            : null;
+
+        foreach ($group as $recipient) {
+            $student = $recipient['student'] ?? null;
+            $isStudent = $student instanceof Studentinfo;
+
+            try {
+                Smsdeliveryreport::create([
+                    'branch_id' => $this->branchId,
+                    'uniqueid' => $this->uniqueid,
+                    'parent' => $isStudent ? $this->getGuardianFullName($student) : null,
+                    'studentname' => $isStudent ? trim(($student->surname ?? '').' '.($student->firstname ?? '')) : null,
+                    'currentlevel' => $isStudent ? $student->currentlevel : null,
+                    'academicterm' => $activeAcademicYear?->semester,
+                    'url' => $callbackUrl,
+                    'parentnumber' => $recipient['phone'],
+                    'msg' => $recipient['message'] ?? '',
+                    'smscode' => $this->extractArkeselMessageId($responseData, $recipient['phone']),
+                    'smssenderid' => $this->senderId,
+                    'status' => $succeeded ? 'sent' : 'failed',
+                    'provider' => 'arkesel',
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Failed to persist Smsdeliveryreport row', [
+                    'phone' => $recipient['phone'],
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Best-effort extraction of Arkesel's per-recipient message id from the
+     * Template SMS v2 response. UNVERIFIED against real Arkesel docs — see
+     * persistDeliveryReports() docblock.
+     */
+    protected function extractArkeselMessageId(array $responseData, string $phone): ?string
+    {
+        $entry = $responseData['data'][$phone] ?? null;
+
+        if (is_array($entry)) {
+            return $entry['id'] ?? $entry['sms_id'] ?? $entry['message_id'] ?? null;
+        }
+
+        return $responseData['id'] ?? $responseData['sms_id'] ?? $responseData['message_id'] ?? null;
+    }
+
+    protected function sendViaArkeselSuperAdmin(array $recipients, ?string $scheduleTime = null): array
+    {
+        try {
+            $url = 'https://sms.arkesel.com/api/v2/sms/send';
+
+            // Chunk recipients into batches of 100 (API limit)
+            $chunks = array_chunk($recipients, 100);
+            $totalSent = 0;
+            $totalFailed = 0;
+
+            foreach ($chunks as $chunk) {
+                // Convert placeholders from {key} to <%key%>
+                $recipients_data = array_map(function ($recipient) {
+                    $convertedMessage = preg_replace_callback('/\{(\w+)\}/', function ($matches) {
+                        return '<%'.$matches[1].'%>';
+                    }, $recipient['message']);
+
+                    $data = [
+                        'number' => $recipient['phone'],
+                        'message' => $convertedMessage,
+                    ];
+
+                    // Add student-related placeholders if student data is available
+                    if (isset($recipient['student']) && $recipient['student'] instanceof Studentinfo) {
+                        $student = $recipient['student'];
+                        $data['parentfullname'] = $this->getGuardianFullName($student);
+                        $data['studentid'] = $student->student_id ?? '';
+                        $data['studentclass'] = $student->stclass->name ?? '';
+                        $data['studentFullName'] = trim($student->surname.' '.$student->firstname);
+                    }
+
+                    $data['date'] = now()->format('d/m/Y');
+
+                    return $data;
+                }, $chunk);
+
+                $payload = [
+                    'sender' => $this->senderId,
+                    'recipients' => $recipients_data,
+                ];
+
+                // Add schedule time if provided
+                if ($scheduleTime) {
+                    $payload['schedule_date'] = Carbon::parse($scheduleTime)->format('Y-m-d H:i:s');
+                }
+
+                $response = Http::withHeaders([
+                    'api-key' => $this->apiKey,
+                ])->post($url, $payload);
+
+                if ($response->successful()) {
+                    $totalSent += count($chunk);
+                } else {
+                    $totalFailed += count($chunk);
+                    Log::error('Arkesel SMS Error: '.$response->body());
+                }
+            }
+
+            return [
+                'success' => $totalSent > 0,
+                'message' => "Successfully queued {$totalSent} SMS message(s).".($totalFailed > 0 ? " {$totalFailed} failed." : ''),
+                'sent' => $totalSent,
+                'failed' => $totalFailed,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Arkesel SMS Exception: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Failed to send SMS: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Send SMS via MNotify API
+     */
+    protected function sendViaMNotify(array $recipients, ?string $scheduleTime = null): array
+    {
+        try {
+            $url = 'https://api.mnotify.com/api/sms/quick?key='.$this->apiKey;
+
+            $totalSent = 0;
+            $totalFailed = 0;
+            $results = [];
+
+            // MNotify sends to each recipient individually
+            foreach ($recipients as $recipient) {
+                $payload = [
+                    'sender' => $this->senderId,
+                    'recipient' => [$recipient['phone']],
+                    'message' => $recipient['message'],
+                ];
+
+                if ($scheduleTime) {
+                    $payload['schedule_date'] = Carbon::parse($scheduleTime)->format('Y-m-d H:i:s');
+                }
+
+                $response = Http::withHeaders([
+                    'Content-Type' => 'application/json',
+                ])->retry(3, 200)->post($url, $payload);
+
+                $succeeded = $response->successful();
+                $results[$recipient['phone']] = $succeeded;
+
+                if ($succeeded) {
+                    $totalSent++;
+                } else {
+                    $totalFailed++;
+                    Log::error('MNotify SMS Error: '.$response->body());
+                }
+            }
+
+            return [
+                'success' => $totalSent > 0,
+                'message' => "Successfully sent {$totalSent} SMS message(s).".($totalFailed > 0 ? " {$totalFailed} failed." : ''),
+                'sent' => $totalSent,
+                'failed' => $totalFailed,
+                'results' => $results,
+            ];
+        } catch (\Exception $e) {
+            Log::error('MNotify SMS Exception: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Failed to send SMS: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Send SMS to all guardians of a student
+     */
+    public function sendToStudentGuardians(Studentinfo $student, string $message, string $relation = 'both'): array
+    {
+        $phones = $this->getGuardianPhones($student, $relation);
+
+        if (empty($phones)) {
+            return [
+                'success' => false,
+                'message' => 'No valid phone numbers found for student guardians.',
+                'sent' => 0,
+            ];
+        }
+
+        $recipients = [];
+        foreach ($phones as $phone) {
+            $normalizedPhone = $this->normalizePhone($phone);
+            if ($normalizedPhone) {
+                $recipients[] = [
+                    'phone' => $normalizedPhone,
+                    'message' => $message,
+                    'student' => $student,
+                ];
+            }
+        }
+
+        if (empty($recipients)) {
+            return [
+                'success' => false,
+                'message' => 'No valid phone numbers found after normalization.',
+                'sent' => 0,
+            ];
+        }
+
+        return $this->sendBulk($recipients);
+    }
+
+    /**
+     * Replace message placeholders with actual values
+     */
+    public function replacePlaceholders(string $message, Studentinfo $student, array $extraData = []): string
+    {
+        $parentFullName = $this->getGuardianFullName($student);
+        $studentFullName = trim($student->surname.' '.$student->firstname);
+        $studentClass = $student->stclass->name ?? 'N/A';
+
+        $placeholders = [
+            '{parentfullname}' => $parentFullName,
+            '{studentid}' => $student->student_id ?? 'N/A',
+            '{studentclass}' => $studentClass,
+            '{studentFullName}' => $studentFullName,
+            '{date}' => now()->format('d/m/Y'),
+            '{portallink}' => route('filament.parentportal.auth.login'),
+        ];
+
+        // Merge extra data
+        foreach ($extraData as $key => $value) {
+            $placeholders['{'.$key.'}'] = $value;
+        }
+
+        return str_replace(array_keys($placeholders), array_values($placeholders), $message);
+    }
+
+    /**
+     * Send payment notification SMS to student guardians
+     */
+    public function sendPaymentNotification(Studentinfo $student, float $amount, string $receiptNumber): array
+    {
+        $studentFullName = trim($student->surname.' '.$student->firstname);
+        $studentClass = $student->stclass->name ?? 'N/A';
+        $currency = 'GHS';
+
+        // Default payment notification message
+        $message = "Dear Parent/Guardian, Payment of {$currency}{$amount} has been received for {$studentFullName} (Class: {$studentClass}). Receipt: {$receiptNumber}. Thank you.";
+
+        return $this->sendToStudentGuardians($student, $message);
+    }
+}

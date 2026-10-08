@@ -115,6 +115,16 @@ it('rejects requests not signed by the platform', function (): void {
     ussdPost('/api/ussd/identify', ['msisdn' => '233244123456'], ['X-Ussd-Nonce' => 'once'])->assertUnauthorized();
 });
 
+it('lists only active companies for onboarding', function (): void {
+    $this->branch->company->update(['name' => 'Kasoa Susu']);
+    $closed = Branch::factory()->create()->company;
+    $closed->update(['is_active' => false]);
+
+    ussdPost('/api/ussd/tenants', [])
+        ->assertOk()
+        ->assertExactJson(['tenants' => [['tenant_ref' => $this->branch->company_id, 'name' => 'Kasoa Susu']]]);
+});
+
 it('identifies a customer by phone whatever format it was stored in', function (): void {
     ussdPost('/api/ussd/identify', ['msisdn' => '233244123456'])
         ->assertOk()

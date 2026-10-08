@@ -47,6 +47,7 @@ Route::prefix('ussd')
     ->name('api.ussd.')
     ->group(function (): void {
         Route::post('/identify', [UssdConnectorController::class, 'identify'])->name('identify');
+        Route::post('/tenants', [UssdConnectorController::class, 'tenants'])->name('tenants');
         Route::post('/actions/{key}', [UssdConnectorController::class, 'action'])->name('action');
     });
 

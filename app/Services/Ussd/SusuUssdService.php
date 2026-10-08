@@ -9,6 +9,7 @@ use App\Enums\LoanStatus;
 use App\Enums\SavingsProductType;
 use App\Enums\WithdrawalStatus;
 use App\Jobs\Ussd\InitiateUssdContributionCharge;
+use App\Models\Company;
 use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\Loan;
@@ -51,6 +52,21 @@ class SusuUssdService
         private PaystackClient $paystack,
         private UssdServiceUser $serviceUser,
     ) {}
+
+    /**
+     * The active Susu companies the USSD platform can onboard as tenants.
+     *
+     * @return list<array{tenant_ref: string, name: string}>
+     */
+    public function tenants(): array
+    {
+        return Company::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Company $company): array => ['tenant_ref' => (string) $company->id, 'name' => (string) $company->name])
+            ->all();
+    }
 
     /**
      * @return list<array{tenant_ref: string, tenant_name: string, subject_ref: string, label: string}>
