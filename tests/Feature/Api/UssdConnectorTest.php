@@ -268,7 +268,7 @@ describe('MoMo contributions', function (): void {
         config(['services.paystack.secret_key' => 'sk_platform', 'services.paystack.base_url' => 'https://api.paystack.co']);
     });
 
-    it('walks days, network and confirmation, then queues the charge to run after the session ends', function (): void {
+    it('walks days and confirmation on the network detected from the number, then queues the charge to run after the session ends', function (): void {
         Queue::fake();
 
         ussdPost('/api/ussd/actions/susu.contribute', susuAction($this->customer))
@@ -278,13 +278,8 @@ describe('MoMo contributions', function (): void {
         ussdPost('/api/ussd/actions/susu.contribute', susuAction($this->customer, [
             'input' => '5',
             'state' => ['step' => 'days', 'account_id' => $this->account->id],
-        ]))->assertJsonPath('message', "Pay with:\n1. MTN MoMo\n2. Telecel Cash\n3. AirtelTigo Money");
-
-        ussdPost('/api/ussd/actions/susu.contribute', susuAction($this->customer, [
-            'input' => '1',
-            'state' => ['step' => 'network', 'account_id' => $this->account->id, 'amount' => 2500],
         ]))->assertExactJson([
-            'message' => "Pay GHS 25.00 into Daily Susu with MTN MoMo?\n1. Confirm\n2. Cancel",
+            'message' => "Pay GHS 25.00 into Daily Susu with MTN MoMo?\n1. Confirm\n2. Cancel\n3. Other network",
             'continue' => true,
             'state' => ['step' => 'confirm', 'account_id' => $this->account->id, 'amount' => 2500, 'provider' => 'mtn'],
             'transaction' => ['amount' => 2500, 'currency' => 'GHS'],
@@ -308,6 +303,21 @@ describe('MoMo contributions', function (): void {
             && $job->provider === 'mtn'
             && $job->savingsAccountId === $this->account->id
             && $job->delay !== null);
+    });
+
+    it('lets a caller on a ported number pay from another network', function (): void {
+        ussdPost('/api/ussd/actions/susu.contribute', susuAction($this->customer, [
+            'input' => '3',
+            'state' => ['step' => 'confirm', 'account_id' => $this->account->id, 'amount' => 2500, 'provider' => 'mtn'],
+        ]))->assertJsonPath('message', "Pay with:\n1. MTN MoMo\n2. Telecel Cash\n3. AirtelTigo Money")
+            ->assertJsonPath('state', ['step' => 'network', 'account_id' => $this->account->id, 'amount' => 2500]);
+
+        ussdPost('/api/ussd/actions/susu.contribute', susuAction($this->customer, [
+            'input' => '2',
+            'state' => ['step' => 'network', 'account_id' => $this->account->id, 'amount' => 2500],
+        ]))->assertJsonPath('message', "Pay GHS 25.00 into Daily Susu with Telecel Cash?\n1. Confirm\n2. Cancel\n3. Other network")
+            ->assertJsonPath('state.provider', 'vod')
+            ->assertJsonPath('transaction', ['amount' => 2500, 'currency' => 'GHS']);
     });
 
     it('re-asks for days outside 1 to 31', function (string $days): void {

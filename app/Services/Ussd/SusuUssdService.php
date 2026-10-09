@@ -35,14 +35,7 @@ class SusuUssdService
      */
     private const PHONE_MATCH_DIGITS = 9;
 
-    /**
-     * USSD network choice => Paystack mobile money provider code.
-     */
-    private const MOMO_PROVIDERS = [
-        '1' => ['mtn', 'MTN MoMo'],
-        '2' => ['vod', 'Telecel Cash'],
-        '3' => ['atl', 'AirtelTigo Money'],
-    ];
+    private const CONFIRM_OPTIONS = "1. Confirm\n2. Cancel\n3. Other network";
 
     private const MAX_CONTRIBUTION_DAYS = 31;
 
@@ -166,7 +159,9 @@ class SusuUssdService
     }
 
     /**
-     * MoMo contribution: account → days → network → confirm. The charge is sent by a
+     * MoMo contribution: account → days → confirm. The MoMo network comes from the number's
+     * prefix; "Other network" on the confirm screen covers ported numbers, and an unknown
+     * prefix is asked for. The charge is sent by a
      * delayed job after this final screen, because the phone can only show the MoMo
      * approval prompt once its USSD session has closed. The platform's transaction id
      * is the charge's client_reference, so a retried confirmation never charges twice.
@@ -184,8 +179,8 @@ class SusuUssdService
 
         return match ($state['step'] ?? null) {
             'account' => $this->chooseContributionAccount($accounts, (string) $input),
-            'days' => $account === null ? $this->end('That account is no longer available.') : $this->enterDays($account, (string) $input),
-            'network' => $account === null ? $this->end('That account is no longer available.') : $this->chooseNetwork($account, $state, (string) $input),
+            'days' => $account === null ? $this->end('That account is no longer available.') : $this->enterDays($account, $msisdn, (string) $input),
+            'network' => $account === null ? $this->end('That account is no longer available.') : $this->chooseNetwork($account, (int) $state['amount'], (string) $input),
             'confirm' => $this->confirmContribution($customer, $account, $msisdn, $state, (string) $input, $transactionId),
             default => $this->startContribution($accounts),
         };
@@ -238,7 +233,7 @@ class SusuUssdService
      *
      * @return array<string, mixed>
      */
-    private function enterDays(SavingsAccount $account, string $input): array
+    private function enterDays(SavingsAccount $account, string $msisdn, string $input): array
     {
         $days = ctype_digit(trim($input)) ? (int) trim($input) : 0;
 
@@ -246,30 +241,46 @@ class SusuUssdService
             return $this->askDays($account, 'Enter 1 to '.self::MAX_CONTRIBUTION_DAYS.' days.');
         }
 
+        $amount = $days * $account->contribution_amount;
+        $provider = MobileMoneyNetwork::detect($msisdn);
+
+        return $provider === null
+            ? $this->askNetwork($account, $amount)
+            : $this->contributionConfirmation($account, $amount, $provider);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function askNetwork(SavingsAccount $account, int $amount): array
+    {
         return $this->prompt(
-            "Pay with:\n".collect(self::MOMO_PROVIDERS)->map(fn (array $provider, string $option): string => "{$option}. {$provider[1]}")->implode("\n"),
-            ['step' => 'network', 'account_id' => $account->id, 'amount' => $days * $account->contribution_amount],
+            "Pay with:\n".collect(MobileMoneyNetwork::options())->map(fn (string $provider, string $option): string => "{$option}. ".MobileMoneyNetwork::name($provider))->implode("\n"),
+            ['step' => 'network', 'account_id' => $account->id, 'amount' => $amount],
         );
     }
 
     /**
-     * @param  array<string, mixed>  $state
      * @return array<string, mixed>
      */
-    private function chooseNetwork(SavingsAccount $account, array $state, string $input): array
+    private function chooseNetwork(SavingsAccount $account, int $amount, string $input): array
     {
-        $provider = self::MOMO_PROVIDERS[$input] ?? null;
+        $provider = MobileMoneyNetwork::options()[$input] ?? null;
 
-        if ($provider === null) {
-            return $this->enterDays($account, (string) intdiv((int) $state['amount'], $account->contribution_amount));
-        }
+        return $provider === null
+            ? $this->askNetwork($account, $amount)
+            : $this->contributionConfirmation($account, $amount, $provider);
+    }
 
-        $amount = (int) $state['amount'];
-
+    /**
+     * @return array<string, mixed>
+     */
+    private function contributionConfirmation(SavingsAccount $account, int $amount, string $provider): array
+    {
         return [
-            'message' => 'Pay '.Money::format($amount).' into '.$this->accountLabel($account)." with {$provider[1]}?\n1. Confirm\n2. Cancel",
+            'message' => 'Pay '.Money::format($amount).' into '.$this->accountLabel($account).' with '.MobileMoneyNetwork::name($provider)."?\n".self::CONFIRM_OPTIONS,
             'continue' => true,
-            'state' => ['step' => 'confirm', 'account_id' => $account->id, 'amount' => $amount, 'provider' => $provider[0]],
+            'state' => ['step' => 'confirm', 'account_id' => $account->id, 'amount' => $amount, 'provider' => $provider],
             'transaction' => ['amount' => $amount, 'currency' => Money::DEFAULT_CURRENCY],
         ];
     }
@@ -284,8 +295,14 @@ class SusuUssdService
             return $this->end('Contribution cancelled.');
         }
 
+        if ($input === '3') {
+            return $account === null
+                ? $this->end('That account is no longer available.')
+                : $this->askNetwork($account, (int) $state['amount']);
+        }
+
         if ($input !== '1') {
-            return $this->prompt("1. Confirm\n2. Cancel", $state);
+            return $this->prompt(self::CONFIRM_OPTIONS, $state);
         }
 
         if ($account === null || $transactionId === null) {
